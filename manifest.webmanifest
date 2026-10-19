@@ -1,0 +1,12 @@
+{
+  "name": "Amistad Prefab Central Hub",
+  "short_name": "Central Hub",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f2e8",
+  "theme_color": "#0a3440",
+  "icons": [
+    { "src": "assets/logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

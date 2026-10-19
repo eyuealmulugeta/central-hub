@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Book a meeting · Amistad Prefab</title>
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <style>
+    :root { --bg: #f4f5f7; --surface: #fff; --ink: #1f2328; --muted: #5f6672; --line: #dfe2e7; --brand: #0a3440; --gold: #b47d14; --soft: #e6f0f2; --ok: #1a7f4b; --bad: #b3261e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--brand); color: #f3efe6; }
+    header img { width: 40px; height: 40px; border-radius: 10px; }
+    header b { display: block; font-size: 15px; letter-spacing: .04em; text-transform: uppercase; }
+    header span { font-size: 12px; color: #e6ad45; letter-spacing: .08em; text-transform: uppercase; }
+    main { max-width: 760px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .card { background: var(--surface); border-radius: 14px; padding: 18px; box-shadow: 0 1px 3px rgb(0 0 0 / .1); }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    p { margin: 0 0 10px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .ok { color: var(--ok); font-weight: 600; }
+    .bad { color: var(--bad); font-weight: 600; }
+    .pick { display: grid; gap: 8px; }
+    .pick.types { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+    .pick.days { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 260px; overflow: auto; }
+    .pick.times { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+    .pick button { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    .pick.times button { text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .pick button:hover { border-color: var(--brand); }
+    .pick button.on { border-color: var(--brand); background: var(--soft); box-shadow: inset 0 0 0 1px var(--brand); }
+    .pick button small { display: block; color: var(--muted); font-size: 12px; }
+    form { display: grid; gap: 12px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+    input, textarea { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-weight: 400; width: 100%; }
+    .go { padding: 12px 18px; border: 0; border-radius: 999px; background: var(--brand); color: #fff; font: inherit; font-weight: 600; cursor: pointer; justify-self: start; }
+    .go:disabled { opacity: .5; cursor: default; }
+    .links { display: flex; gap: 10px; flex-wrap: wrap; }
+    .links a { padding: 9px 16px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); text-decoration: none; font-weight: 600; }
+    .trap { position: absolute; left: -9999px; }
+    footer { padding: 8px 16px 24px; text-align: center; }
+    @media (max-width: 560px) { .two { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header><img src="assets/logo.png" alt=""><div><b id="from">Amistad Prefab</b><span>Book a meeting</span></div></header>
+  <main id="app"><div class="card"><p class="muted">Loading the free times…</p></div></main>
+  <footer class="muted">Your details are used only to arrange this meeting.</footer>
+  <script type="module" src="js/bookpage.js"></script>
+</body>
+</html>

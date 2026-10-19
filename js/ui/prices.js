@@ -567,7 +567,7 @@ export const actions = {
   async copyRules() {
     try {
       const res = await fetch('firestore.rules', { cache: 'no-store' });
-      if (!res.ok) throw new Error('the rules file is only available when Central Hub runs from your computer');
+      if (!res.ok) throw new Error('the rules file is not in this copy of Central Hub. Upload firestore.rules to the central-hub repository on GitHub with the other files, or open the file in the Central Hub folder on your computer and copy its text');
       await navigator.clipboard.writeText(await res.text());
       rulesNotice = 'Rules copied. In the Firebase console open Firestore Database, Rules, select everything, paste, and click Publish.';
     } catch (err) {

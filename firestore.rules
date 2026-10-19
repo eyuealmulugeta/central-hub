@@ -1,0 +1,228 @@
+rules_version = '2';
+
+// Who may read and write what. Keep in step with js/core/access.js.
+//
+//   Admin   the Owner: the first person to sign in (recorded in config/setup). Everything.
+//           The only one who may delete records, create or delete projects, change
+//           settings (prices, rates, letterhead, project settings, billing terms) and
+//           manage people. HR records are the Admin's alone.
+//   Office  every project, but only the pages the Admin ticked for them (users/<email>.pages;
+//           all pages when the Admin has not chosen). Money records need a money page
+//           (Costs, Documents or Finance). Issuing a client report needs the approver tick.
+//   Site    only the projects assigned to them: reads the schedule and site data,
+//           writes daily reports and follow-ups. No costs, invoices or billing terms.
+//
+// The section lists below must match SITE_SECTIONS in js/core/store.js and MONEY_SECTIONS in js/core/access.js.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null && request.auth.token.email_verified == true;
+    }
+    function me() { return request.auth.token.email.lower(); }
+    function setupDoc() { return /databases/$(database)/documents/config/setup; }
+    function userDoc() { return /databases/$(database)/documents/users/$(me()); }
+    function user() { return get(userDoc()).data; }
+
+    // The Admin: the first person to sign in. Only the Admin writes, edits, deletes and changes settings and permissions.
+    // A co-owner (config/setup.coOwners, added by the Admin) may read everything the Admin reads and change nothing.
+    function isPrimary() { return signedIn() && exists(setupDoc()) && get(setupDoc()).data.owner == me(); }
+    function isOwner() { return isPrimary(); }
+    function isCoOwner() { return signedIn() && exists(setupDoc()) && me() in get(setupDoc()).data.get('coOwners', []); }
+    function seesAll() { return isPrimary() || isCoOwner(); }
+    function hasUser() { return signedIn() && exists(userDoc()); }
+    function isOffice() { return hasUser() && user().role == 'office'; }
+    function canApprove() { return isOwner() || (isOffice() && user().get('approver', false) == true); }
+    function isIssued(d) { return d.type == 'report' && d.status == 'issued'; }
+    // A project is open to a Site user only while its status is active (a missing status counts as active).
+    function projectOpen(pid) { return get(/databases/$(database)/documents/projects/$(pid)).data.get('status', 'active') == 'active'; }
+    function isSiteOn(pid) {
+      return hasUser() && user().role == 'site' && pid in user().projects && projectOpen(pid);
+    }
+    // Office people are assigned to projects like Site people: they open only the projects in their list (several allowed).
+    function officeOn(pid) { return isOffice() && pid in user().get('projects', []); }
+    // the pages an Office user may open; all of them until the Admin chooses
+    function pages() {
+      return user().get('pages', ['dashboard', 'reports', 'schedule', 'ledger', 'estimator', 'docs', 'requests', 'cashflow', 'trade', 'finance', 'contracts']);
+    }
+    function officeWith(list) { return isOffice() && pages().hasAny(list); }
+    function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates']; }
+    // billing terms are settings of the contract: only the Admin changes them
+    function isSetting(section) { return section in ['payStages', 'measure', 'billRates']; }
+    // may this Office user see the records of a project section at all?
+    function officeReads(section) { return isOffice() && (!isMoney(section) || officeWith(['ledger', 'cashflow', 'docs', 'finance'])); }
+    function officeWrites(section) { return officeReads(section) && !isSetting(section); }
+    function officeReadsIn(pid, section) { return officeOn(pid) && (!isMoney(section) || officeWith(['ledger', 'cashflow', 'docs', 'finance'])); }
+    function officeWritesIn(pid, section) { return officeReadsIn(pid, section) && !isSetting(section); }
+    // Evaluations. Each rank rates the one below it: Site Engineer rates crew, Project Manager rates
+    // Site Engineers, General Manager rates Project Managers. Keep in step with RATES in js/engine/evaluation.js.
+    function ranks() { return hasUser() ? user().get('ranks', []) : []; }
+    function mayRate(level) {
+      return (level == 'crew' && 'site_engineer' in ranks())
+        || (level == 'site_engineer' && 'project_manager' in ranks())
+        || (level == 'project_manager' && 'general_manager' in ranks());
+    }
+
+    // Created once, by the first person to sign in. Afterwards only the Admin can change it,
+    // and only to hand the role to another address.
+    match /config/setup {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.owner == me();
+      allow update: if isPrimary() && request.resource.data.owner is string && request.resource.data.owner.size() > 5;
+    }
+
+    // People with access, and what each may open: the Admin only. Everyone may read their own entry.
+    match /users/{email} {
+      allow get: if signedIn() && email == me();
+      allow read: if seesAll();
+      allow write: if isOwner();
+    }
+
+    // One signed-in device per person (the Admin is never locked): a device claims sessions/<email>, and a second
+    // device cannot take it while the first holds it. It is freed only by signing out (released) or by the Admin
+    // deleting it. Being offline or quiet never frees it: a site engineer may be away from signal for days.
+    match /sessions/{email} {
+      allow get: if signedIn() && (email == me() || seesAll());
+      allow list: if seesAll();
+      allow create: if signedIn() && email == me() && request.resource.data.email == me();
+      allow update: if signedIn() && email == me() && request.resource.data.email == me()
+        && (resource.data.deviceId == request.resource.data.deviceId
+            || resource.data.get('released', false) == true);
+      allow delete: if isOwner();
+    }
+
+    // Faults reported by devices (js/core/diagnostics.js): any signed-in person adds their own, small ones; the Admin reads and clears them.
+    match /diagnostics/{id} {
+      allow create: if signedIn() && request.resource.data.by == me()
+        && request.resource.data.keys().hasOnly(['id', 'at', 'where', 'message', 'stack', 'count', 'page', 'agent', 'by'])
+        && request.resource.data.message.size() <= 300 && request.resource.data.stack.size() <= 800;
+      allow read: if seesAll();
+      allow delete: if isOwner();
+    }
+
+    // Someone who signed in without having been given access leaves a request here, under their own
+    // address. Only the Admin sees the requests, and answers by adding the person (or not).
+    match /requests/{email} {
+      allow get: if signedIn() && email == me();
+      allow create, update: if signedIn() && email == me() && request.resource.data.email == me();
+      allow read: if seesAll();
+      allow delete: if isOwner();
+    }
+
+    // Prices, exchange rates, countries, letterhead: settings, so only the Admin changes them.
+    match /global/{doc} {
+      allow read: if seesAll() || hasUser();
+      allow write: if isOwner();
+    }
+
+    // Company-wide records. HR (staff) is the Admin's alone. Deleting is the Admin's.
+    // Sign. A request (signs) and the parts of its PDF (signfiles) can be read by anyone who has
+    // their long random id: that is the link a signer is sent, and signers do not sign in.
+    // A signature (signed) is created once, under the signer's own secret key, while the request
+    // is open, and is never changed. The keys (signkeys) are for the office only.
+    function signStaff() { return isOwner() || officeWith(['contracts']); }
+    match /company/main/signs/{id} {
+      allow get: if true;
+      allow list: if signStaff() || seesAll();
+      allow create, update: if signStaff();
+    }
+    match /company/main/signfiles/{id} {
+      allow get: if true;
+      allow create, update: if signStaff();
+    }
+    match /company/main/signkeys/{id} {
+      allow read: if signStaff() || seesAll();
+      allow create, update: if signStaff();
+    }
+    match /company/main/signed/{key} {
+      allow get: if true;
+      allow list: if signStaff() || seesAll();
+      allow create: if key.size() >= 40
+        && request.resource.data.keys().hasOnly(['id', 'request', 'name', 'image', 'at', 'agent'])
+        && request.resource.data.id == key
+        && request.resource.data.name is string && request.resource.data.name.size() <= 120
+        && request.resource.data.image is string && request.resource.data.image.size() <= 250000
+        && request.resource.data.at is string
+        && get(/databases/$(database)/documents/company/main/signs/$(request.resource.data.request)).data.status == 'sent';
+    }
+
+    // Meetings. The booking page is open to anyone: it reads its settings (public/booking) and which
+    // times are taken (slots, which hold no names), and leaves one booking. A slot's id is its time,
+    // and a slot can only be created, never overwritten: that is what stops two people taking one time.
+    match /public/{doc} {
+      allow get: if true;
+      allow write: if isOwner();
+    }
+    match /company/main/slots/{id} {
+      allow get, list: if true;
+      allow create: if id.matches('^[0-9]{8}T[0-9]{4}Z$')
+        && request.resource.data.keys().hasOnly(['id', 'start', 'minutes'])
+        && request.resource.data.id == id;
+      allow delete: if isOwner() || isOffice();
+    }
+    match /company/main/bookings/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['id', 'start', 'minutes', 'step', 'type', 'typeName', 'where', 'name', 'company', 'email', 'phone', 'note', 'at', 'status', 'division'])
+        && (!('division' in request.resource.data) || request.resource.data.division == 'trading')
+        && request.resource.data.id == id
+        && request.resource.data.status == 'booked'
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
+        && request.resource.data.email is string && request.resource.data.email.size() <= 160
+        && request.resource.data.note is string && request.resource.data.note.size() <= 1000;
+      allow read: if seesAll() || isOffice();
+      allow update: if isOwner() || isOffice();
+    }
+
+    // Evaluations and feedback notes: read only by the person who wrote them and by the Admin, never by the
+    // person they are about. A list query has to say where by == the signed-in address. Only the author edits.
+    match /company/main/evaluations/{id} {
+      allow read: if seesAll() || (hasUser() && resource.data.by == me());
+      allow create: if request.resource.data.by == me()
+        && (isOwner() || (hasUser() && mayRate(request.resource.data.level)));
+      allow update: if resource.data.by == me() && request.resource.data.by == me();
+      allow delete: if isOwner();
+    }
+
+    // Discuss messages: everyone with access reads them and writes their own; nobody edits one afterwards.
+    match /company/main/{section}/{record} {
+      allow read: if seesAll()
+        || (section == 'messages' && hasUser())
+        || (section in ['shipments', 'sales'] && officeWith(['trade', 'finance']))
+        || (section == 'contracts' && officeWith(['contracts']))
+        || (section == 'contacts' && isOffice());
+      allow create: if section == 'messages' && (isOwner() || hasUser()) && request.resource.data.by == me();
+      allow create, update: if (isOwner() && section != 'messages')
+        || (section in ['shipments', 'sales'] && officeWith(['trade']))
+        || (section == 'contracts' && officeWith(['contracts']))
+        || (section == 'contacts' && isOffice());
+      allow delete: if isOwner();
+    }
+
+    match /projects/{pid} {
+      allow get: if seesAll() || officeOn(pid) || isSiteOn(pid);
+      allow list: if seesAll();
+      // project settings are the Admin's; an Office user may only refresh the sidebar figures
+      // and confirm which Field Report project a code belongs to
+      allow create, delete: if isOwner();
+      allow update: if isOwner()
+        || (officeOn(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['summary', 'fieldLabel']));
+
+      match /{section}/{record} {
+        allow read: if seesAll() || officeReadsIn(pid, section)
+          || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'laborRates', 'assemblies', 'procurement', 'requests']);
+        allow create: if isOwner()
+          || (officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove()))
+          || (isSiteOn(pid) && section in ['reports', 'items'])
+          // a Site user may only raise a request, as one waiting for approval
+          || (isSiteOn(pid) && section == 'requests' && request.resource.data.status == 'requested');
+        allow update: if isOwner()
+          || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove()))
+          || (isSiteOn(pid) && section in ['reports', 'items'])
+          // ...and change or withdraw it only while nobody has answered it
+          || (isSiteOn(pid) && section == 'requests' && resource.data.status == 'requested' && request.resource.data.status in ['requested', 'cancelled']);
+        // nobody but the Admin deletes a record
+        allow delete: if isOwner();
+      }
+    }
+  }
+}

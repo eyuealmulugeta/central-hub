@@ -636,7 +636,7 @@ dialog.palette p { margin: 0; font-size: 12px; }
 .view-prices .settings { gap: 12px; }
 
 /* ---- Home: a tile per section, then the projects ---- */
-.view-home { grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr); }
+.view-home { grid-template: auto / minmax(0, 1fr); align-content: start; }
 .launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 18px 10px; padding: 6px 0 10px; }
 .launcher .app { display: flex; flex-direction: column; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; text-align: center; font-size: 13px; line-height: 1.25; }
 .app-ic { position: relative; width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; transition: transform .12s ease; }

@@ -16,8 +16,6 @@
     <div class="app-version" id="app-version" title="Version of Central Hub"></div>
     <div class="division" id="division" role="group" aria-label="Division" hidden></div>
     <nav class="nav" id="nav-hubs" aria-label="Sections"></nav>
-    <div class="side-label" id="projects-label">Projects</div>
-    <div id="projects" class="projects"></div>
     <button class="side-link" id="btn-new-project" type="button"><span>+ New project</span></button>
     <span class="grow"></span>
     <div id="nav-foot"></div>
@@ -52,6 +50,7 @@
     <form method="dialog">
       <h2>Backup</h2>
       <p class="muted" id="bk-where"></p>
+      <p class="muted" id="bk-last"></p>
       <div class="actions left">
         <button class="btn" type="button" id="bk-export">Export JSON</button>
         <label class="btn">Import JSON<input type="file" id="bk-import" accept="application/json" hidden></label>
@@ -61,6 +60,8 @@
       <p class="muted">The same web app saves backups to Drive and sends documents by email.</p>
       <label>Web app URL <input id="bk-endpoint" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
       <label>Shared secret <input id="bk-token" type="password" autocomplete="off"></label>
+      <label>Replies go to <input id="bk-reply" type="email" placeholder="Your own address. Empty: the address you sign in with" autocomplete="off"></label>
+      <p class="muted">These three are saved in this browser as soon as you change them. Each person sets their own.</p>
       <div class="actions left">
         <button class="btn primary" type="button" id="bk-drive">Save snapshot to Drive</button>
         <button class="btn" type="button" id="bk-copy" title="Copies the script that saves backups and sends email, ready to paste into Google Apps Script">Copy the script code</button>

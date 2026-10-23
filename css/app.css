@@ -362,9 +362,13 @@ input.supplier { width: 130px; padding: 5px 7px; }
   .no-print { display: none !important; }
   .card.sheet { background: none; border: 0; padding: 0; margin: 0; }
   .paper { max-width: none; margin: 0; padding: 0; border: 0; overflow: visible; }
-  /* fixed boxes are drawn again on every printed page: the mark is on each page, in the same place */
+  /* fixed boxes are drawn again on every printed page: the mark is on each page, in the same place.
+     A sheet prints on pages without margins, so the mark can reach the edge of the paper; the sheet keeps its own margin on every page. */
   .paper::before { position: fixed; }
+  .paper { page: sheet; padding: 14mm 14mm 16mm; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  body:has(.paper) .top { display: none !important; }
 }
+@page sheet { size: A4; margin: 0; }
 
 /* ---- sign-in screen, signed-in user, error toast ---- */
 .gate { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: var(--bg); }

@@ -73,6 +73,11 @@ service cloud.firestore {
     }
 
     // People with access, and what each may open: the Admin only. Everyone may read their own entry.
+    // What a person marked as read, kept for them on every device (js/core/prefs.js): only they read or write it.
+    match /prefs/{email} {
+      allow read, write: if signedIn() && email == me();
+    }
+
     match /users/{email} {
       allow get: if signedIn() && email == me();
       allow read: if seesAll();

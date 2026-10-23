@@ -349,7 +349,7 @@ export function explainLink(row) {
 /** The people linked to a project, as Field Report's setup holds them: the only thing that lets a person see the project there. */
 export const linkedList = (project, people = []) => people
   .filter(u => (u.projects || []).includes(project.id))
-  .map(u => ({ email: cleanEmail(u.email), name: u.name || '', role: u.role === 'office' ? 'office' : 'site', ranks: u.ranks || [] }));
+  .map(u => ({ email: cleanEmail(u.email), name: u.name || '', title: u.title || '', role: u.role === 'office' ? 'office' : 'site', ranks: u.ranks || [] }));
 
 // ---- checking the whole connection
 

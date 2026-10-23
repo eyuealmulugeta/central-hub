@@ -119,7 +119,7 @@ app.addEventListener('submit', async e => {
   const booking = {
     id: newId(), start: new Date(start).toISOString(), minutes: type.minutes, step: s.step, type: type.id, typeName: type.name, where: type.where || '',
     name: text('name'), company: text('company'), email: text('email').toLowerCase(), phone: text('phone'), note: text('note'),
-    at: new Date().toISOString(), status: 'booked', ...(division ? { division } : {}),
+    at: new Date().toISOString(), status: 'booked', division: division || 'installation',
   };
   const slots = stepsOf(start, type.minutes, s.step).map(ms => ({ id: slotId(ms), start: new Date(ms).toISOString(), minutes: s.step }));
   document.getElementById('go').disabled = true;

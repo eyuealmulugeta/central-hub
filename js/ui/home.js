@@ -41,7 +41,7 @@ export function render(c) {
   }
 
   // Shipments: for the projects in Installation; stock for resale in Trading
-  if (can('trade')) {
+  if (trading && can('trade')) {
     // each shipment is valued in its own currency; the currencies are shown separately
     let open = 0, late = 0;
     const stockValue = {}, unpaid = {};
@@ -89,7 +89,14 @@ export function render(c) {
       alerts, 'Contract dates and staff papers needing attention');
   }
 
+  const counts = c.counts || {};
+  const apps = html`<nav class="launcher" aria-label="Apps">${(c.apps || []).map(a => {
+    const n = a.pages.reduce((s, t) => s + (counts[t] || 0), 0);
+    return html`<a class="app" href="#${a.page}"><span class="app-ic tone-${a.tone}">${icon(a.icon, 28)}${n ? html`<em>${n}</em>` : ''}</span><span class="app-name">${a.title}</span></a>`;
+  })}</nav>`;
+
   return html`
+    ${apps}
     <section class="tiles">${tiles}</section>
     ${trading ? '' : html`<section class="card">
       <div class="toolbar"><h2>Projects</h2><span class="muted">Click a project to open it${showMoney ? '. Each project in its own currency' : ''}</span></div>

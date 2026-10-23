@@ -176,6 +176,43 @@ const PERCENT_MEANS = {
 };
 
 let lastCounts = { raw: {}, key: {} };   // what the red numbers counted at the last draw, for Mark as read
+let lastShown = {};                      // the red numbers as the menu shows them (after Mark as read), for the apps on Home
+
+// The apps on Home: every page this person may open in this division, one tile each, coloured by its section.
+const APP_ICON = {
+  dashboard: 'dashboard', schedule: 'schedule', setup: 'apps', reports: 'reports', status: 'reports', hr: 'hr', employment: 'hr', crewletters: 'contracts',
+  attendance: 'reports', evaluation: 'hr', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
+  expenses: 'ledger', summary: 'finance', contracts: 'contracts', documentsign: 'contracts', letters: 'contracts', requests: 'docs', contacts: 'access',
+  owners: 'company', trade: 'trade', stock: 'stock', tradesummary: 'finance', discuss: 'discuss', meetings: 'meetings',
+};
+const HUB_TONE = { projects: 'teal', report: 'teal', trading: 'teal', crew: 'violet', finance: 'amber', admin: 'coral' };
+// [page, name, pages whose red numbers it shows]. "@finance" is the first Finance page this person may open; "@settings" likewise.
+const LAUNCHER = [
+  ['dashboard', 'Dashboard', ['dashboard', 'setup']], ['schedule', 'Schedule'], ['reports', 'Daily reports', ['reports', 'status']],
+  ['trade', 'Trading'], ['stock', 'Stock'],
+  ['hr', null], ['attendance', 'Attendance'], ['payroll', 'Payroll'],
+  ['@finance', 'Finance'], ['invoices', 'Invoices', ['invoices', 'quotations']], ['tradesummary', 'Finance'], ['requests', 'Requests'],
+  ['contracts', 'Contracts'], ['documentsign', 'Sign'], ['letters', 'Letters'], ['contacts', 'Contacts'],
+  ['discuss', 'Discuss'], ['meetings', 'Meetings'], ['@settings', 'Settings'],
+];
+function launcherApps() {
+  const mine = pagesIn(division);
+  const firstOf = id => (hubs().find(h => h.id === id)?.tabs || []).filter(t => allowed(t) && !(id === 'finance' && t === 'invoices'));
+  const out = [];
+  for (const [key, name, pages] of LAUNCHER) {
+    if (key === '@finance' && division !== 'installation') continue;
+    const hubId = key.startsWith('@') ? key.slice(1) : null;
+    const tabs = hubId ? firstOf(hubId) : [];
+    const page = hubId ? (lastTab[hubId] && tabs.includes(lastTab[hubId]) ? lastTab[hubId] : tabs[0]) : key;
+    if (!page || !mine.includes(page) || !allowed(page)) continue;
+    const hub = hubOf(page);
+    out.push({
+      page, title: name || (division === 'trading' ? 'Staff' : 'Crew'), icon: APP_ICON[page] || hub?.icon || 'apps',
+      tone: hubId === 'settings' ? 'gray' : HUB_TONE[hub?.id] || 'gray', pages: hubId ? tabs : (pages || [page]),
+    });
+  }
+  return out;
+}
 let lastSummaries = [];
 
 /** Mark things as read: the pages of the open section, or everything (every section and every project's alerts). */
@@ -226,6 +263,7 @@ function renderSidebar(name, summaries) {
   lastCounts = { raw, key };
   const settled = !store.loading && store.settled;   // while records are still arriving, a low count says nothing
   const count = Object.fromEntries(Object.entries(raw).map(([page, n]) => [page, key[page] ? badges.shown(key[page], n, settled) : n]));
+  lastShown = count;
   const badge = n => (n ? html`<em>${n}</em>` : '');
   const here = hubOf(name);
 
@@ -315,6 +353,8 @@ function render() {
   ctx.summaries = summaries;
   ctx.can = allowed;
   renderSidebar(name, summaries);
+  ctx.apps = launcherApps();
+  ctx.counts = lastShown;
   store.saveSummary(summaryOf(ctx));
 
   $('#page-title').textContent = TITLES[name];
@@ -675,6 +715,8 @@ function start() {
     document.addEventListener('visibilitychange', check);
     addEventListener('focus', check);
     checkSoon = () => setTimeout(check, 1500);
+    // the division lock: the first Admin's Central Hub gives the old records their division, once they have all arrived
+    setTimeout(async () => { if (store.cloud && store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.stampDivisions(); } catch { /* tried again next time */ } } }, 30_000);
     // the weekly full copy: checked a minute after start, then every 6 hours
     setTimeout(weeklyBackup, 60_000);
     setInterval(weeklyBackup, 6 * 3600_000);

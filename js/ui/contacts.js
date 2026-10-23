@@ -6,11 +6,12 @@ import { store } from '../core/store.js';
 import { uid, todayISO } from '../core/util.js';
 import { resolveOne, phoneDigits } from '../engine/contacts.js';
 import { html } from './dom.js';
+import { stamp } from '../core/division.js';
 
 let search = '';
 let notice = '';
 
-const all = c => c.company.contacts || [];
+const all = c => c.company.contacts || [];   // the open division's only (scopedCompany)
 const projectName = id => store.projects.find(p => p.id === id)?.name || '';
 const chips = (c, ids, label) => (ids || []).map(projectName).filter(Boolean).map(n => html`<span class="chip">${label}: ${n}</span> `);
 
@@ -71,7 +72,7 @@ export const submits = {
     if (!name) return false;
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { notice = '✗ That is not an email address.'; return false; }
     if (all(c).some(x => String(x.email).toLowerCase() === email)) { notice = `✗ ${email} is already saved.`; return false; }
-    store.updateCompany(co => { (co.contacts ||= []).push({ id: uid('ct'), name, email, phone: String(fd.get('phone') || '').trim(), company: String(fd.get('company') || '').trim(), to: [], cc: [], used: todayISO() }); });
+    store.updateCompany(co => { (co.contacts ||= []).push({ id: uid('ct'), ...stamp(), name, email, phone: String(fd.get('phone') || '').trim(), company: String(fd.get('company') || '').trim(), to: [], cc: [], used: todayISO() }); });
     notice = `${name} saved.`;
   },
 };

@@ -251,6 +251,7 @@ export const actions = {
       id: uid('sh'), ref: nextRef(store.company.shipments), supplier: '', projectId: currentDivision() === TRADING ? '' : c.project.id, currency: c.global.fx.base,
       origin: '', destination: '', mode: 'sea', incoterm: '', tracking: '', carrier: '', etd: '', eta: '', arrived: '',
       status: 'ordered', lines: [], costs: [], notes: '', created: c.today,
+      division: currentDivision() === TRADING ? TRADING : 'installation',
     };
     store.updateCompany(co => co.shipments.push(s));
     selected = s.id;
@@ -342,7 +343,7 @@ export const submits = {
     if (qty > item.left + 1e-9) { notice = `Only ${num(item.left)} ${item.unit} of ${item.description} are left.`; return false; }
     store.updateCompany(co => co.sales.push({
       id: uid('sl'), date: fd.get('date') || c.today, customer: fd.get('customer').trim(), country: fd.get('country').trim(),
-      shipmentId, lineId, qty, unitPrice, currency: fd.get('currency'), paid: false, note: '',
+      shipmentId, lineId, qty, unitPrice, currency: fd.get('currency'), paid: false, note: '', division: TRADING,
     }));
     notice = `Sale to ${fd.get('customer').trim()} recorded.`;
   },

@@ -9,6 +9,7 @@ import { makePdf } from '../sync/share.js';
 import { store } from '../core/store.js';
 import { todayISO } from '../core/util.js';
 import { resolveList, suggestions, remember, defaultsFor, splitList } from '../engine/contacts.js';
+import { scopedCompany, currentDivision, divOf } from '../core/division.js';
 
 const $ = id => document.getElementById(id);
 let current = null;   // what the open dialog is about to send
@@ -39,7 +40,7 @@ function status(text, cls = 'muted') {
   el.className = cls;
 }
 
-const book = () => store.company?.contacts || [];
+const book = () => scopedCompany(store.company || {}, currentDivision()).contacts || [];   // the open division's contacts only
 
 /** The addresses typed so far, written out: saved names become addresses, plain words get @gmail.com. */
 function settle(id) {
@@ -85,7 +86,12 @@ function keepRecipients(v) {
   if (store.readOnly || !store.company) return;
   const entries = [...splitList(v.to).map(email => ({ email, as: 'to' })), ...splitList(v.cc).map(email => ({ email, as: 'cc' }))];
   if (!entries.length) return;
-  store.updateCompany(co => { co.contacts = remember(co.contacts || [], entries, { projectId: store.project?.id || '', today: todayISO() }); });
+  // contacts are kept per division: the open division's list is updated, the other one is left as it is
+  store.updateCompany(co => {
+    const d = currentDivision(), all = co.contacts || [];
+    const mine = all.filter(k => divOf(k) === d), rest = all.filter(k => divOf(k) !== d);
+    co.contacts = [...rest, ...remember(mine, entries, { projectId: store.project?.id || '', today: todayISO() }).map(k => (k.division ? k : { ...k, division: d }))];
+  });
 }
 
 function values() {

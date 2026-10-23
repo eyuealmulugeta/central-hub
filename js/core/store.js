@@ -16,6 +16,7 @@ import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } fro
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
 import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, companySections, MONEY_SECTIONS } from './access.js';
 import { divisionsOf } from './nav.js';
+import { DIVIDED, stampPlan } from './division.js';
 import { prefs, prefsPath } from './prefs.js';
 import { OWNER_RANKS } from '../engine/evaluation.js';
 import { lostBetween, restore } from '../engine/undo.js';
@@ -269,7 +270,9 @@ export const store = {
     // company-wide records are for the Office and the Owner; a Site user never loads them
     {
       for (const section of companySections(role, pages)) {
-        shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); }, section === 'messages' ? () => {} : fail));
+        // the rules let an Office user read only their own division of a divided section, so the app asks for just that
+        const only = role === 'office' && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
+        shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); }, section === 'messages' ? () => {} : fail, only));
       }
     }
 
@@ -620,6 +623,13 @@ export const store = {
   notify: emit,
   onError(fn) { errorSubscribers.add(fn); return () => errorSubscribers.delete(fn); },
 
+  /** The first Admin only: every record of a divided section that does not say its division yet is given it (once). */
+  async stampDivisions() {
+    if (!api || role !== 'owner' || !primary) return 0;
+    const ops = stampPlan(company).map(o => ({ path: `${COMPANY_PATH}/${o.section}/${o.id}`, data: clean(o.data) }));
+    if (ops.length) await api.batch(ops);
+    return ops.length;
+  },
   async exportAll() {
     const workspaces = {};
     for (const p of meta.projects) {

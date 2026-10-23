@@ -152,7 +152,10 @@ async function create(fd, x, c) {
   } else {
     Object.assign(req, { kind: 'text', text, hash: await sha256(text) });
   }
-  store.updateCompany(co => { (co.signs ||= []).push(req); (co.signkeys ||= []).push({ id, keys }); });
+  // the request and its keys belong to the division of the contract (the database lock reads this)
+  const division = x.division === 'trading' ? 'trading' : 'installation';
+  req.division = division;
+  store.updateCompany(co => { (co.signs ||= []).push(req); (co.signkeys ||= []).push({ id, keys, division }); });
   picked = null;
 }
 

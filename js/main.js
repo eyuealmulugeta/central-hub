@@ -8,12 +8,12 @@ import { derive } from './core/derive.js';
 import { todayISO, downloadText } from './core/util.js';
 import { html, options, icon } from './ui/dom.js';
 import { driveConfig, saveToDrive } from './sync/drive.js';
+import { prefs } from './core/prefs.js';
 import * as home from './ui/home.js';
 import * as dashboard from './ui/dashboard.js';
 import * as reports from './ui/reports.js';
 import * as schedule from './ui/schedule.js';
 import * as ledger from './ui/ledger.js';
-import * as estimator from './ui/estimator.js';
 import * as prices from './ui/prices.js';
 import * as docs from './ui/docs.js';
 import * as finance from './ui/finance.js';
@@ -54,14 +54,14 @@ import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
 const APP = 'Amistad Prefab Central Hub';
 // the trading side has two pages, both drawn by the trade module
-const VIEWS = { home, dashboard, reports, schedule, ledger, estimator, evaluation, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, dashboard, reports, schedule, ledger, evaluation, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
 const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Booked by clients and suppliers through your booking page', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', estimator: 'Estimate', evaluation: 'Evaluation', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Prices and currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Prices and currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -203,12 +203,6 @@ function renderSidebar(name, summaries) {
   $('#division').hidden = mine.length < 2;
   $('#division').innerHTML = String(html`${mine.map(d => html`<button type="button" data-division="${d}" class="${d === division ? 'on' : ''}" aria-pressed="${d === division}">${divisionLabel(d)}</button>`)}`);
   const installation = division === 'installation';
-  $('#projects').hidden = !installation;
-  $('#projects').innerHTML = String(html`${summaries.map(d => html`
-    <button type="button" class="side-link ${d.project === p ? 'on' : ''}" data-id="${d.project.id}" title="${PERCENT_MEANS[d.basis] || PERCENT_MEANS.work}${d.basis === 'work' || !d.basis ? (d.slip > 0 ? `. ${d.slip} working days behind plan` : '. On plan') : ''}">
-      <i class="dot ${d.basis === 'none' ? '' : d.slip > 0 ? 'behind' : 'done'}"></i><span>${d.project.name}</span><small>${d.basis === 'none' ? '—' : `${Math.round(d.progress)}%${d.basis === 'billed' ? ' inv.' : ''}`}</small>
-      ${d.unseen ? html`<em title="${d.unseen} alert${d.unseen > 1 ? 's' : ''} not opened yet">${d.unseen}</em>` : ''}
-    </button>`)}`);
   $('#project-select').innerHTML = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
     ${store.isAdmin ? html`<option value="${NEW_PROJECT}">+ New project</option>` : ''}`);
   $('#btn-new-project').hidden = !store.isAdmin || !installation;
@@ -230,7 +224,8 @@ function renderSidebar(name, summaries) {
   // the counts that are only counts can be marked as read; alerts, chat and meetings remember what was opened
   const key = { setup: `${p?.id}:setup`, requests: `${p?.id}:requests`, trade: `${division}:trade`, contracts: `${division}:contracts`, hr: `${division}:hr`, access: 'access' };
   lastCounts = { raw, key };
-  const count = Object.fromEntries(Object.entries(raw).map(([page, n]) => [page, key[page] ? badges.shown(key[page], n) : n]));
+  const settled = !store.loading && store.settled;   // while records are still arriving, a low count says nothing
+  const count = Object.fromEntries(Object.entries(raw).map(([page, n]) => [page, key[page] ? badges.shown(key[page], n, settled) : n]));
   const badge = n => (n ? html`<em>${n}</em>` : '');
   const here = hubOf(name);
 
@@ -253,13 +248,12 @@ function renderSidebar(name, summaries) {
   // a section with a single page needs no row of tabs
   // Settings lists its pages down the left of the page instead
   $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings';
-  $('#projects-label').hidden = !summaries.length || !installation;
 
   const unread = Object.values(count).reduce((n, v) => n + (v || 0), 0) + summaries.reduce((n, s) => n + (s.unseen || 0), 0);
   $('#nav-foot').innerHTML = String(html`
     ${unread ? html`<button type="button" class="mark-all" data-markread="all" title="Hide every red number until something new needs attention">✓ Mark all as read <b>${unread}</b></button>` : ''}
     ${store.cloud ? html`<div class="side-user"><span title="${store.user.email}">${store.user.email}</span><button type="button" class="btn ghost small" id="btn-signout">Sign out</button></div>` : ''}`);
-  $('#role-badge').textContent = store.cloud ? (store.readOnly ? 'Co-owner, view only' : ROLE_NAME[store.role] || '') : 'Demo';
+  $('#role-badge').textContent = store.cloud ? (store.readOnly ? 'Executive Partner, view only' : ROLE_NAME[store.role] || '') : 'Demo';
   $('#role-badge').title = store.cloud ? `Signed in as ${store.user.email}` : 'Demo data kept in this browser. Nobody is signed in.';
   $('#quick-menu').innerHTML = String(html`${!p ? '' : QUICK.filter(q => allowed(q.view) && !(q.office && isSite())).map((q, i) => html`<button type="button" data-q="${i}">${q.label}</button>`)}`);
   $('#quick').hidden = !p || !$('#quick-menu').children.length;
@@ -392,7 +386,6 @@ function searchItems() {
     add('Project', p.name, 'Open this project', () => { store.switchTo(p.id); goTo(allowed('dashboard') ? 'dashboard' : 'home'); });
     if (p.client?.name && store.can('docs')) add('Client', p.client.name, p.name, () => { store.switchTo(p.id); goTo('docs'); });
   }
-  if (ctx && installation && allowed('estimator')) for (const r of ctx.boq.procurement) items.push({ kind: 'Material', label: r.name, hint: `${Math.round(r.qty * 100) / 100} ${r.unit} in the estimate`, body: '', run: () => goTo('estimator') });
   if (ctx) items.push(...buildIndex(indexEnv()));
   return items;
 }
@@ -556,10 +549,6 @@ const narrow = on => {
 };
 $('#btn-collapse').addEventListener('click', () => narrow(!document.body.classList.contains('side-narrow')));
 try { if (localStorage.getItem(SIDE_KEY) === 'narrow') document.body.classList.add('side-narrow'); } catch { /* no saved choice */ }
-$('#projects').addEventListener('click', e => {
-  const el = e.target.closest('[data-id]');
-  if (el) store.switchTo(el.dataset.id);
-});
 $('#project-select').addEventListener('change', e => {
   if (e.target.value !== NEW_PROJECT) return store.switchTo(e.target.value);
   e.target.value = store.project?.id || '';
@@ -578,6 +567,23 @@ async function clearCache() {
 const status = text => { $('#bk-status').textContent = text; };
 const snapshot = async () => JSON.stringify(await store.exportAll(), null, 2);
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+const BACKUP_LAST = 'sf:backup-last';   // when the last weekly copy was saved (kept on the Admin's account: every device knows it)
+const BACKUP_EVERY = 7 * 864e5;
+/** The weekly full copy to Drive: only the first Admin, only with the backup link set up, only when the last one is a week old. */
+async function weeklyBackup() {
+  if (!store.cloud || !store.isAdmin || store.readOnly || !store.isPrimary || store.loading || !store.settled) return;
+  const { endpoint, token } = driveConfig.get();
+  if (!endpoint || !token) return;
+  if (Date.now() - (+prefs.get(BACKUP_LAST) || 0) < BACKUP_EVERY) return;
+  try {
+    await saveToDrive(`central-hub-weekly-${stamp()}.json`, await snapshot());
+    prefs.set(BACKUP_LAST, Date.now());
+  } catch { /* tried again at the next check */ }
+}
+const backupLine = () => {
+  const last = +prefs.get(BACKUP_LAST) || 0;
+  return last ? `Last weekly copy to Drive: ${new Date(last).toLocaleString()}. The next one is made by itself a week later, when you have Central Hub open.` : 'No weekly copy yet. Once the web app link and secret are set, Central Hub saves a full copy to Drive by itself once a week, while you have it open.';
+};
 
 document.addEventListener('click', e => {
   if (e.target.closest('#btn-signout')) { store.signOut(); return; }
@@ -586,10 +592,12 @@ document.addEventListener('click', e => {
   const cfg = driveConfig.get();
   $('#bk-endpoint').value = cfg.endpoint || '';
   $('#bk-token').value = cfg.token || '';
+  $('#bk-reply').value = cfg.replyTo || '';
   $('#bk-where').textContent = store.cloud
     ? 'Data is stored in your Firebase project and shared with everyone who has access. Export a copy from time to time.'
     : 'Data is stored in this browser. Export it regularly, or push a snapshot to Google Drive through your Apps Script web app.';
   $('#bk-reset').hidden = store.cloud;
+  $('#bk-last').textContent = store.cloud && store.isAdmin ? backupLine() : '';
   status('');
   $('#dlg-backup').showModal();
 });
@@ -628,8 +636,14 @@ $('#bk-copy').addEventListener('click', async () => {
     status(`Not copied: ${err.message}`);
   }
 });
+/** The web app link, the secret and the reply address are kept the moment they change: pressing another button first is not needed. */
+const keepDriveFields = () => {
+  driveConfig.set({ endpoint: $('#bk-endpoint').value.trim(), token: $('#bk-token').value, replyTo: $('#bk-reply').value.trim().toLowerCase() });
+  status('Saved in this browser.');
+};
+for (const id of ['#bk-endpoint', '#bk-token', '#bk-reply']) $(id).addEventListener('change', keepDriveFields);
 $('#bk-drive').addEventListener('click', async () => {
-  driveConfig.set({ endpoint: $('#bk-endpoint').value.trim(), token: $('#bk-token').value });
+  keepDriveFields();
   status('Saving…');
   try {
     const out = await saveToDrive(`central-hub-${stamp()}.json`, await snapshot());
@@ -661,6 +675,9 @@ function start() {
     document.addEventListener('visibilitychange', check);
     addEventListener('focus', check);
     checkSoon = () => setTimeout(check, 1500);
+    // the weekly full copy: checked a minute after start, then every 6 hours
+    setTimeout(weeklyBackup, 60_000);
+    setInterval(weeklyBackup, 6 * 3600_000);
     const quick = async () => {
       if (!document.hidden && ctx && route() === 'reports') { try { await reports.autoPull(true); } catch { /* shown by the next full check */ } }
       setTimeout(quick, FAST_PULL_MS);

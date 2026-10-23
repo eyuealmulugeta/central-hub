@@ -4,7 +4,7 @@
 // company letterhead through the Print button.
 
 import { store } from '../core/store.js';
-import { METHODS, invoiceLines, quoteLines, makeDoc, measureFromBOQ, nextNumber } from '../engine/billing.js';
+import { METHODS, invoiceLines, makeDoc, nextNumber, docTotals } from '../engine/billing.js';
 import { reportSnapshot } from '../engine/report.js';
 import { performanceReport } from '../engine/performance.js';
 import { paySheet, delayRecord } from '../engine/site.js';
@@ -139,7 +139,7 @@ function docPaper(d, c) {
       </section>
       <table class="table compact">
         <thead><tr><th>#</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Rate</th><th class="r">Amount (${cur})</th></tr></thead>
-        <tbody>${d.lines.map((l, i) => {
+        <tbody>${d.lines.filter(l => String(l.description || '').trim() || l.amount).map((l, i) => {
           const head = l.group && l.group !== group ? html`<tr class="group"><td colspan="6">${l.group}</td></tr>` : '';
           group = l.group || group;
           return html`${head}<tr>
@@ -406,7 +406,7 @@ function terms(c) {
       </form>`;
   } else if (b.method === 'measured') {
     detail = html`
-      <div class="toolbar"><h2>Measured items</h2><span class="grow"></span><button class="btn" data-act="copyMeasure">Copy items from estimate</button></div>
+      <div class="toolbar"><h2>Measured items</h2></div>
       <table class="table compact">
         <thead><tr><th>Item</th><th>Unit</th><th class="r">Contract qty</th><th class="r">Rate (${cur})</th><th class="r">Measured to date</th><th class="r">Invoiced</th><th></th></tr></thead>
         <tbody>${ws.measure.map(m => html`
@@ -551,6 +551,19 @@ export function render(c) {
       ${emailed(doc)}
       <label class="no-print">Notes shown on the document
         <textarea data-chg="docField" data-f="notes" data-fk="d-notes" rows="2" placeholder="Payment terms, delivery address, scope notes">${doc.notes}</textarea></label>
+      ${doc.type === 'quote' && doc.status === 'draft' ? html`<div class="card no-print"><h3>Lines</h3>
+        <table class="table compact">
+          <thead><tr><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Rate</th><th class="r">Amount</th><th></th></tr></thead>
+          <tbody>${doc.lines.map((l, i) => html`<tr>
+            <td><input data-chg="qLine" data-i="${i}" data-f="description" data-fk="ql-d-${i}" value="${l.description}" placeholder="What is quoted" aria-label="Description"></td>
+            <td class="r"><input type="number" step="any" data-chg="qLine" data-i="${i}" data-f="qty" data-fk="ql-q-${i}" value="${l.qty}" style="width:80px" aria-label="Quantity"></td>
+            <td><input data-chg="qLine" data-i="${i}" data-f="unit" data-fk="ql-u-${i}" value="${l.unit}" placeholder="pcs" style="width:70px" aria-label="Unit"></td>
+            <td class="r"><input type="number" step="any" data-chg="qLine" data-i="${i}" data-f="rate" data-fk="ql-r-${i}" value="${l.rate}" style="width:110px" aria-label="Rate"></td>
+            <td class="r">${num(l.amount)}</td>
+            <td><button class="btn ghost small" data-act="dropQLine" data-i="${i}" aria-label="Remove line">×</button></td>
+          </tr>`)}</tbody>
+        </table>
+        <button class="btn" data-act="addQLine">+ Add line</button></div>` : ''}
       ${docPaper(doc, c)}`;
   } else if (sel?.kind === 'report') {
     preview = html`
@@ -646,9 +659,8 @@ export const actions = {
     tab = 'docs'; sel = { kind: 'doc', id: doc.id }; notice = `${doc.number} created as a draft.`;
   },
   newQuote(el, c) {
-    if (!c.boq.rows.length) { notice = 'Build the estimate first: a quotation is priced from it.'; return; }
     const doc = makeDoc({
-      type: 'quote', project: c.project, docs: c.ws.docs, today: c.today, lines: quoteLines(c.boq),
+      type: 'quote', project: c.project, docs: c.ws.docs, today: c.today, lines: [{ description: '', qty: 1, unit: '', rate: 0, amount: 0 }],
       party: c.project.client, due: fromDay(toDay(c.today) + QUOTE_VALID_DAYS),
     });
     store.update(ws => ws.docs.push(doc));
@@ -770,15 +782,23 @@ ${body}`).catch(() => {});
 
   removeStage(el) { store.update(ws => { ws.payStages = ws.payStages.filter(s => s.id !== el.dataset.id); }); },
   removeMeasure(el) { store.update(ws => { ws.measure = ws.measure.filter(m => m.id !== el.dataset.id); }); },
-  copyMeasure(el, c) {
-    if (!c.boq.rows.length) { notice = 'The estimate is empty.'; return; }
-    if (c.ws.measure.length && !confirm('Replace the current measured items with the items from the estimate?')) return;
-    store.update(ws => { ws.measure = measureFromBOQ(c.boq); });
-  },
+  /** A draft quotation is typed line by line. */
+  addQLine() { store.update(ws => { const d = current(ws); if (d && d.type === 'quote' && d.status === 'draft') d.lines.push({ description: '', qty: 1, unit: '', rate: 0, amount: 0 }); }); },
+  dropQLine(el) { store.update(ws => { const d = current(ws); if (!d || d.status !== 'draft') return; d.lines.splice(+el.dataset.i, 1); Object.assign(d, docTotals(d.lines, d.vatPct, d.retentionPct)); }); },
 };
 
 export const changes = {
   endDate(el) { endDate = el.value; },
+  qLine(el) {
+    store.update(ws => {
+      const d = current(ws), l = d?.lines[+el.dataset.i];
+      if (!l || d.type !== 'quote' || d.status !== 'draft') return;
+      const f = el.dataset.f;
+      l[f] = f === 'qty' || f === 'rate' ? (+el.value || 0) : el.value;
+      l.amount = Math.round((l.qty || 0) * (l.rate || 0) * 100) / 100;
+      Object.assign(d, docTotals(d.lines, d.vatPct, d.retentionPct));
+    });
+  },
   docField(el) { store.update(ws => { const d = current(ws); if (d && (el.dataset.f !== 'due' || el.value)) d[el.dataset.f] = el.value; }); },
   client(el) { store.updateProject(p => { p.client = { ...p.client, [el.dataset.f]: el.value.trim() }; }); },
   billing(el) {

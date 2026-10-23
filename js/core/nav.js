@@ -46,7 +46,7 @@ export const MENUS = {
   // Login > Division > Projects (the open project) > Report, Crew, Finance, Administration
   installation: [
     ...company,
-    { id: 'projects', label: 'Overview', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'estimator', 'trade', 'setup'] },
+    { id: 'projects', label: 'Overview', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Report', icon: 'reports', tabs: ['reports', 'status'] },
     { id: 'crew', label: 'Crew', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'attendance', 'evaluation', 'payroll'] },
     { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'cashflow', 'income', 'expenses', 'summary'] },

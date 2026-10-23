@@ -51,35 +51,8 @@ export function buildFlags({ project, ws, sched, boq, led, bill, today }) {
   }
   if (sched.cyclic.length) flag('high', 'Schedule', 'Circular dependency', 'Some tasks depend on each other in a loop', 'schedule');
 
-  // materials: needed by the forecast start of the task that uses them. That is the task set on
-  // the procurement line, or failing that the task the component is linked to.
-  const rowById = new Map(sched.rows.map(r => [r.id, r]));
+  // materials: the Estimate is gone (1B), so no material dates are known any more
   const needBy = {};
-  for (const m of boq.procurement) {
-    const st = ws.procurement[m.materialId] || {};
-    const users = (st.taskId ? [st.taskId] : m.taskIds).map(id => rowById.get(id)).filter(Boolean);
-    if (!users.length) continue;
-    const need = needBy[m.materialId] = Math.min(...users.map(r => r.es));
-    const status = st.status || 'not_ordered';
-    if (status === 'delivered' || users.every(r => r.progress >= 100)) continue;
-    if (status === 'not_ordered') {
-      const orderBy = need - m.leadDays;
-      if (T > orderBy) {
-        flag('high', 'Material bottleneck', m.name,
-          `Not ordered. Needs ${m.leadDays} days lead time and is required on site ${fmtDay(need)}`, 'estimator');
-      } else if (orderBy - T <= ORDER_SOON_DAYS) {
-        flag('warn', 'Order soon', m.name, `Order by ${fmtDay(orderBy)} to arrive for ${fmtDay(need)}`, 'estimator');
-      }
-    } else if (st.eta && toDay(st.eta) > need) {
-      flag('high', 'Material bottleneck', m.name,
-        `Delivery expected ${fmtDate(st.eta)}, after it is needed on ${fmtDay(need)}`, 'estimator');
-    }
-  }
-  const unpriced = boq.procurement.filter(m => m.missing);
-  if (unpriced.length) {
-    flag('warn', 'Pricing', `${unpriced.length} material${unpriced.length > 1 ? 's' : ''} without a price`,
-      unpriced.map(m => m.name).join(', '), 'catalog');
-  }
 
   // money
   if (led.budget > 0) {

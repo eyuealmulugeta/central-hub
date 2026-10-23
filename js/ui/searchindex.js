@@ -57,7 +57,6 @@ export function buildIndex(env) {
     if (allowed('dashboard')) for (const i of ws.items) add('Follow-up', i.title, `${i.owner || ''} ${i.status}`, flatText(i), () => goTo('dashboard'));
     if (allowed('requests')) for (const r of ws.requests || []) add('Request', r.title || r.category, r.status || '', flatText(r), () => goTo('requests'));
     if (allowed('prices')) for (const m of ws.team) add('Team member', m.name, m.role || '', flatText(m), () => goTo('prices'));
-    if (allowed('estimator')) for (const a of ws.assemblies) add('Estimate item', a.name, '', flatText(a), () => goTo('estimator'));
   }
 
   return items;

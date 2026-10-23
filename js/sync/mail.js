@@ -87,7 +87,7 @@ export const pageHtml = (inner, title) =>
   `<!doctype html><html><head><meta charset="utf-8"><title>${String(title || 'Document').replace(/[<>&]/g, '')}</title><style>${PAPER_CSS}</style></head><body>${inner}</body></html>`;
 
 /** Send through the web app. Resolves with what the script reports, or throws a message a person can act on. */
-export async function sendMail({ to, cc = '', subject, message, html = '', filename = 'document', files = [] }) {
+export async function sendMail({ to, cc = '', subject, message, html = '', filename = 'document', files = [], replyTo = '', fromName = '' }) {
   const { endpoint, token } = driveConfig.get();
   if (!endpoint || !token) throw new Error('Email is not set up yet. Enter the web app URL and shared secret under Backup.');
   let text;
@@ -96,7 +96,7 @@ export async function sendMail({ to, cc = '', subject, message, html = '', filen
       method: 'POST',
       // text/plain avoids a CORS preflight, which Apps Script cannot answer
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'email', token, to, cc, subject, message, html, filename, files }),
+      body: JSON.stringify({ action: 'email', token, to, cc, subject, message, html, filename, files, replyTo, fromName }),
       redirect: 'follow',
     });
     text = await res.text();

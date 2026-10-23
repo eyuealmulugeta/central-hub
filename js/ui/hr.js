@@ -389,7 +389,6 @@ function form({ p, alerts, monthly }, c) {
       <span class="muted">${p.name || 'New employee'}</span>
       <span class="grow"></span>
       <button class="btn" data-act="sheet" title="A printable page about this person, with the details you choose, to print or email to a client">Profile sheet</button>
-      <button class="btn" data-act="moveToOwners" title="For someone who owns the company: kept apart from the employees">Move to company owners</button>
       <button class="btn" data-act="toggleLeft">${p.status === 'left' ? 'Mark as working again' : 'Mark as left'}</button>
       <button class="btn danger" data-act="remove">Delete</button>
     </div>
@@ -425,15 +424,6 @@ export const actions = {
   back() { selected = null; mode = 'form'; resetZoom(); },
   zoomPassport() { toggleZoom(); },
   dropPassportImage() { store.updateCompany(co => { const p = find(co); if (p) p.passportImage = ''; }); },
-  /** An employee who is really an owner: moved to Company owners, which keeps no pay or agreement. */
-  moveToOwners(el, c) {
-    const p = find(c.company);
-    if (!p || !confirm(`Move ${p.name || 'this person'} to Company owners?\n\nTheir pay, agreement and payroll lines stay behind and are not copied. Their details, photo, passport and papers go with them. They remain on any project team until you take them off there.`)) return;
-    const owner = ownerFromStaff(p, () => uid('ow'));
-    store.updateCompany(co => { co.owners.push(owner); co.staff = co.staff.filter(x => x.id !== p.id); });
-    selected = null;
-    notice = `${p.name || 'The person'} is now under Company owners (Administration).`;
-  },
   sheet() { mode = 'sheet'; },
   /** Bring the open project's team into the directory: matched by name or email, otherwise new people, all linked. */
   fromTeam(el, c) {

@@ -1,5 +1,6 @@
 import { store } from '../core/store.js';
 import { convert } from '../engine/pricing.js';
+import { ALLOWED, isForeign, foreignSummary, convertGlobal, convertProject, convertCompany } from '../engine/currencies.js';
 import { uid } from '../core/util.js';
 import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
@@ -89,6 +90,7 @@ const nav = () => html`
 let rulesNotice = '';
 let transferNotice = '';
 let coOwnerNotice = '';
+let fxNotice = '';
 let coOwnerBad = false;
 let pack = null;        // a data pack that has been chosen and is waiting for confirmation
 let packFor = '';       // the project that was open when it was chosen: it is imported there and nowhere else
@@ -259,12 +261,12 @@ function youTab() {
           <label>Your title <input data-chg="myProfile" data-f="title" data-fk="me-title" value="${store.profile.title}" placeholder="e.g. General Manager"></label>
         </div>
         <p class="muted">Documents you approve are signed "${store.signature}".</p>`)}
-      ${store.isPrimary ? box('coowners', 'Co-owners', html`
-        <p class="muted">A co-owner sees everything in both departments, including HR and payroll, but cannot add, edit or delete anything, or change settings and permissions. Only you add or remove co-owners.</p>
-        ${store.coOwners.length ? html`<ul class="list">${store.coOwners.map(e => html`<li class="split"><span>${e}</span><button class="btn ghost small" data-act="removeCoOwner" data-id="${e}">Remove</button></li>`)}</ul>` : html`<p class="muted">No co-owner yet.</p>`}
+      ${store.isPrimary ? box('coowners', 'Executive Partners', html`
+        <p class="muted">An Executive Partner sees everything in both departments, including HR and payroll, but cannot add, edit or delete anything, or change settings and permissions. Only you add or remove Executive Partners.</p>
+        ${store.coOwners.length ? html`<ul class="list">${store.coOwners.map(e => html`<li class="split"><span>${e}</span><button class="btn ghost small" data-act="removeCoOwner" data-id="${e}">Remove</button></li>`)}</ul>` : html`<p class="muted">No Executive Partner yet.</p>`}
         <form data-form="coOwner" class="entry">
-          <input type="email" name="email" placeholder="partner@gmail.com" required aria-label="Co-owner's Google account" class="wide">
-          <button class="btn primary">Make co-owner</button>
+          <input type="email" name="email" placeholder="partner@gmail.com" required aria-label="Executive Partner's Google account" class="wide">
+          <button class="btn primary">Make Executive Partner</button>
         </form>
         ${coOwnerNotice ? html`<p class="${coOwnerBad ? 'bad' : 'ok'}">${coOwnerNotice}</p>` : ''}`) : ''}
       ${box('rules', 'Database rules', html`
@@ -319,7 +321,7 @@ function linksPage(c) {
 /** The open project, as four tabs. */
 function projectPage(c) {
   const { global: g, project: p, ws } = c;
-  const currencies = Object.keys(g.fx.rates).map(k => [k, k]);
+  const currencies = Object.keys(g.fx.rates).filter(k => ALLOWED.includes(k)).map(k => [k, k]);
   const linked = assignedUsers(store.users, p.id).length;
   const t = targetFor(p, c.ws, c.today);
   const reported = t.nonWorking.filter(d => !(p.nonWorking || []).includes(d));
@@ -475,7 +477,7 @@ export function render(c) {
   if (section === 'access') return html`${nav()}${accessPage(c)}`;
   if (section === 'links') return html`${nav()}${linksPage(c)}`;
   const { global: g, project: p, ws } = c;
-  const currencies = Object.keys(g.fx.rates).map(k => [k, k]);
+  const currencies = Object.keys(g.fx.rates).filter(k => ALLOWED.includes(k)).map(k => [k, k]);
   const co = g.company || {};
 
   return html`
@@ -486,7 +488,7 @@ export function render(c) {
       <form data-form="region" class="entry" id="add-region">
         <b>Add a country</b>
         <input name="name" placeholder="Country, e.g. Israel" required aria-label="Country name" class="wide">
-        <input name="currency" list="currency-codes" placeholder="Currency, e.g. ILS" required pattern="[A-Za-z]{3}" maxlength="3" title="Three-letter currency code" aria-label="Currency code" class="amount">
+        <input name="currency" list="currency-codes" placeholder="ETB, USD or AED" required pattern="[A-Za-z]{3}" maxlength="3" title="ETB, USD or AED" aria-label="Currency code" class="amount">
         <datalist id="currency-codes">${currencies.map(([k]) => html`<option value="${k}"></option>`)}</datalist>
         <input type="number" name="rate" min="0" step="any" placeholder="Per 1 ${g.fx.base}" title="Exchange rate: units per 1 ${g.fx.base}. Only needed for a currency that is not listed yet." aria-label="Exchange rate per 1 ${g.fx.base}, for a new currency" class="amount">
         <select name="from" aria-label="Starting prices">
@@ -520,14 +522,23 @@ export function render(c) {
       </form>`)}
 
     ${panel('fx', 'Exchange rates', Object.keys(g.fx.rates).join(', '), () => html`
-        <p class="muted">Units per 1 ${g.fx.base}. Sample values: enter your own.</p>
+        <p class="muted">Central Hub works in ETB, USD and AED. Units per 1 ${g.fx.base}. Sample values: enter your own.</p>
         <div class="grid2">${Object.entries(g.fx.rates).map(([k, v]) => html`
           <label>${k} <input type="number" min="0" step="any" data-chg="fx" data-k="${k}" data-fk="fx-${k}" value="${v}" ${k === g.fx.base ? 'disabled' : ''}></label>`)}</div>
-        <form data-form="currency" class="entry">
-          <input name="code" placeholder="New currency, e.g. ILS" required pattern="[A-Za-z]{3}" maxlength="3" title="Three-letter currency code" aria-label="Currency code" class="wide">
+        ${(() => {
+          const left = [...foreignSummary(g, store.projects, store.company), ...((store.ws?.ledger || []).some(e => isForeign(e.currency)) ? [`Costs of ${p.name} in another currency`] : [])];
+          return left.length ? html`<div class="card"><b>Still in other currencies</b>
+            <ul>${left.map(r => html`<li>${r}</li>`)}</ul>
+            <p class="muted">Converting changes them to USD at the rates above, for every project. The original amount and currency stay in a note on each record. Export a backup first (Backup, Export JSON).</p>
+            ${store.isAdmin && !store.readOnly ? html`<button class="btn primary" data-act="convertCurrencies">Convert to USD</button>` : ''}
+          </div>` : html`<p class="ok">Everything is in ETB, USD or AED.</p>`;
+        })()}
+        ${fxNotice ? html`<p class="ok">${fxNotice}</p>` : ''}
+        ${ALLOWED.some(k => !g.fx.rates[k]) ? html`<form data-form="currency" class="entry">
+          <select name="code" aria-label="Currency">${options(ALLOWED.filter(k => !g.fx.rates[k]).map(k => [k, k]))}</select>
           <input type="number" name="rate" min="0" step="any" placeholder="Per 1 ${g.fx.base}" required aria-label="Units per 1 ${g.fx.base}" class="amount">
           <button class="btn">Add</button>
-        </form>`)}
+        </form>` : ''}`)}
 
     ${panel('company', 'Company letterhead', co.name || 'Name, address, bank details and logo for printed documents', () => html`
         <p class="muted">Printed at the top of every invoice, quotation, purchase order and report. Shared by all projects.</p>
@@ -602,8 +613,26 @@ export const actions = {
   clearFaults() { if (confirm('Clear the list of reported problems?')) store.clearFaults(); },
   /** End someone's session, for example when their phone is lost, so they can sign in on another device. */
   resetSession(el) { if (confirm(`End the session of ${el.dataset.id}? They are signed out on that device and can sign in on another.`)) store.resetSession(el.dataset.id); },
+  /** Everything in another currency to USD, at today's table: every project, the company records, then the shared settings. */
+  async convertCurrencies(el, c) {
+    if (!store.isAdmin || store.readOnly) return;
+    if (!confirm('Convert everything that is in another currency to USD, at the rates in this table?\n\nThis changes every project. The original amount and currency stay in a note on each record. Export a backup first if you have not.')) return;
+    const fx = structuredClone(store.global.fx), on = c.today;
+    let n = 0;
+    for (const p of [...store.projects]) {
+      let next = null;
+      await store.updateOther(p.id, ws => { const r = convertProject(p, ws, fx, on); n += r.changes.length; next = r.project; Object.assign(ws, r.ws); });
+      if (next && next !== p) store.patchProject(p.id, { currency: next.currency, budget: next.budget, contractValue: next.contractValue, fxFrom: next.fxFrom });
+    }
+    const co = convertCompany(store.company, fx, on);
+    if (co.changes.length) store.updateCompany(x => Object.assign(x, co.sections));
+    const gl = convertGlobal(store.global, on);
+    store.updateGlobal(g => { g.fx = gl.global.fx; g.regions = gl.global.regions; g.prices = gl.global.prices; });
+    fxNotice = `Converted to USD: ${n + co.changes.length + gl.changes.length} item${n + co.changes.length + gl.changes.length === 1 ? '' : 's'}. The rate table now holds ETB, USD and AED.`;
+    store.notify();
+  },
   removeCoOwner(el) {
-    if (!confirm(`Remove ${el.dataset.id} as a co-owner? They can no longer sign in as an Admin.`)) return;
+    if (!confirm(`Remove ${el.dataset.id} as an Executive Partner? They can no longer sign in to see everything.`)) return;
     store.removeCoOwner(el.dataset.id).catch(err => { coOwnerNotice = err.message; coOwnerBad = true; store.notify(); });
   },
   removeUser(el) { if (confirm(`Remove access for ${el.dataset.id}?`)) store.removeUser(el.dataset.id); },
@@ -783,7 +812,7 @@ export const submits = {
     const rate = +fd.get('rate');
     const g0 = store.global;
     if (g0.regions.some(r => r.name.toLowerCase() === name.toLowerCase())) return say(`${name} is already in the list.`, true);
-    if (!/^[A-Z]{3}$/.test(currency)) return say('The currency must be a three-letter code such as ILS.', true);
+    if (!ALLOWED.includes(currency)) return say('Use ETB, USD or AED: Central Hub works in these three only.', true);
     if (!g0.fx.rates[currency] && !(rate > 0)) return say(`${currency} is a new currency: also enter its exchange rate per 1 ${g0.fx.base}.`, true);
     store.updateGlobal(g => {
       if (!g.fx.rates[currency]) g.fx.rates[currency] = rate;
@@ -799,13 +828,13 @@ export const submits = {
   currency(fd) {
     const code = fd.get('code').trim().toUpperCase();
     const rate = +fd.get('rate');
-    if (/^[A-Z]{3}$/.test(code) && rate > 0) store.updateGlobal(g => { g.fx.rates[code] = rate; });
+    if (ALLOWED.includes(code) && rate > 0) store.updateGlobal(g => { g.fx.rates[code] = rate; });
   },
   coOwner(fd) {
     const email = String(fd.get('email') || '').trim().toLowerCase();
-    if (!confirm(`Make ${email} a co-owner? They can view everything in both departments, including HR and payroll, but cannot edit, delete or change settings and permissions.`)) return false;
+    if (!confirm(`Make ${email} an Executive Partner? They can view everything in both departments, including HR and payroll, but cannot edit, delete or change settings and permissions.`)) return false;
     coOwnerNotice = '';
-    store.addCoOwner(email).then(() => { coOwnerNotice = `${email} is a co-owner (view only). Publish the latest access rules first, or they will not see the data.`; coOwnerBad = false; store.notify(); })
+    store.addCoOwner(email).then(() => { coOwnerNotice = `${email} is an Executive Partner (view only). Publish the latest access rules first, or they will not see the data.`; coOwnerBad = false; store.notify(); })
       .catch(err => { coOwnerNotice = /permission/i.test(`${err.code} ${err.message}`) ? 'The database refused it. Publish the latest access rules first, then try again.' : err.message; coOwnerBad = true; store.notify(); });
     return false;
   },

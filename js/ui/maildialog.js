@@ -4,6 +4,7 @@
 // email app, which gets the text but no attachment.
 
 import { sendMail, mailReady, mailtoLink, readPdf, MAX_FILES, MAX_FILE_BYTES } from '../sync/mail.js';
+import { driveConfig } from '../sync/drive.js';
 import { makePdf } from '../sync/share.js';
 import { store } from '../core/store.js';
 import { todayISO } from '../core/util.js';
@@ -118,7 +119,10 @@ function wire() {
         if (sheet) { try { ownPdf = await readPdf(await makePdf(sheet, job.filename)); } catch { /* the script makes it instead */ } }
         if (!ownPdf) html = await job.getHtml();
       }
-      const out = await sendMail({ ...v, html, filename: job.filename, files: [...(ownPdf ? [ownPdf] : []), ...picked].map(({ name, dataBase64 }) => ({ name, dataBase64 })) });
+      // replies come back to the person who pressed Send: the address set under Backup, else the one they signed in with
+      const replyTo = driveConfig.get().replyTo || (store.cloud ? store.user?.email : '') || '';
+      const fromName = store.profile?.name || (store.cloud ? store.user?.name : '') || '';
+      const out = await sendMail({ ...v, replyTo, fromName, html, filename: job.filename, files: [...(ownPdf ? [ownPdf] : []), ...picked].map(({ name, dataBase64 }) => ({ name, dataBase64 })) });
       $('dlg-mail').close();
       keepRecipients(v);
       job.onSent?.({ to: v.to, cc: v.cc, attached: out.attached || '' });

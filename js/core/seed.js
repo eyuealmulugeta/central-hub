@@ -8,13 +8,13 @@ import { buildBOM } from '../engine/bom.js';
 import { priceBOM } from '../engine/pricing.js';
 import { DEFAULT_BILLING, makeDoc, measureFromBOQ } from '../engine/billing.js';
 
-const FX = { base: 'USD', rates: { USD: 1, ETB: 155, CDF: 2850, SCR: 14.2, AED: 3.6725, EUR: 0.9 } };
+const FX = { base: 'USD', rates: { USD: 1, ETB: 155, AED: 3.6725 } };   // Central Hub works in ETB, USD and AED only
 
 // factor = rough cost level relative to the reference USD price
 const REGIONS = [
   { id: 'ET', name: 'Ethiopia', currency: 'ETB', factor: 1.0 },
   { id: 'CD', name: 'DR Congo', currency: 'USD', factor: 1.35 },
-  { id: 'SC', name: 'Seychelles', currency: 'SCR', factor: 1.5 },
+  { id: 'SC', name: 'Seychelles', currency: 'USD', factor: 1.5 },
   { id: 'AE', name: 'UAE', currency: 'AED', factor: 0.95 },
 ];
 
@@ -122,7 +122,7 @@ const PROJECTS = [
     procurement: {},
   },
   {
-    id: 'seychelles', name: 'Seychelles Container Housing', type: 'container', regionId: 'SC', currency: 'SCR', startedDaysAgo: 16, billing: 'milestone_fixed',
+    id: 'seychelles', name: 'Seychelles Container Housing', type: 'container', regionId: 'SC', currency: 'USD', startedDaysAgo: 16, billing: 'milestone_fixed',
     assembly: { templateId: 'container_unit', name: 'Housing block, 6 units', params: { size: '40hc', count: 6, windows: 12, doors: 8, partitions: 30, points: 60, wetUnits: 6, insulated: true }, taskId: 't4' },
     procurement: { container_40hc: 'delivered', pier: 'delivered', steel_rhs: 'delivered', window: 'ordered', door: 'ordered' },
   },

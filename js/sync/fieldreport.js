@@ -181,7 +181,18 @@ export const REQUEST_CATEGORIES = ['Material', 'Equipment', 'Manpower', 'Informa
  * the open tasks with their units, the payment milestones, the crew by name, the trades
  * and the equipment seen so far. Built from the open project; sent with sendSetup.
  */
-export function buildSetup({ project, ws, sched, bill, people = [] }, today) {
+/** Departments and titles of people who work in the office: they are left out of the site roll in Field Report. */
+const OFFICE_DEPTS = ['Management', 'Finance and accounts', 'Administration', 'Procurement and logistics', 'Sales'];
+const OFFICE_ROLE = /\b(admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|cashier|secretary|human resources|hr)\b/i;
+/** Whether a project's team member works on site: their HR department decides; without one, their role. Pure. */
+export function onSite(member, staff = []) {
+  const person = member.personId ? staff.find(p => p.id === member.personId) : null;
+  if (person && person.department) return !OFFICE_DEPTS.includes(person.department);   // the HR department decides when there is one
+  return !OFFICE_ROLE.test(String(member.role || ''));
+}
+
+export function buildSetup({ project, ws, sched, bill, people = [], company = {} }, today) {
+  const site = ws.team.filter(m => onSite(m, company.staff || []));
   const triggers = new Set((bill?.stages || []).map(s => s.taskId).filter(Boolean));
   const open = sched.rows.filter(r => r.progress < 100);
   return {
@@ -193,9 +204,9 @@ export function buildSetup({ project, ws, sched, bill, people = [] }, today) {
     })),
     // a milestone the site can report as reached; the ones that release a payment are marked
     milestones: open.filter(r => r.milestone).map(r => ({ id: r.id, name: r.name, payment: triggers.has(r.id) })),
-    crew: ws.team.map(m => ({ id: m.id, name: m.name, role: m.role || '' })),
+    crew: site.map(m => ({ id: m.id, name: m.name, role: m.role || '' })),
     // the roster of this project: only people currently on it (a team member can be switched off without being deleted)
-    staff: ws.team.filter(m => m.active !== false).map(m => ({ id: m.id, name: m.name, trade: m.role || '', active: true, level: m.level || 'crew' })),
+    staff: site.filter(m => m.active !== false).map(m => ({ id: m.id, name: m.name, trade: m.role || '', active: true, level: m.level || 'crew' })),
     // the calendar and the target (finish) date: start + planned working days, skipping every non-working day
     ...(({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }) => ({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }))(targetFor(project, ws, today)),
     // the people whose email the Admin linked to this project: the only ones who should see it in Field Report

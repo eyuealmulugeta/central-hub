@@ -16,6 +16,7 @@ import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } fro
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
 import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, companySections, MONEY_SECTIONS } from './access.js';
 import { divisionsOf } from './nav.js';
+import { prefs, prefsPath } from './prefs.js';
 import { OWNER_RANKS } from '../engine/evaluation.js';
 import { lostBetween, restore } from '../engine/undo.js';
 import { isLimited, isActive } from '../engine/deployment.js';
@@ -58,6 +59,7 @@ let role = 'owner';      // owner | office | site. Local mode has no sign-in, so
 let users = [];          // other people with access (the Owner sees these)
 let requests = [];       // people who signed in and are waiting for the Admin's approval
 let loading = false;     // the open workspace is still arriving
+let connectedAt = 0;     // when this sign-in started: counts are not trusted to lower a "read" mark for a few seconds
 let pages = ROLE_PAGES.office;   // pages this person may open (the Admin opens everything)
 let ranks = OWNER_RANKS;   // Site Engineer, Project Manager, General Manager: decides whom this person may evaluate
 let session = null;      // the record this device holds in sessions/<email>: one signed-in device per person (not the Admin)
@@ -113,7 +115,7 @@ const viewOnly = (quiet = false) => {
   const now = Date.now();
   if (!quiet && now - toldAt > 4000 && typeof dispatchEvent === 'function') {
     toldAt = now;
-    dispatchEvent(new CustomEvent('hub-toast', { detail: '✗ Co-owners can view everything, but cannot edit, delete or change settings and permissions.' }));
+    dispatchEvent(new CustomEvent('hub-toast', { detail: '✗ Executive Partners can view everything, but cannot edit, delete or change settings and permissions.' }));
   }
   return true;
 };
@@ -201,7 +203,8 @@ export const store = {
     [...shared, ...opened].forEach(off => off());
     stopSession(); lockedBy = null; sessions = [];
     shared = []; opened = []; openId = null; users = []; requests = []; profile = { name: '', title: '' };
-    api = adapter; me = user;
+    api = adapter; me = user; connectedAt = Date.now();
+    api.get(prefsPath(me.email)).then(d => { prefs.attach(api, me.email, d); emit(); }).catch(() => prefs.attach(api, me.email, null));
     company = emptyCompany();
     cache.clear();
     meta = { projects: [], activeId: ls().getItem(K.active) };
@@ -347,6 +350,8 @@ export const store = {
     return [name, profile.title].filter(Boolean).join(', ') || me?.email || 'Office';
   },
   get loading() { return loading; },
+  /** Local data is there at once; signed in, the records are taken as all arrived 15 seconds after sign-in. */
+  get settled() { return !api || Date.now() - connectedAt > 15000; },
   /** Local mode has no sign-in, so there is nobody to restrict. */
   get canApprove() { return !api || approver; },
 
@@ -593,6 +598,7 @@ export const store = {
   },
   /** Let go of this device's session (so the person can sign in elsewhere), then sign out. */
   async signOut() {
+    prefs.detach();
     if (session) {
       const rec = { ...session, released: true, lastSeen: Date.now() };
       stopSession();
@@ -622,7 +628,13 @@ export const store = {
       for (const section of SECTIONS) ws[section] = sectionFromDocs(section, await api.list(`projects/${p.id}/${section}`));
       workspaces[p.id] = ws;
     }
-    return { app: 'siteflow', version: VERSION, exportedAt: new Date().toISOString(), meta, global, company, workspaces };
+    // the Admin's backup also holds who has access, so a lost database can be rebuilt with its people
+    let access;
+    if (api && role === 'owner' && primary) {
+      const setup = await api.get('config/setup').catch(() => null);
+      access = { users: structuredClone(users), coOwners: setup?.coOwners || [] };
+    }
+    return { app: 'siteflow', version: VERSION, exportedAt: new Date().toISOString(), meta, global, company, workspaces, ...(access ? { access } : {}) };
   },
 
   /** Local: replaces everything in this browser. Cloud: adds or replaces the projects in the file, and the shared prices. */
@@ -644,7 +656,15 @@ export const store = {
       stamp(ws);
       for (const o of diffWorkspace(emptyWorkspace(), ws)) ops.push({ path: `projects/${p.id}/${o.section}/${o.id}`, data: o.data });
     });
+    // the people with access come back too, but only through the first Admin, and never anyone's Admin role
+    if (role === 'owner' && primary && data.access) {
+      for (const u of data.access.users || []) if (u?.email && u.role !== 'owner') ops.push({ path: `users/${String(u.email).toLowerCase()}`, data: clean(u) });
+    }
     await api.batch(ops);
+    if (role === 'owner' && primary && data.access?.coOwners?.length) {
+      const setup = await api.get('config/setup');
+      if (setup?.owner === me.email) await api.set('config/setup', { ...setup, coOwners: [...new Set([...(setup.coOwners || []), ...data.access.coOwners])] });
+    }
   },
   reset(today = todayISO()) { if (!api) { install(seed(today)); emit(); } },
 };

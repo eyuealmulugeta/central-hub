@@ -1,13 +1,15 @@
 // Which alerts on Home this person has already opened. Kept in this browser,
 // per project: the red number beside Home counts the ones not opened yet.
 
+import { prefs } from '../core/prefs.js';
+
 const storeKey = projectId => `sf:seen:${projectId}`;
 
 function read(projectId) {
   try { return new Set(JSON.parse(localStorage.getItem(storeKey(projectId))) || []); } catch { return new Set(); }
 }
 
-export const flagKey = f => `${f.kind}|${f.title}`;
+export const flagKey = f => `${f.kind}|${String(f.title).replace(/\d+/g, '#')}`;
 export const itemKey = i => `item|${i.id}`;
 
 /** Keys of everything that counts towards the red number. */
@@ -51,7 +53,7 @@ export const summaryOf = d => {
 
 /** Mark a set of alerts (by key) as opened, for any project: "Mark as read". */
 export function markKeysSeen(projectId, keys) {
-  try { localStorage.setItem(storeKey(projectId), JSON.stringify([...new Set(keys || [])])); } catch { /* private window: the number just stays */ }
+  prefs.set(storeKey(projectId), [...new Set(keys || [])]);
 }
 
 /** Mark one alert as opened. Alerts that no longer exist are forgotten, so one that comes back counts again. */
@@ -59,5 +61,5 @@ export function markSeen(projectId, flags, key) {
   const live = new Set(alertKeys(flags));
   const seen = [...read(projectId)].filter(k => live.has(k));
   if (live.has(key) && !seen.includes(key)) seen.push(key);
-  try { localStorage.setItem(storeKey(projectId), JSON.stringify(seen)); } catch { /* private window: the number just stays */ }
+  prefs.set(storeKey(projectId), seen);
 }

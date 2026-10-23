@@ -4,7 +4,7 @@
 // in the database, so keep the two in step.
 
 /** Pages of one construction project. */
-export const PROJECT_PAGES = ['dashboard', 'reports', 'schedule', 'ledger', 'estimator', 'docs', 'evaluation', 'requests', 'cashflow'];
+export const PROJECT_PAGES = ['dashboard', 'reports', 'schedule', 'ledger', 'docs', 'evaluation', 'requests', 'cashflow'];
 /** Pages of the trading side: buying, shipping, stock and sales. */
 export const TRADING_PAGES = ['trade', 'stock'];
 /** Pages about the whole company. */
@@ -16,7 +16,7 @@ export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', ...SE
 
 /** What the Admin can grant to an Office user. 'trade' covers both trading pages. */
 export const GRANTABLE = [
-  ['dashboard', 'Overview'], ['reports', 'Daily report'], ['schedule', 'Schedule'], ['ledger', 'Costs'], ['cashflow', 'Cash flow'], ['estimator', 'Estimate'],
+  ['dashboard', 'Overview'], ['reports', 'Daily report'], ['schedule', 'Schedule'], ['ledger', 'Costs'], ['cashflow', 'Cash flow'],
   ['docs', 'Invoices and documents'], ['requests', 'Requests'], ['trade', 'Trading'], ['finance', 'Company finance'], ['contracts', 'Contracts'],
 ];
 const ALL = GRANTABLE.map(([k]) => k);
@@ -80,7 +80,6 @@ export const APPS = [
     { page: 'dashboard', name: 'Overview', does: 'Progress, forecast finish, alerts and follow-ups for one project', fixed: true },
     { page: 'reports', name: 'Daily report', does: 'Site reports from Field Report or typed here, confirmed by the office' },
     { page: 'schedule', name: 'Schedule', does: 'Tasks, dependencies and a plan that moves with the daily reports' },
-    { page: 'estimator', name: 'Estimate', does: 'Quantities, material prices by country, and what to order when' },
     { page: 'requests', name: 'Requests', does: 'Material, manpower and equipment asked for by the site, approved by the office, with a follow-up when approved' },
     { page: 'evaluation', name: 'Evaluation', does: 'Each rank rates the one below it, 1 to 5, and writes feedback on the day. Seen only by who wrote it and the Admin' },
   ] },

@@ -34,7 +34,7 @@ const inputs = () => ({ projects: store.projects, users: store.users, regions: s
 async function run(dry) {
   if (busy) return;
   if (!configured()) { say(false, 'Fill in the Field Report web app URL and manager key first (Field Report tab, step 1).'); return; }
-  if (!dry && store.readOnly) { say(false, 'A co-owner cannot change anything.'); return; }
+  if (!dry && store.readOnly) { say(false, 'An Executive Partner cannot change anything.'); return; }
   busy = true; said = null; store.notify();
   try {
     const out = await syncProjects({ ...inputs(), dry, today: todayISO() });

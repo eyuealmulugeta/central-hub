@@ -636,7 +636,18 @@ dialog.palette p { margin: 0; font-size: 12px; }
 .view-prices .settings { gap: 12px; }
 
 /* ---- Home: a tile per section, then the projects ---- */
-.view-home { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); }
+.view-home { grid-template: auto auto minmax(0, 1fr) / minmax(0, 1fr); }
+.launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 18px 10px; padding: 6px 0 10px; }
+.launcher .app { display: flex; flex-direction: column; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; text-align: center; font-size: 13px; line-height: 1.25; }
+.app-ic { position: relative; width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; transition: transform .12s ease; }
+.launcher .app:hover .app-ic, .launcher .app:focus-visible .app-ic { transform: translateY(-2px); }
+.app-ic em { position: absolute; top: -6px; right: -9px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #c0392b; color: #fff; font-style: normal; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.tone-teal { background: #e1f5ee; color: #085041; }
+.tone-violet { background: #eeedfe; color: #3c3489; }
+.tone-amber { background: #faeeda; color: #633806; }
+.tone-coral { background: #faece7; color: #712b13; }
+.tone-gray { background: #efeee9; color: #444441; }
+@media print { .launcher { display: none; } }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); color: inherit; text-decoration: none; min-width: 0; border: 1px solid transparent; transition: border-color .12s, transform .08s; }
 .tile:hover { border-color: var(--primary); }

@@ -47,6 +47,11 @@ service cloud.firestore {
       return user().get('pages', ['dashboard', 'reports', 'schedule', 'ledger', 'estimator', 'docs', 'requests', 'cashflow', 'trade', 'finance', 'contracts']);
     }
     function officeWith(list) { return isOffice() && pages().hasAny(list); }
+    // An Office user works in one division (users/<email>.divisions): a record of a divided section is theirs only
+    // when it carries that division. Every record says its division since 1D (the first Admin's Central Hub stamped the old ones).
+    function mine(d) { return d.get('division', '') in user().get('divisions', []); }
+    // a record changed by an Office user: it is theirs before (or new) and stays theirs after
+    function keptMine() { return (resource == null || mine(resource.data)) && mine(request.resource.data); }
     function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates']; }
     // billing terms are settings of the contract: only the Admin changes them
     function isSetting(section) { return section in ['payStages', 'measure', 'billRates']; }
@@ -127,18 +132,20 @@ service cloud.firestore {
     // A signature (signed) is created once, under the signer's own secret key, while the request
     // is open, and is never changed. The keys (signkeys) are for the office only.
     function signStaff() { return isOwner() || officeWith(['contracts']); }
+    function signStaffOf(d) { return isOwner() || (officeWith(['contracts']) && mine(d)); }
+    function signWriter() { return isOwner() || (officeWith(['contracts']) && keptMine()); }
     match /company/main/signs/{id} {
       allow get: if true;
-      allow list: if signStaff() || seesAll();
-      allow create, update: if signStaff();
+      allow list: if seesAll() || signStaffOf(resource.data);
+      allow create, update: if signWriter();
     }
     match /company/main/signfiles/{id} {
       allow get: if true;
       allow create, update: if signStaff();
     }
     match /company/main/signkeys/{id} {
-      allow read: if signStaff() || seesAll();
-      allow create, update: if signStaff();
+      allow read: if seesAll() || signStaffOf(resource.data);
+      allow create, update: if signWriter();
     }
     match /company/main/signed/{key} {
       allow get: if true;
@@ -168,14 +175,14 @@ service cloud.firestore {
     }
     match /company/main/bookings/{id} {
       allow create: if request.resource.data.keys().hasOnly(['id', 'start', 'minutes', 'step', 'type', 'typeName', 'where', 'name', 'company', 'email', 'phone', 'note', 'at', 'status', 'division'])
-        && (!('division' in request.resource.data) || request.resource.data.division == 'trading')
+        && (!('division' in request.resource.data) || request.resource.data.division in ['trading', 'installation'])
         && request.resource.data.id == id
         && request.resource.data.status == 'booked'
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
         && request.resource.data.email is string && request.resource.data.email.size() <= 160
         && request.resource.data.note is string && request.resource.data.note.size() <= 1000;
-      allow read: if seesAll() || isOffice();
-      allow update: if isOwner() || isOffice();
+      allow read: if seesAll() || (isOffice() && mine(resource.data));
+      allow update: if isOwner() || (isOffice() && mine(resource.data) && mine(request.resource.data));
     }
 
     // Evaluations and feedback notes: read only by the person who wrote them and by the Admin, never by the
@@ -192,14 +199,14 @@ service cloud.firestore {
     match /company/main/{section}/{record} {
       allow read: if seesAll()
         || (section == 'messages' && hasUser())
-        || (section in ['shipments', 'sales'] && officeWith(['trade', 'finance']))
-        || (section == 'contracts' && officeWith(['contracts']))
-        || (section == 'contacts' && isOffice());
+        || (section in ['shipments', 'sales'] && officeWith(['trade', 'finance']) && mine(resource.data))
+        || (section == 'contracts' && officeWith(['contracts']) && mine(resource.data))
+        || (section == 'contacts' && isOffice() && mine(resource.data));
       allow create: if section == 'messages' && (isOwner() || hasUser()) && request.resource.data.by == me();
       allow create, update: if (isOwner() && section != 'messages')
-        || (section in ['shipments', 'sales'] && officeWith(['trade']))
-        || (section == 'contracts' && officeWith(['contracts']))
-        || (section == 'contacts' && isOffice());
+        || (section in ['shipments', 'sales'] && officeWith(['trade']) && keptMine())
+        || (section == 'contracts' && officeWith(['contracts']) && keptMine())
+        || (section == 'contacts' && isOffice() && keptMine());
       allow delete: if isOwner();
     }
 

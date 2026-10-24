@@ -29,6 +29,7 @@ import * as letters from './ui/letters.js';
 import * as requests from './ui/requests.js';
 import * as payroll from './ui/payroll.js';
 import * as cashflow from './ui/cashflow.js';
+import * as payments from './ui/payments.js';
 import * as attendance from './ui/attendance.js';
 import * as employment from './ui/employment.js';
 import * as signatures from './ui/signatures.js';
@@ -62,14 +63,14 @@ const section = {
     apps: sectionTabs(openSection).map(t => ({ page: t, title: TITLES[t], icon: APP_ICON[t] || openSection.icon, tone: HUB_TONE[openSection.id] || 'gray', pages: [t] })),
   }),
 };
-const VIEWS = { section, home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { section, home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
 const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -200,7 +201,7 @@ let lastShown = {};                      // the red numbers as the menu shows th
 // The apps on Home: every page this person may open in this division, one tile each, coloured by its section.
 const APP_ICON = {
   dashboard: 'dashboard', schedule: 'schedule', setup: 'apps', reports: 'reports', status: 'reports', hr: 'hr', employment: 'hr', crewletters: 'contracts',
-  attendance: 'reports', evaluation: 'hr', directory: 'access', setup: 'apps', status: 'reports', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
+  attendance: 'reports', evaluation: 'hr', directory: 'access', setup: 'apps', status: 'reports', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', payments: 'finance', income: 'ledger',
   expenses: 'ledger', summary: 'finance', contracts: 'contracts', documentsign: 'contracts', letters: 'contracts', requests: 'docs', contacts: 'access',
   owners: 'company', trade: 'trade', stock: 'stock', tradesummary: 'finance', discuss: 'discuss', meetings: 'meetings',
 };
@@ -209,7 +210,7 @@ const HUB_TONE = { projects: 'teal', report: 'teal', trading: 'teal', crew: 'vio
 const LAUNCHER = [
   ['dashboard', 'Dashboard', ['dashboard', 'setup']], ['schedule', 'Schedule'], ['reports', 'Daily reports', ['reports', 'status']],
   ['trade', 'Trading'], ['stock', 'Stock'],
-  ['hr', null], ['attendance', 'Attendance'], ['payroll', 'Payroll'],
+  ['hr', null], ['attendance', 'Attendance sheet'], ['payroll', 'Payroll'],
   ['@finance', 'Finance'], ['invoices', 'Invoices', ['invoices', 'quotations']], ['tradesummary', 'Finance'], ['requests', 'Requests'],
   ['contracts', 'Contracts'], ['documentsign', 'Sign'], ['letters', 'Letters'], ['contacts', 'Contacts'],
   ['discuss', 'Discuss'], ['meetings', 'Meetings'], ['@settings', 'Settings'],
@@ -259,10 +260,14 @@ function renderSidebar(name, summaries) {
   $('#division').hidden = mine.length < 2;
   $('#division').innerHTML = String(html`${mine.map(d => html`<button type="button" data-division="${d}" class="${d === division ? 'on' : ''}" aria-pressed="${d === division}">${divisionLabel(d)}</button>`)}`);
   const installation = division === 'installation';
-  $('#project-select').innerHTML = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
+  const choices = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
     ${store.isAdmin ? html`<option value="${NEW_PROJECT}">+ New project</option>` : ''}`);
+  // the same chooser twice: under the division switch in the menu (wide screens), and in the page header (phones, narrow menu)
+  $('#project-select').innerHTML = choices;
+  $('#side-project-select').innerHTML = choices;
   $('#btn-new-project').hidden = !store.isAdmin || !installation;
   $('#project-pick').hidden = !installation || !(store.projects.length || store.isAdmin);
+  $('#side-project').hidden = $('#project-pick').hidden;
   $('#btn-settings').hidden = !store.isAdmin || !p;
   $('#btn-settings').href = `#${lastTab.settings || 'prices'}`;
   // deleting and settings are the Admin's: their buttons are hidden for everyone else
@@ -609,11 +614,13 @@ const narrow = on => {
 };
 $('#btn-collapse').addEventListener('click', () => narrow(!document.body.classList.contains('side-narrow')));
 try { if (localStorage.getItem(SIDE_KEY) === 'narrow') document.body.classList.add('side-narrow'); } catch { /* no saved choice */ }
-$('#project-select').addEventListener('change', e => {
+const pickProject = e => {
   if (e.target.value !== NEW_PROJECT) return store.switchTo(e.target.value);
   e.target.value = store.project?.id || '';
   newProject();
-});
+};
+$('#project-select').addEventListener('change', pickProject);
+$('#side-project-select').addEventListener('change', pickProject);
 
 /** Forget the saved app files (not the records) and load the newest version. Needs the internet, to fetch it again. */
 async function clearCache() {

@@ -511,7 +511,7 @@ export const changes = {
     const p = find(c.company);
     if (!p) return;
     const u = store.users.find(x => x.email === accountOf(p));
-    const may = el.value ? mayTake(u, el.value) : { ok: true };
+    const may = el.value ? mayTake(u, el.value, store.projects.map(x => x.id)) : { ok: true };
     if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
     store.setUser(accountOf(p), titlePatch(el.value));
   },
@@ -608,7 +608,7 @@ export const submits = {
     const pid = fd.get('projectId');
     if (!p || !pid) return false;
     const account = store.users.find(x => x.email === accountOf(p));
-    const may = account ? mayJoin(account, pid) : { ok: true };
+    const may = account ? mayJoin(account, pid, store.projects.map(x => x.id)) : { ok: true };
     if (!may.ok) { notice = may.reason; return false; }
     const a = { projectId: pid, role: String(fd.get('role') || '').trim(), dayRate: Math.max(0, +fd.get('dayRate') || 0), active: true };
     store.updateCompany(co => { const x = find(co); x.assignments = [...(x.assignments || []).filter(y => y.projectId !== pid), a]; });

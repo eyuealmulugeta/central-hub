@@ -66,7 +66,7 @@ export function letterhead(c, title, facts) {
     </header>`;
 }
 
-function party(label, p) {
+function party(label, p = {}) {
   return html`<div class="p-block">
     <span class="muted">${label}</span><b>${p.name || '—'}</b>
     <span class="pre">${p.address || ''}</span><span>${p.contact || ''}</span>
@@ -608,8 +608,8 @@ export function render(c) {
       </dl>
       ${docs.length ? html`<ul class="list">${docs.map(d => html`
         <li><button class="row pick ${doc === d ? 'sel' : ''}" data-act="open" data-id="${d.id}">
-          <span class="row-main"><b>${d.number}</b><span class="muted">${TITLE[d.type]}, ${d.party.name || 'no name'}, ${fmtDate(d.date)}</span></span>
-          <span class="row-end"><span>${d.type === 'report' ? PERIODS[d.kind][0] : money(d.amountDue, p.currency)}</span>${chip(d.status, STATUS_CLS[d.status])}</span>
+          <span class="row-main"><b>${d.number}</b><span class="muted">${TITLE[d.type]}, ${d.party?.name || 'no name'}, ${fmtDate(d.date)}</span></span>
+          <span class="row-end"><span>${d.type === 'report' ? (PERIODS[d.kind] || ['Report'])[0] : money(d.amountDue, p.currency)}</span>${chip(d.status, STATUS_CLS[d.status])}</span>
         </button></li>`)}</ul>` : html`<p class="empty">No documents yet.</p>`}
     </section>
     <section class="card sheet" data-scroll="sheet">${preview}</section>`;
@@ -680,7 +680,7 @@ export const actions = {
       if (doc.type === 'invoice' && next === 'paid') {
         doc.ledgerId = uid('l');
         ws.ledger.push({
-          id: doc.ledgerId, date: c.today, type: 'income', category: 'overhead', vendor: doc.party.name,
+          id: doc.ledgerId, date: c.today, type: 'income', category: 'overhead', vendor: doc.party?.name || '',
           description: `Payment received, ${doc.number}`, amount: Math.round(doc.amountDue * 100) / 100, currency: c.project.currency,
         });
       }

@@ -559,6 +559,8 @@ export function render(c) {
 
 export const actions = {
   ...fieldsetup.actions,
+  /** Edit in the directory: the person's record in Crew, Employee data, on its Projects tab. */
+  openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   ...fieldprojects.actions,
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
@@ -678,7 +680,7 @@ export const changes = {
   /** One title, which is also the person's one rank for evaluations. */
   userTitle(el) {
     const u = store.users.find(x => x.email === el.dataset.id);
-    const ok = el.value ? mayTake(u, el.value) : { ok: confirm('Clear this person\'s title?') };
+    const ok = el.value ? mayTake(u, el.value, store.projects.map(x => x.id)) : { ok: confirm('Clear this person\'s title?') };
     if (!ok.ok) { if (ok.reason) tell(`✗ ${ok.reason}`); store.notify(); return; }
     store.setUser(el.dataset.id, titlePatch(el.value));
   },
@@ -687,9 +689,10 @@ export const changes = {
     const u = store.users.find(x => x.email === el.dataset.id);
     const project = store.project;
     if (!u || !project) return;
-    const projects = (u.projects || []).filter(id => id !== project.id);
+    const live = store.projects.map(x => x.id);
+    const projects = (u.projects || []).filter(id => id !== project.id && live.includes(id));   // a deleted project is dropped from the list
     if (el.checked) {
-      const may = mayJoin(u, project.id);
+      const may = mayJoin(u, project.id, live);
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
       projects.push(project.id);
     }
@@ -701,7 +704,6 @@ export const changes = {
   /** The dates nobody works on the open project, one per line. */
   nonWorking(el) { store.updateProject(p => { p.nonWorking = parseDates(el.value); }); },
   /** Open a person's directory record, on its Projects tab. */
-  openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   memberActive(el) { store.update(ws => { const m = ws.team.find(x => x.id === el.dataset.id); if (m) m.active = el.checked; }); },
   /** The activity types of the open project, one per line. */
   activities(el) { store.updateProject(p => { p.activities = parseList(el.value); }); },
@@ -725,9 +727,10 @@ export const changes = {
   },
   userProject(el) {
     const u = store.users.find(x => x.email === el.dataset.id);
-    const projects = (u?.projects || []).filter(id => id !== el.dataset.p);
+    const live = store.projects.map(x => x.id);
+    const projects = (u?.projects || []).filter(id => id !== el.dataset.p && live.includes(id));
     if (el.checked) {
-      const may = mayJoin(u, el.dataset.p);
+      const may = mayJoin(u, el.dataset.p, live);
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
       projects.push(el.dataset.p);
     }

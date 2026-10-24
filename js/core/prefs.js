@@ -24,11 +24,16 @@ export function mergePref(a, b) {
   return b;
 }
 
-/** The saved document holds a list of [key, value] pairs: keys such as "sf:seen:p1" are not used as field names. */
-export const toDoc = map => ({ items: Object.entries(map).map(([k, v]) => [k, JSON.stringify(v)]), at: Date.now() });
+/** The saved document holds a list of { k, v } entries, each value written as text: keys such as "sf:seen:p1" are not
+ * used as field names, and the database takes no list inside a list. */
+export const toDoc = map => ({ items: Object.entries(map).map(([k, v]) => ({ k, v: JSON.stringify(v) })), at: Date.now() });
 export function fromDoc(doc) {
   const out = {};
-  for (const [k, v] of doc?.items || []) { try { out[k] = JSON.parse(v); } catch { /* a damaged entry is skipped */ } }
+  for (const item of doc?.items || []) {
+    const [k, v] = Array.isArray(item) ? item : [item?.k, item?.v];
+    if (typeof k !== 'string') continue;
+    try { out[k] = JSON.parse(v); } catch { /* a damaged entry is skipped */ }
+  }
   return out;
 }
 

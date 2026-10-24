@@ -1,7 +1,7 @@
 import { calendarOf } from '../engine/calendar.js';
 import { store } from '../core/store.js';
 import { wouldCycle } from '../engine/gantt.js';
-import { TASK_TEMPLATES, typeLabel } from '../core/seed.js';
+import { copyTasks } from '../engine/taskcopy.js';
 import { uid, toDay, fromDay, fmtDay, isWork, dow, num } from '../core/util.js';
 import { html, field, options } from './dom.js';
 
@@ -12,11 +12,32 @@ let selected = null;
 let zoom = 'day';
 let notice = '';
 let todayX = 0;
+// Import from another project: the panel is open while `imp` is set
+let imp = null;          // { from: project id, start: date, replace: bool, tasks: null | [] (loaded), loading: bool }
 
 /** Select a task from outside this screen (search, quick links). */
 export const focusOn = id => { selected = id; };
 
 const STATUS_LABEL = { done: 'Done', late: 'Overdue', active: 'In progress', pending: 'Not started' };
+
+/** The Import panel, in place of the task editor: copy another project's task list into this one. */
+function importPanel(c) {
+  const others = store.projects.filter(p => p.id !== c.project.id);
+  const n = imp.tasks?.length || 0;
+  return html`<aside class="card editor" id="panel-import">
+    <div class="toolbar"><h2>Import tasks</h2><span class="grow"></span><button class="btn ghost small" data-act="closeImport">Close</button></div>
+    ${others.length ? html`<div class="form">
+      <p class="muted">Copies the task list of another project: names, durations, quantities and the links between tasks. Who each task is given to and the progress stay with that project.</p>
+      <label>From the project <select data-chg="impFrom" data-fk="imp-from">${options(others.map(p => [p.id, p.name]), imp.from)}</select></label>
+      <label>The first task starts on <input type="date" data-chg="impStart" data-fk="imp-start" value="${imp.start}"></label>
+      ${c.ws.tasks.length && store.isAdmin ? html`<label class="check"><input type="checkbox" data-chg="impReplace" ${imp.replace ? 'checked' : ''}> Replace the ${c.ws.tasks.length} tasks this project has (otherwise the copies are added to them)</label>` : ''}
+      ${imp.tasks === null ? html`<button class="btn" data-act="loadImport" ${imp.loading ? 'disabled' : ''}>${imp.loading ? 'Reading…' : 'See what will be copied'}</button>`
+        : n ? html`<p><b>${n} tasks</b> from ${store.projects.find(p => p.id === imp.from)?.name}: ${imp.tasks.slice(0, 6).map(t => t.name).join(', ')}${n > 6 ? ', …' : ''}</p>
+          <button class="btn primary" data-act="runImport">${imp.replace && store.isAdmin ? 'Replace with' : 'Copy'} these ${n} tasks</button>`
+        : html`<p class="muted">That project has no tasks to copy.</p>`}
+    </div>` : html`<p class="empty">There is no other project to copy from.</p>`}
+  </aside>`;
+}
 
 export function render(c) {
   const { sched: s, project, ws } = c;
@@ -65,7 +86,7 @@ export function render(c) {
         <button class="${zoom === 'day' ? 'on' : ''}" data-act="zoom" data-z="day">Days</button>
         <button class="${zoom === 'week' ? 'on' : ''}" data-act="zoom" data-z="week">Weeks</button>
       </div>
-      ${canEdit ? html`<button class="btn primary" data-act="add">Add task</button>` : ''}
+      ${canEdit ? html`<button class="btn" data-act="openImport" title="Copy the task list of another project into this one">Import</button><button class="btn primary" data-act="add">Add task</button>` : ''}
     </div>
 
     <section class="card flush gantt" data-scroll="gantt" style="--w:${W}px">
@@ -101,13 +122,12 @@ export function render(c) {
             </div>
           </div>`)}
         ${s.rows.length ? '' : !canEdit ? html`<div class="empty pad"><p>No tasks yet. The Office adds them.</p></div>` : html`<div class="empty pad">
-          <p>No tasks yet. Add them one by one with "Add task", or start from a standard list and edit it.</p>
-          <button class="btn primary" data-act="template">Start from the standard ${typeLabel(project.type).toLowerCase()} tasks</button>
+          <p>No tasks yet. Add them one by one with "Add task", or use Import to copy the task list of another project and edit it.</p>
         </div>`}
       </div>
     </section>
 
-    ${cur ? html`
+    ${imp && canEdit ? importPanel(c) : cur ? html`
       <aside class="card editor">
         <div class="toolbar"><h2>Task</h2><span class="grow"></span><button class="btn ghost small" data-act="close">Close</button></div>
         <fieldset class="bare" ${canEdit ? '' : 'disabled'}><div class="form">
@@ -158,19 +178,30 @@ export function onEnter(root) {
 const task = ws => ws.tasks.find(t => t.id === selected);
 
 export const actions = {
-  select(el) { selected = el.dataset.id; notice = ''; },
+  select(el) { selected = el.dataset.id; notice = ''; imp = null; },
   close() { selected = null; },
   zoom(el) { zoom = el.dataset.z; },
-  /** Fill an empty schedule with the standard task list for this type of project, starting today. */
-  template(el, c) {
-    if (c.ws.tasks.length || c.role === 'site') return;
-    const list = TASK_TEMPLATES[c.project.type] || TASK_TEMPLATES.steel;
-    store.update(ws => {
-      ws.tasks = list.map(([id, name, duration, deps]) => ({
-        id, name, start: c.today, duration, milestone: duration === 0, deps: deps.map(d => ({ ...d })),
-      }));
-    });
-    notice = 'Standard tasks added. Rename them, change durations and start dates, and delete what does not apply.';
+  openImport(el, c) {
+    const other = store.projects.find(p => p.id !== c.project.id);
+    imp = { from: other?.id || '', start: c.project.start || c.today, replace: false, tasks: null, loading: false };
+  },
+  closeImport() { imp = null; },
+  /** Read the chosen project's tasks to show what would be copied. */
+  async loadImport() {
+    if (!imp?.from) return;
+    imp.loading = true;
+    try { imp.tasks = await store.readTasks(imp.from); } catch (err) { imp.tasks = []; notice = `Could not read that project's tasks: ${err.message}`; }
+    imp.loading = false;
+    store.notify();
+  },
+  runImport(el, c) {
+    if (!imp?.tasks?.length || c.role === 'site') return;
+    const copied = copyTasks(imp.tasks, imp.start || c.today, () => uid('t'));
+    const replace = imp.replace && store.isAdmin;   // replacing deletes the tasks there are: the Admin's
+    const name = store.projects.find(p => p.id === imp.from)?.name || 'the other project';
+    store.update(ws => { ws.tasks = replace ? copied : [...ws.tasks, ...copied]; });
+    notice = `${copied.length} tasks copied from ${name}${replace ? ', replacing the ones there were' : ''}. Rename, move and delete what does not apply.`;
+    imp = null;
   },
   add(el, c) {
     if (c.role === 'site') return;
@@ -195,6 +226,9 @@ export const actions = {
 };
 
 export const changes = {
+  impFrom(el) { if (imp) { imp.from = el.value; imp.tasks = null; } },
+  impStart(el) { if (imp) imp.start = el.value; },
+  impReplace(el) { if (imp) imp.replace = el.checked; },
   task(el, c) {
     const f = el.dataset.f;
     let value = field(el);

@@ -13,6 +13,21 @@ export const contactOf = person => person.email || person.phone || person.privat
 /** The email a person signs in with. */
 export const accountOf = person => normEmail(person.accountEmail);
 
+/**
+ * The dates to keep on a users/<email> record when it changes: when access was given (a new record), and when the
+ * person was put on each project they have just been put on. A project they leave loses its date.
+ */
+export function joinDates(before, patch, now) {
+  const out = {};
+  if (!before) out.since = now;
+  if (Array.isArray(patch.projects)) {
+    const had = before?.projects || [];
+    const was = before?.joined || {};
+    out.joined = Object.fromEntries(patch.projects.map(id => [id, had.includes(id) ? was[id] || '' : now]).filter(([, d]) => d));
+  }
+  return out;
+}
+
 export const assignmentOf = (person, projectId) => (person.assignments || []).find(a => a.projectId === projectId);
 export const activeProjects = person => (person.assignments || []).filter(a => a.active !== false).map(a => a.projectId);
 

@@ -8,6 +8,7 @@ import { targetFor } from '../engine/calendar.js';
 import { toDay, fromDay } from '../core/util.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { fieldProjectOf, problemsOf, differences } from '../engine/fieldproject.js';
+import { fixesForField, siteFixes } from '../engine/attendance.js';
 
 const KEY = 'sf:fieldreport';
 const OVERLAP_DAYS = 3;            // re-read the last few days so re-submitted reports are picked up
@@ -169,7 +170,10 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
       source: 'field', review: 'pending', field: { nowork: true, reason: n.reason || '', note: n.note || '' },
     });
   }
-  return { added, updated };
+  // attendance the site corrected after the report (script 7.27.0); the office's corrections stay final
+  const attendance = siteFixes(ws, payload.attendance);
+  updated += attendance;
+  return attendance ? { added, updated, attendance } : { added, updated };
 }
 
 export const SETUP_VERSION = 1;
@@ -211,6 +215,8 @@ export function buildSetup({ project, ws, sched, bill, people = [], company = {}
     ...(({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }) => ({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }))(targetFor(project, ws, today)),
     // the people whose email the Admin linked to this project: the only ones who should see it in Field Report
     linked: linkedList(project, people),
+    // the office's corrections of the Attendance sheet: Field Report shows these marks as final (from 1.61.0)
+    attendanceFixes: fixesForField(ws.attendance, today),
     trades: Object.keys(ws.laborRates),
     // what the Admin deployed for this project: where it is, what it covers, the activity types to pick from
     status: statusOf(project), location: cleanText(project.location, LIMITS.location), scope: cleanText(project.scope, LIMITS.scope),

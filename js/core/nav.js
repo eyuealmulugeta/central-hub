@@ -24,7 +24,7 @@ export const ALIASES = {
   crewletters: { view: 'letters', title: 'Letters' },
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },
-  attendance: { view: 'attendance', title: 'Attendance', switch: 'reports' },
+  attendance: { view: 'attendance', title: 'Attendance sheet', switch: 'reports' },
 };
 
 /** Old addresses (links, alerts, bookmarks) that now belong to a page of the new menu. */
@@ -49,7 +49,7 @@ export const MENUS = {
     { id: 'projects', label: 'Overview', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Report', icon: 'reports', tabs: ['reports', 'status'] },
     { id: 'crew', label: 'Crew', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'attendance', 'evaluation', 'directory', 'payroll'] },
-    { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'cashflow', 'income', 'expenses', 'summary'] },
+    { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'cashflow', 'payments', 'income', 'expenses', 'summary'] },
     { id: 'admin', label: 'Administration', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
     settings,
   ],

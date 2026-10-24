@@ -5,7 +5,6 @@
 import { store } from '../core/store.js';
 import { TEMPLATES, templateOf, BILLING_HELP, billingLabel, defaultVat, checkStep, fromWizard } from '../engine/setup.js';
 import { METHODS } from '../engine/billing.js';
-import { TASK_TEMPLATES } from '../core/seed.js';
 import { todayISO } from '../core/util.js';
 import { html, options } from './dom.js';
 
@@ -36,7 +35,6 @@ export function openWizard() {
 function draw() {
   const g = store.global;
   const t = templateOf(a.template);
-  const tasks = (TASK_TEMPLATES[t.type] || []).length;
   const steps = ['The project', 'The contract', 'Check and create'];
   box().innerHTML = String(html`
     <h2>New project</h2>
@@ -74,8 +72,7 @@ function draw() {
         <dt>Billing</dt><dd>${billingLabel(a.billing)}</dd>
         <dt>Starts</dt><dd>${a.start}</dd>
       </dl>
-      <label class="check"><input type="checkbox" data-w="standardTasks" ${a.standardTasks ? 'checked' : ''}> Add the standard task list (${tasks} tasks) starting on ${a.start}. You rename and change them afterwards.</label>
-      <p class="muted">Working week Monday to Saturday, a 10-hour day and overtime at 1.5 times are set for you; change them under Settings. The next screen is the project's checklist: it shows what is still to do.</p>` : ''}
+      <p class="muted">Working week Monday to Saturday, a 10-hour day and overtime at 1.5 times are set for you; change them under Settings. The next screen is the project's checklist: it shows what is still to do. Tasks are added on the Schedule, one by one or with Import from another project.</p>` : ''}
     <div class="actions">
       <button class="btn ghost" type="button" data-wiz="cancel">Cancel</button>
       ${step > 1 ? html`<button class="btn" type="button" data-wiz="back">Back</button>` : ''}

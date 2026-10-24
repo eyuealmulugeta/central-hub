@@ -4,7 +4,7 @@
 // in the database, so keep the two in step.
 
 /** Pages of one construction project. */
-export const PROJECT_PAGES = ['dashboard', 'reports', 'schedule', 'ledger', 'docs', 'evaluation', 'requests', 'cashflow'];
+export const PROJECT_PAGES = ['dashboard', 'reports', 'schedule', 'ledger', 'docs', 'evaluation', 'requests', 'cashflow', 'payments'];
 /** Pages of the trading side: buying, shipping, stock and sales. */
 export const TRADING_PAGES = ['trade', 'stock'];
 /** Pages about the whole company. */
@@ -14,27 +14,46 @@ export const COMPANY_PAGES = ['finance', 'contracts'];
 export const SETTINGS_PAGES = ['apps', 'prices', 'access', 'catalog', 'company', 'links'];
 export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', ...SETTINGS_PAGES];
 
-/** What the Admin can grant to an Office user. 'trade' covers both trading pages. */
-export const GRANTABLE = [
-  ['dashboard', 'Overview'], ['reports', 'Daily report'], ['schedule', 'Schedule'], ['ledger', 'Costs'], ['cashflow', 'Cash flow'],
-  ['docs', 'Invoices and documents'], ['requests', 'Requests'], ['trade', 'Trading'], ['finance', 'Company finance'], ['contracts', 'Contracts'],
+/** What the Admin can grant to anyone but the Admin (Office and Site alike), in groups. 'trade' covers both trading pages. */
+export const GRANT_GROUPS = [
+  ['Projects', [['dashboard', 'Overview'], ['reports', 'Daily report'], ['schedule', 'Schedule'], ['requests', 'Requests'], ['evaluation', 'Evaluation'], ['directory', 'Staff directory']]],
+  ['Communication', [['meetings', 'Meetings'], ['contacts', 'Contacts']]],
+  ['Money', [['ledger', 'Costs'], ['cashflow', 'Cash flow'], ['payments', 'Payments'], ['docs', 'Invoices and documents'], ['finance', 'Company finance']]],
+  ['Contracts and trading', [['contracts', 'Contracts'], ['trade', 'Trading']]],
 ];
+export const GRANTABLE = GRANT_GROUPS.flatMap(([, list]) => list);
 const ALL = GRANTABLE.map(([k]) => k);
-/** What a role opens when the Admin has not chosen pages for the person. Must match firestore.rules. */
-export const ROLE_PAGES = { office: ALL, site: ['dashboard', 'reports', 'schedule', 'requests'] };
+/** What a role opens until the Admin ticks pages for the person. Must match pages() in firestore.rules. */
+// Payments (pay of the crew) is never there by default: the Admin ticks it for the people who handle it.
+export const ROLE_PAGES = { office: ALL.filter(k => k !== 'evaluation' && k !== 'payments'), site: ['dashboard', 'reports', 'schedule', 'requests', 'directory'] };
+// Pages that came with the role, not with a tick, before every role had ticks (v0.15.0): an older record keeps them.
+const CAME_WITH_OFFICE = ['meetings', 'contacts', 'directory'];
 
 /** A person who signs in to Installation works on the projects only: the Trading pages are never theirs. */
 const inInstallation = user => user?.role !== 'owner' && (user?.divisions || [])[0] === 'installation';
 /** The pages the Admin can tick for this person. */
 export const grantableFor = user => GRANTABLE.filter(([k]) => !(inInstallation(user) && TRADING_PAGES.includes(k)));
 
-/** The pages a person (a users/<email> record) may open. A Site user is always limited to the site pages. */
+/** What a person starts with: the pages of their role, and Evaluation when their title rates someone. */
+export const defaultPages = user => [...ROLE_PAGES[user?.role === 'office' ? 'office' : 'site'], ...(user?.ranks?.length ? ['evaluation'] : [])];
+
+/**
+ * The pages a person (a users/<email> record) may open. Once the Admin ticks pages for someone the record holds
+ * them all (`pages` with `pagesV: 2`); an older record is read the way it was meant before.
+ */
 export function pagesOf(user) {
-  // Evaluation is not a page the Admin ticks: whoever holds a rank (users/<email>.ranks) has it
   const ranked = user?.ranks?.length ? ['evaluation'] : [];
-  if (user?.role === 'site') return [...ROLE_PAGES.site, ...ranked];
-  const may = grantableFor(user).map(([k]) => k);
-  return [...(Array.isArray(user?.pages) ? user.pages : ROLE_PAGES.office).filter(p => may.includes(p)), ...ranked];
+  const list = user?.pagesV === 2 && Array.isArray(user.pages) ? user.pages
+    : user?.role === 'site' ? defaultPages(user)
+    : Array.isArray(user?.pages) ? [...user.pages, ...CAME_WITH_OFFICE, ...ranked]
+    : defaultPages(user);
+  return grantableFor(user).map(([k]) => k).filter(k => list.includes(k));
+}
+/** The record change that ticks (on) or unticks one page for a person. */
+export function tickPage(user, page, on) {
+  const now = pagesOf(user).filter(k => k !== page);
+  if (on) now.push(page);
+  return { pages: grantableFor(user).map(([k]) => k).filter(k => now.includes(k)), pagesV: 2 };
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).
@@ -44,17 +63,16 @@ const key = permKey;
 
 /** May someone with `role` and granted `pages` open `page`? */
 export function mayOpen(role, pages, page) {
-  if (page === 'directory') return role !== 'owner';   // the staff directory is for those without the employee records
+  if (page === 'directory') return role !== 'owner' && pages.includes('directory');   // the staff directory is for those without the employee records
   if (role === 'owner' || page === 'home' || page === 'discuss') return true;   // Home and Discuss show each person only their own sections
-  if (page === 'meetings' || page === 'contacts') return role === 'office';   // booked meetings and the address book are the office's, not the site's
   if (ADMIN_PAGES.includes(permKey(page))) return false;
   return pages.includes(key(page));
 }
 
 /** Money records (costs, invoices, billing terms) are loaded only for people who have a page that shows them. */
-export const MONEY_PAGES = ['ledger', 'cashflow', 'docs', 'finance'];
-export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates'];
-export const seesMoney = (role, pages) => role === 'owner' || (role === 'office' && MONEY_PAGES.some(p => pages.includes(p)));
+export const MONEY_PAGES = ['ledger', 'cashflow', 'payments', 'docs', 'finance'];
+export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments'];
+export const seesMoney = (role, pages) => role === 'owner' || ((role === 'office' || role === 'site') && MONEY_PAGES.some(p => pages.includes(p)));
 
 /** Records of documents sent for signature: they go with the Contracts page. */
 const SIGN_SECTIONS = ['signs', 'signkeys', 'signed'];
@@ -64,9 +82,9 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
   if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', ...SIGN_SECTIONS, ...MEET_SECTIONS];
-  if (role !== 'office') return ['messages'];
+  if (role !== 'office' && role !== 'site') return ['messages'];
   return [
-    'messages', 'contacts', ...MEET_SECTIONS,
+    'messages', ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
     ...(pages.includes('trade') || pages.includes('finance') ? ['shipments', 'sales'] : []),
     ...(pages.includes('contracts') ? ['contracts', ...SIGN_SECTIONS] : []),
   ];
@@ -96,6 +114,7 @@ export const APPS = [
   ] },
   { group: 'Finance', about: 'Money in and out', apps: [
     { page: 'ledger', name: 'Costs', does: 'What each project has spent and received, with labour from the reports' },
+    { page: 'payments', name: 'Payments', does: 'Pay of the site crew per week, two weeks or month from the Attendance sheet: earned, paid and still owed; each payment is a labour cost' },
     { page: 'cashflow', name: 'Cash flow', does: 'Money in and out month by month, and the next months forecast from invoices still to be paid and payroll' },
     { page: 'docs', name: 'Invoices and documents', does: 'Invoices, quotations, purchase orders and client reports, by email as PDF' },
     { page: 'finance', name: 'Company finance', does: 'Every project and the trading side in one currency' },

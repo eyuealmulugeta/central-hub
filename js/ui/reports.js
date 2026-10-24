@@ -595,6 +595,7 @@ const readMark = id => { try { return JSON.parse(localStorage.getItem(markKey(id
 const fingerprint = (out, since) => JSON.stringify([
   (out.reports || []).filter(m => m.date >= since).map(m => [m.date, m.version || 1, m.status || '', (m.comments || []).length]),
   (out.nowork || []).filter(n => n.date >= since).map(n => n.date),
+  (out.attendance || []).map(a => [a.date, a.at]),
 ]);
 
 async function watchOthers(cfg) {
@@ -667,7 +668,8 @@ Import its ${count} report(s) into the Central Hub project "${project.name}"?`))
     const result = importFieldReports(structuredClone(store.ws), out, { hoursPerDay });
     if (result.added || result.updated) {
       store.update(ws => { importFieldReports(ws, out, { hoursPerDay }); });
-      fieldNotice = `${result.added} new and ${result.updated} updated from ${out.project}. Review each one to count its progress.`;
+      fieldNotice = `${result.added} new and ${result.updated - (result.attendance || 0)} updated from ${out.project}. Review each one to count its progress.`;
+      if (result.attendance) fieldNotice += ` ${result.attendance} attendance mark(s) corrected by the site are on the Attendance sheet.`;
       if (out.more) fieldNotice += ' Older reports were left out.';
       fieldNotice += weeklyNote;
       changed = true;

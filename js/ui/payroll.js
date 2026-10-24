@@ -11,7 +11,14 @@ import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
 import { letterhead } from './docs.js';
+import { withFixes } from '../engine/attendance.js';
+import { paidOnSite } from '../engine/crewpay.js';
+import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { openMail, emailIn } from './maildialog.js';
+// the attendance as the office corrected it on the Attendance sheet
+const sheetReports = c => withFixes(c.ws.reports, c.ws.attendance);
+// site crew of a project that pays through Payments is paid there, not here
+const onSitePay = p => paidOnSite(p, store.projects, d => SITE_DEPARTMENTS.includes(normDepartment(d)));
 
 let selected = null;      // run id
 let slip = null;          // line id of the payslip being shown
@@ -169,7 +176,7 @@ export const actions = {
       for (const l of run.lines) {
         const staff = co.staff.find(p => p.id === l.staffId);
         if (!staff) continue;
-        const a = attendanceFor(c.ws.reports, run.month, staff);
+        const a = attendanceFor(sheetReports(c), run.month, staff);
         if (a.found) { l.days = a.days; l.ot = a.ot; l.fromAttendance = true; }
       }
     });
@@ -238,16 +245,17 @@ export const submits = {
     for (const k of Object.keys(DEFAULT_SETTINGS)) settings[k] = Math.max(0, +fd.get(k) || 0) || (k.startsWith('pension') ? 0 : DEFAULT_SETTINGS[k]);
     const run = {
       id: uid('pr'), month, ...stamp(), status: 'draft', settings, createdOn: c.today, approvedBy: '', approvedOn: '', paidOn: '',
-      lines: newLines(c.company.staff, month, c.ws.reports),
+      lines: newLines(c.company.staff.filter(p => !onSitePay(p)), month, sheetReports(c)),
     };
+    const left = c.company.staff.filter(onSitePay).length;
     if (!run.lines.length) { notice = 'Nobody on the staff list was employed in that month. Add people under HR first.'; return false; }
     store.updateCompany(co => co.payroll.push(run));
-    selected = run.id; slip = null; notice = '';
+    selected = run.id; slip = null; notice = left ? `${left} site crew left out: they are paid under Finance, Payments.` : '';
   },
   addPerson(fd, c) {
     const run = find(c.company);
     const staff = c.company.staff.find(p => p.id === fd.get('staffId'));
     if (!run || !staff || run.status !== 'draft') return false;
-    store.updateCompany(co => { const r = find(co); r.lines.push(newLine(staff, r.month, c.ws.reports)); });
+    store.updateCompany(co => { const r = find(co); r.lines.push(newLine(staff, r.month, sheetReports(c))); });
   },
 };

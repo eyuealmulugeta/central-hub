@@ -43,6 +43,7 @@ export function buildIndex(env) {
   const trading = env.division === 'trading';
   for (const m of store.company.messages || []) {
     if ((m.channel === 'general-trading') !== trading) continue;   // each department searches its own conversations
+    if (String(m.at || '') < store.seesFrom(m.channel, trading ? 'general-trading' : 'general')) continue;   // written before this person joined
     add('Message', trim(m.text, 70), m.name || '', flatText(m), () => goTo('discuss'));
   }
 

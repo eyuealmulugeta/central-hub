@@ -51,7 +51,10 @@ const colour = text => COLOURS[[...String(text)].reduce((n, ch) => n + ch.charCo
 /** The channels this person may use: the company one, and the projects they can open. */
 const channels = () => [{ id: general(), name: 'General', about: currentDivision() === TRADING ? 'Everyone in Trading' : 'Everyone in Installation' },
   ...(currentDivision() === TRADING ? [] : store.projects.map(p => ({ id: p.id, name: p.name, about: 'Project channel' })))];
-const inChannel = (company, id) => (company.messages || []).filter(m => m.channel === id);
+// a person sees a project channel from the day they were put on the project, and General from the day they were given
+// access (store.seesFrom); people who had access before keep the history, and the Admin sees everything
+const visible = (m, id) => m.channel === id && String(m.at || '') >= store.seesFrom(id, general());
+const inChannel = (company, id) => (company.messages || []).filter(m => visible(m, id));
 const unreadIn = (company, id, seen = readSeen()) => inChannel(company, id).filter(m => m.by !== me() && m.at > (seen[id] || '')).length;
 
 /** Messages from other people in this person's channels that they have not opened yet. */
@@ -99,7 +102,7 @@ function ring() {
 /** Called on every screen update: rings and shows a note for messages from others that arrived since the last look. */
 export function announce(company, onDiscuss = false) {
   const mine = new Set(channels().map(ch => ch.id));
-  const fresh = (company.messages || []).filter(m => mine.has(m.channel) && !m.deleted);
+  const fresh = (company.messages || []).filter(m => mine.has(m.channel) && visible(m, m.channel) && !m.deleted);
   const newest = fresh.reduce((t, m) => (m.at > t ? m.at : t), '');
   if (heard === null) { heard = newest; return; }      // what was there at sign-in is not news
   const news = fresh.filter(m => m.at > heard && m.by !== me());

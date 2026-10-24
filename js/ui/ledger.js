@@ -45,11 +45,11 @@ export function render(c) {
           <tr>
             <td class="nowrap">${fmtDate(r.date)}</td>
             <td>${r.type === 'income' ? chip('Received', 'ok') : chip(LABEL[r.category] || r.category)}</td>
-            <td>${r.description}${r.auto ? html` ${chip('auto', 'info')}` : ''}</td>
+            <td>${r.description}${r.estimate ? html` ${chip('estimate, not counted: the crew is paid through Payments', 'warn')}` : r.auto ? html` ${chip('auto', 'info')}` : ''}${r.payId ? html` ${chip('Payments', 'info')}` : ''}</td>
             <td class="muted">${r.vendor || ''}</td>
             <td class="r nowrap">${money(r.amount, r.currency)}</td>
             <td class="r nowrap ${r.type === 'income' ? 'ok' : ''}">${r.type === 'income' ? '+' : '−'}${money(r.base, cur)}</td>
-            <td class="r">${r.auto ? '' : html`<button class="btn ghost small" data-act="remove" data-id="${r.id}">Delete</button>`}</td>
+            <td class="r">${r.auto || r.payId ? '' : html`<button class="btn ghost small" data-act="remove" data-id="${r.id}">Delete</button>`}</td>
           </tr>`)}</tbody>
       </table>
       ${rows.length ? '' : html`<p class="empty">${led.rows.length ? `No ${only === 'income' ? 'payments received' : 'expenses'} yet.` : 'No entries yet.'}</p>`}

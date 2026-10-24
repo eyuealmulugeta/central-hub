@@ -9,7 +9,7 @@ import { store } from '../core/store.js';
 import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, RATING_FILTERS, agreementLabel, hrSummary, filterStaff, ratingOf } from '../engine/hr.js';
 import { uid, money, fmtFull } from '../core/util.js';
 import { ratingsOf, rankLabel, scaleLabel, averages, LEVELS, levelOf } from '../engine/evaluation.js';
-import { assign, unassign, assignmentOf, activeProjects, accountOf, fromTeam as fromTeamPlan, unlinked, duplicates } from '../engine/people.js';
+import { assign, unassign, assignmentOf, activeProjects, accountOf, memberId, fromTeam as fromTeamPlan, unlinked, duplicates } from '../engine/people.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, PHOTO, PASSPORT } from '../core/image.js';
 import { passportBlock, toggleZoom, resetZoom } from './docimage.js';
@@ -23,13 +23,14 @@ import { paperHtml } from '../sync/mail.js';
 import { letterhead } from './docs.js';
 import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
+import { personSummary, methodLabel } from '../engine/crewpay.js';
 
 let selected = null;
 let tab = 'work';       // work | private | pay | papers
 const filt = { search: '', position: '', department: '', rating: '', status: 'active', project: '' };   // the employee list's filters ('' = any)
 let notice = '';
 
-const TABS = [['work', 'Work information'], ['private', 'Private information'], ['pay', 'Agreement and pay'], ['papers', 'Papers'], ['projects', 'Projects'], ['access', 'Sign-in access'], ['history', 'Work history and ratings']];
+const TABS = [['work', 'Work information'], ['private', 'Private information'], ['pay', 'Agreement and pay'], ['papers', 'Papers'], ['projects', 'Projects'], ['crewpay', 'Payments'], ['access', 'Sign-in access'], ['history', 'Work history and ratings']];
 let mode = 'form';      // form | sheet (the profile sheet that is printed or emailed)
 // What goes on the profile sheet. Pay, private address and phone, ID number, emergency contact, bank and notes never do.
 const SHEET_OPTIONS = [
@@ -194,7 +195,7 @@ function profileSheet({ p }, c) {
 }
 
 /** A person's sign-in email and the projects it is linked to follow their assignments. */
-function relink(person, projectId, on) {
+export function relink(person, projectId, on) {
   const mail = accountOf(person);
   const u = mail && store.users.find(x => x.email === mail);
   if (!u) return;
@@ -280,6 +281,7 @@ function form({ p, alerts, monthly }, c) {
   const pick = (label, f, fk, list) => html`<label>${label} <select data-chg="set" data-f="${f}" data-fk="${fk}">${options(list, p[f] || '')}</select></label>`;
 
   const panes = {
+    crewpay: crewPayPane(p, c),
     work: html`
       <div class="grid2">
         ${text('Work mobile', 'phone', 'hr-phone')}
@@ -425,6 +427,17 @@ function form({ p, alerts, monthly }, c) {
         <button type="button" role="tab" class="tab ${tab === k ? 'on' : ''}" data-act="tab" data-t="${k}" aria-selected="${tab === k ? 'true' : 'false'}">${label}${k === 'papers' && p.documents?.length ? html` <span class="muted">${p.documents.length}</span>` : ''}</button>`)}</div>
       <div class="form emp-pane">${panes[tab]}</div>
     </section>`;
+}
+
+/** The Payments tab of an HR record: what the person earned, was paid and is owed on the open project. */
+function crewPayPane(p, c) {
+  const pay = personSummary(c.ws, memberId(p));
+  const cur = c.project.currency;
+  return html`<p class="muted">On <b>${c.project.name}</b>; choose another project with the project chooser to see its figures. Earned counts the approved pay periods under Finance, Payments.</p>
+    <div class="grid2"><p>Earned <b>${money(pay.earned, cur, 2)}</b></p><p>Paid <b>${money(pay.paid, cur, 2)}</b></p><p>Still owed <b class="${pay.owed > 0.004 ? 'bad' : 'ok'}">${money(pay.owed, cur, 2)}</b></p></div>
+    ${pay.payments.length ? html`<table class="table compact"><thead><tr><th>Date</th><th>For the period from</th><th class="r">Amount</th><th>How</th><th>Reference</th></tr></thead>
+      <tbody>${pay.payments.map(x => html`<tr><td class="nowrap">${fmtFull(x.date)}</td><td class="nowrap">${fmtFull(x.periodFrom)}</td><td class="r nowrap">${money(x.amount, x.currency, 2)}</td><td>${methodLabel(x.method)}</td><td>${x.ref || ''}</td></tr>`)}</tbody></table>`
+      : html`<p class="muted">No payment recorded on this project.</p>`}`;
 }
 
 export const actions = {

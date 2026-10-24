@@ -66,7 +66,7 @@ export function performanceReport({ project, ws, global }, from, to) {
   const taskName = id => ws.tasks.find(t => t.id === id)?.name || 'Removed task';
   const delays = reports.flatMap(r => (r.entries || []).filter(e => e.delayDays > 0)
     .map(e => ({ date: r.date, task: taskName(e.taskId), days: e.delayDays, note: e.note || '' })));
-  const money = type => sum([...ws.ledger, ...laborRows(ws, project)].filter(e => e.type === type && within(e.date)),
+  const money = type => sum([...ws.ledger, ...laborRows(ws, project)].filter(e => e.type === type && !e.estimate && within(e.date)),
     e => convert(e.amount, e.currency, project.currency, global.fx));
 
   return {

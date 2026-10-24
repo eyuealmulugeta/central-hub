@@ -5,7 +5,7 @@ import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
 import { PROJECT_TYPES } from '../core/seed.js';
-import { GRANTABLE, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor } from '../core/access.js';
+import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
 import { checkPack, packSummary, applyToWorkspace, applyToCompany, applyToProject } from '../core/pack.js';
 import { OWNER_SECTIONS } from '../core/schema.js';
@@ -16,15 +16,16 @@ import { chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
-import { assign, assignmentOf, unlinked, accountOf } from '../engine/people.js';
-import { focusOn as focusPerson } from './hr.js';
+import { assign, unassign, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
+import { focusOn as focusPerson, relink } from './hr.js';
 import { describe as describeSession } from '../engine/session.js';
 import { targetFor, parseDates } from '../engine/calendar.js';
 import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUsers, LIMITS } from '../engine/deployment.js';
 import { money, num, fmtFull } from '../core/util.js';
+import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const ROLES = [['office', 'Office: the pages ticked below, on every project'], ['site', 'Site: Overview, Daily report and Schedule on chosen projects']];
+const ROLES = [['office', 'Office: works from the office, on the projects ticked'], ['site', 'Site: works on site, on the projects ticked (active ones only)']];
 const PAGE_NAME = Object.fromEntries(GRANTABLE);
 
 // Settings is five pages, one per tab: this project, people and access, currencies,
@@ -37,7 +38,7 @@ export const getSection = () => section;
 export function indexText(c) {
   const keep = { projTab, accTab, linkTab };
   const parts = [];
-  const tabs = section === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : section === 'access' ? ['accTab', ['people', 'you', 'problems']] : section === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
+  const tabs = section === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : section === 'access' ? ['accTab', ['people', 'crew', 'perms', 'you', 'problems']] : section === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
   try {
     for (const k of tabs ? tabs[1] : [null]) {
       if (tabs) ({ projTab, accTab, linkTab } = { ...keep, [tabs[0]]: k });
@@ -161,6 +162,24 @@ function titleSelect(u) {
     ${GROUPS.map(g => html`<optgroup label="${g}">${options(TITLES.filter(t => t[2] === g).map(([k, label]) => [k, label]), key || null)}</optgroup>`)}</select>`;
 }
 
+/** The pages a person may open, ticked in groups, with a way back to what a role starts with. */
+function pageTicks(u) {
+  const may = grantableFor(u).map(([k]) => k);
+  const have = pagesOf(u);
+  const money = MONEY_PAGES.filter(k => have.includes(k));
+  return html`
+    ${GRANT_GROUPS.map(([g, list]) => {
+      const here = list.filter(([k]) => may.includes(k));
+      return here.length ? html`<h4 class="tick-group">${g}</h4>${pills(here.map(([k, label]) => html`<label class="check pill"><input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${have.includes(k) ? 'checked' : ''}> ${label}</label>`))}` : '';
+    })}
+    ${u.role === 'site' && money.length ? html`<p class="bad">This Site person sees the money of their projects (${money.map(k => PAGE_NAME[k]).join(', ')}). With Costs ticked they also enter costs; with Invoices and documents, drafts only.</p>` : ''}
+    <div class="actions left">
+      <button class="btn small ghost" type="button" data-act="resetPages" data-id="${u.email}" data-r="site">Site defaults</button>
+      <button class="btn small ghost" type="button" data-act="resetPages" data-id="${u.email}" data-r="office">Office defaults</button>
+    </div>
+    <p class="muted">HR, Payroll, Letters, Company owners and Settings stay yours alone. Home and Discuss are open to everyone.</p>`;
+}
+
 function personDetail(u) {
   const s = store.sessions.find(x => x.email === u.email && !x.released);
   return html`
@@ -187,12 +206,9 @@ function personDetail(u) {
         </div>
 
         <div class="set-box">
-          ${u.role === 'office' ? html`
-            <h3>Pages this person may open</h3>
-            ${pills(grantableFor(u).map(([k, label]) => html`<label class="check pill"><input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${pagesOf(u).includes(k) ? 'checked' : ''}> ${label}</label>`))}
-            <label class="check"><input type="checkbox" data-chg="userApprover" data-id="${u.email}" ${u.approver ? 'checked' : ''}> May approve and issue client reports</label>
-` : html`
-            <h3>Pages</h3><p class="muted">A Site person opens Overview, Daily report and Schedule on the projects ticked below.</p>`}
+          <h3>Pages this person may open</h3>
+          ${pageTicks(u)}
+          ${u.role === 'office' ? html`<label class="check"><input type="checkbox" data-chg="userApprover" data-id="${u.email}" ${u.approver ? 'checked' : ''}> May approve and issue client reports</label>` : ''}
           <h3>Projects <span class="muted">${ONE_PROJECT.includes(titleOf(u)) ? `a ${titleLabel(titleOf(u))} is on one only` : 'one or several'}</span></h3>
           ${pills(store.projects.map(p => html`<label class="check pill"><input type="checkbox" data-chg="userProject" data-id="${u.email}" data-p="${p.id}" ${(u.projects || []).includes(p.id) ? 'checked' : ''}> ${p.name}</label>`))}
           ${(u.projects || []).length ? '' : html`<p class="bad">Not on any project: they sign in and see nothing yet.</p>`}
@@ -246,6 +262,79 @@ function peopleTab() {
     </div>`;
 }
 
+/** Every person and every app in one table: the permission list for all roles. */
+function permsTab() {
+  const list = store.users;
+  if (!list.length) return html`<section class="card"><p class="empty">Nobody else signs in yet. Add people on the People tab.</p></section>`;
+  const order = [['office', 'Office'], ['site', 'Site']];
+  const roleOf = u => (u.role === 'office' ? 'office' : 'site');
+  return html`<section class="card" id="panel-perms">
+    <div class="toolbar"><h2>Permissions</h2><span class="muted">Each person and each app: tick to let them open it. It applies on the projects they are on.</span></div>
+    <div class="table-wrap"><table class="table compact perm-table">
+      <thead>
+        <tr><th colspan="2"></th>${GRANT_GROUPS.map(([g, l]) => html`<th class="c grp" colspan="${l.length}">${g}</th>`)}</tr>
+        <tr><th>Person</th><th>Role</th>${GRANTABLE.map(([, label]) => html`<th class="c">${label}</th>`)}</tr>
+      </thead>
+      <tbody>${order.map(([r, rl]) => list.filter(u => roleOf(u) === r).map(u => {
+        const may = grantableFor(u).map(([k]) => k), have = pagesOf(u), name = u.name || u.email;
+        return html`<tr>
+          <th scope="row"><button type="button" class="linklike" data-act="openUser" data-id="${u.email}" title="Open ${name} on the People tab">${name}</button></th><td>${rl}</td>
+          ${GRANTABLE.map(([k, label]) => html`<td class="c">${may.includes(k) ? html`<input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${have.includes(k) ? 'checked' : ''} aria-label="${label} for ${name}">` : html`<span class="muted" title="Not for Installation">–</span>`}</td>`)}
+        </tr>`;
+      }))}</tbody>
+    </table></div>
+    <p class="muted">Never ticked, yours alone: HR, Payroll, Letters, Company owners and Settings. Evaluation lets a person rate the tier below them; it starts ticked for anyone whose title rates someone.</p>
+  </section>`;
+}
+
+// Allocated Crew: everyone who works on the projects, one row each, one column per project.
+let crewShow = '';        // '' everybody, 'none' on no project, or a project id
+let crewApps = null;      // the email whose app ticks are open under their row
+
+/** The rows: the directory's people still working (Installation), then sign-ins that have no directory record. */
+export function crewRows(staff, users) {
+  const rows = staff.filter(p => p.status !== 'left' && p.division !== 'trading').map(p => {
+    const mail = accountOf(p);
+    return { key: p.id, person: p, user: (mail && users.find(u => u.email === mail)) || null, on: activeProjects(p) };
+  });
+  const known = new Set(rows.map(x => x.user?.email).filter(Boolean));
+  const loose = users.filter(u => !known.has(u.email) && (divisionsOf(u)[0] || 'installation') === 'installation')
+    .map(u => ({ key: u.email, person: null, user: u, on: u.projects || [] }));
+  return [...rows, ...loose];
+}
+
+function crewRow(row, projects) {
+  const u = row.user, name = row.person?.name || u?.name || u?.email || 'No name yet';
+  const sub = row.person?.title || u?.title || '';
+  const live = projects.map(p => p.id);
+  return html`<tr>
+    <th scope="row"><b>${name}</b>${sub ? html`<br><span class="muted">${sub}</span>` : ''}${row.person ? '' : html`<br><span class="chip warn" title="Signs in, but has no record under Crew, Employee data">Not in the directory</span>`}</th>
+    ${projects.map(p => {
+      const on = row.on.includes(p.id);
+      const may = !on && u ? mayJoin(u, p.id, live) : { ok: true };
+      return html`<td class="c"><input type="checkbox" data-chg="crewOn" data-k="${row.key}" data-p="${p.id}" ${on ? 'checked' : ''} ${may.ok ? '' : 'disabled'} title="${may.ok ? `${on ? 'Take off' : 'Put on'} ${p.name}` : may.reason}" aria-label="${name} on ${p.name}"></td>`;
+    })}
+    <td class="nowrap">${u ? html`<span class="chip ${u.role === 'office' ? 'info' : ''}">${ROLE_NAME[u.role] || u.role}</span> <button type="button" class="btn small" data-act="crewApps" data-id="${u.email}" aria-expanded="${crewApps === u.email ? 'true' : 'false'}">${crewApps === u.email ? 'Close' : 'Apps'}</button>` : html`<span class="muted">No sign-in</span>`}</td>
+  </tr>
+  ${u && crewApps === u.email ? html`<tr class="crew-apps"><td colspan="${projects.length + 2}"><b>Apps ${name} may open</b>${pageTicks(u)}</td></tr>` : ''}`;
+}
+
+function crewTab(c) {
+  if (c.division === 'trading') return html`<section class="card"><p class="empty">Projects belong to Installation. Switch to Installation to allocate the crew.</p></section>`;
+  const projects = store.projects;
+  const all = crewRows(c.company.staff || [], store.cloud ? store.users : []);
+  const rows = all.filter(x => !crewShow || (crewShow === 'none' ? !x.on.length : x.on.includes(crewShow)));
+  return html`<section class="card" id="panel-crew">
+    <div class="toolbar"><h2>Allocated Crew</h2><span class="muted">Tick to put a person on a project, untick to take them off. Their place on the team, the Field Report lists and their sign-in follow.</span></div>
+    <div class="actions left"><label>Show <select data-chg="crewShow" aria-label="Who to show">${options([['', `Everybody (${all.length})`], ['none', 'On no project'], ...projects.map(p => [p.id, `On ${p.name}`])], crewShow)}</select></label></div>
+    ${rows.length ? html`<div class="table-wrap"><table class="table compact crew-table">
+      <thead><tr><th>Person</th>${projects.map(p => html`<th class="c">${p.name}${statusLabel(p) !== statusLabel({}) ? html`<br><span class="muted">${statusLabel(p)}</span>` : ''}</th>`)}<th>Sign-in</th></tr></thead>
+      <tbody>${rows.map(x => crewRow(x, projects))}</tbody>
+    </table></div>` : html`<p class="empty">${all.length ? 'Nobody matches.' : 'Nobody yet. People are added under Crew, Employee data.'}</p>`}
+    <p class="muted">A Project Engineer or Site Engineer is on one project at a time: their other boxes are greyed out. The role and day rate on each project are set on the person's record (Crew, Employee data, Projects).</p>
+  </section>`;
+}
+
 function youTab() {
   return html`
     <div class="set-cols">
@@ -281,15 +370,18 @@ function youTab() {
 }
 
 function accessPage(c) {
-  if (!(store.cloud && store.role === 'owner')) {
-    return html`<div class="side settings"><section class="card"><p class="empty">Nobody signs in to the demo, so there is nobody to give access to. In the signed-in version this page lists each person, their role, and the pages they may open.</p></section></div>`;
-  }
-  const tabs = [['people', 'People', store.requests.length || 0], ['you', 'You and rules'], ['problems', 'Problems reported', store.faults.length || 0]];
+  if (store.role !== 'owner') return html`<div class="side settings"><section class="card"><p class="empty">Only the Admin manages people and access.</p></section></div>`;
+  // the demo has nobody who signs in: only the crew of the directory can be allocated there
+  const demo = !store.cloud;
+  if (demo) accTab = 'crew';
+  const tabs = demo ? [['crew', 'Allocated Crew']]
+    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Permissions'], ['you', 'You and rules'], ['problems', 'Problems reported', store.faults.length || 0]];
   return html`<div class="side settings">
     <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
     ${tabStrip(tabs, accTab, 'accTab')}
-    ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : peopleTab()}
+    ${demo ? html`<p class="muted">Nobody signs in to the demo, so People and Permissions are only in the signed-in version.</p>` : ''}
+    ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'perms' ? permsTab() : peopleTab()}
   </div>`;
 }
 
@@ -406,6 +498,12 @@ function projectPage(c) {
       <div class="set-stack">
         ${box('week', 'Working week', html`
           ${pills(WEEKDAYS.map((d, i) => html`<label class="check pill"><input type="checkbox" data-chg="weekday" data-d="${i}" ${p.workDays.includes(i) ? 'checked' : ''}> ${d}</label>`))}`)}
+        ${box('payperiod', 'Pay period of the crew', html`
+          <p class="muted">How often the site crew of this project is paid. The Attendance sheet shows the same period.</p>
+          <div class="grid2">
+            <label>Paid <select data-chg="payPeriod" data-fk="pp-kind">${options(PAY_PERIODS, payPeriodOf(p))}</select></label>
+            ${payPeriodOf(p) === 'monthly' ? '' : html`<label>A pay week starts on <select data-chg="payWeekStart" data-fk="pp-start">${options(WEEKDAYS.map((d, i) => [String(i), d]), String(weekStartOf(p)))}</select></label>`}
+          </div>`)}
         ${box('calendar', 'Non-working dates and target date', html`
           <label>One date per line (YYYY-MM-DD): holidays and days nobody works
             <textarea data-chg="nonWorking" data-fk="pj-nw" rows="3" placeholder="2026-11-12">${(p.nonWorking || []).join('\n')}</textarea></label>
@@ -520,6 +618,17 @@ export const actions = {
   accTab(el) { accTab = el.dataset.t; },
   linkTab(el) { linkTab = el.dataset.t; },
   pickUser(el) { who = el.dataset.id; },
+  /** From the Permissions table: open the person on the People tab. */
+  openUser(el) { who = el.dataset.id; accTab = 'people'; },
+  crewApps(el) { crewApps = crewApps === el.dataset.id ? null : el.dataset.id; },
+  /** Put a person back on what a role starts with (they keep their role). */
+  resetPages(el) {
+    const u = store.users.find(x => x.email === el.dataset.id);
+    if (!u) return;
+    const want = defaultPages({ ...u, role: el.dataset.r });
+    store.setUser(u.email, { pages: grantableFor(u).map(([k]) => k).filter(k => want.includes(k)), pagesV: 2 });
+    tell(`✓ ${u.name || u.email} now opens the ${el.dataset.r === 'site' ? 'Site' : 'Office'} pages.`);
+  },
   /** Switch one app on or off for the whole company. */
   app(el) {
     const page = el.dataset.p;
@@ -677,12 +786,42 @@ export const changes = {
   userApprover(el) { store.setUser(el.dataset.id, { approver: el.checked }); },
   userField(el) { store.setUser(el.dataset.id, { [el.dataset.f]: el.value.trim() }); },
   myProfile(el) { store.setProfile({ [el.dataset.f]: el.value.trim() }); },
-  /** Tick or untick one page for an Office user. */
+  /** Tick or untick one page for a person (Office or Site). */
   userPage(el) {
     const u = store.users.find(x => x.email === el.dataset.id);
-    const now = pagesOf(u).filter(k => k !== el.dataset.p);
-    if (el.checked) now.push(el.dataset.p);
-    store.setUser(el.dataset.id, { pages: grantableFor(u).map(([k]) => k).filter(k => now.includes(k)) });
+    if (u) store.setUser(u.email, tickPage(u, el.dataset.p, el.checked));
+  },
+  crewShow(el) { crewShow = el.value; },
+  payPeriod(el) { store.updateProject(p => { p.payPeriod = el.value; }); },
+  payWeekStart(el) { store.updateProject(p => { p.payWeekStart = +el.value; }); },
+  /** Allocated Crew: put a person on a project or take them off. A directory person goes the way of their HR record. */
+  crewOn(el, c) {
+    const pid = el.dataset.p, on = el.checked;
+    const project = store.projects.find(p => p.id === pid);
+    const person = (c.company.staff || []).find(p => p.id === el.dataset.k);
+    const mail = person ? accountOf(person) : el.dataset.k;
+    const u = mail && store.users.find(x => x.email === mail);
+    if (on && u) {
+      const may = mayJoin(u, pid, store.projects.map(x => x.id));
+      if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
+    }
+    if (person) {
+      let a;
+      store.updateCompany(co => {
+        const x = co.staff.find(y => y.id === person.id);
+        const old = assignmentOf(x, pid);
+        a = { ...(old || { projectId: pid, role: x.title || '', dayRate: 0 }), active: on };
+        x.assignments = [...(x.assignments || []).filter(y => y.projectId !== pid), a];
+      });
+      store.updateOther(pid, ws => (on ? assign(ws, person, a) : unassign(ws, person)));
+      relink(person, pid, on);
+    } else if (u) {
+      const live = store.projects.map(x => x.id);
+      const projects = (u.projects || []).filter(id => id !== pid && live.includes(id));
+      if (on) projects.push(pid);
+      store.setUser(u.email, { projects });
+    }
+    tell(`✓ ${person?.name || u?.name || mail} ${on ? 'is on' : 'is off'} ${project?.name || 'the project'}.`);
   },
   /** Switch a page on or off for the open project. */
   pageOn(el) {

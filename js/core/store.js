@@ -15,6 +15,7 @@ import { emptyWorkspace, emptyCompany, OWNER_SECTIONS, PUBLIC_SECTIONS, DEFAULT_
 import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } from './sync.js';
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
 import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, companySections, MONEY_SECTIONS } from './access.js';
+import { joinDates } from '../engine/people.js';
 import { divisionsOf } from './nav.js';
 import { DIVIDED, stampPlan } from './division.js';
 import { prefs, prefsPath } from './prefs.js';
@@ -28,7 +29,7 @@ const COMPANY_PATH = 'company/main';
 const VERSION = 1;
 // What a Site user may read. Must match firestore.rules.
 const SUMMARY_REPEAT_MS = 10 * 60 * 1000;
-const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'laborRates', 'assemblies', 'procurement', 'requests'];
+const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'laborRates', 'assemblies', 'procurement', 'requests', 'attendance'];
 
 const ls = () => globalThis.localStorage;
 const read = key => { try { return JSON.parse(ls().getItem(key)); } catch { return null; } };
@@ -73,6 +74,10 @@ let divisions = [];       // the divisions this person works in (empty = both); 
 let limited = false;      // sees only the projects linked to their email (every Site user; an Office user the Admin limited)
 let approver = false;    // may issue client reports (the Owner, or Office users the Owner ticked)
 let profile = { name: '', title: '' }; // how the signed-in person is named on documents they approve
+// When the signed-in person was given access (since) and put on each project (joined): Discuss shows them only
+// what was written from then on. Empty for people given access before v0.16.1, who keep the history.
+let since = '';
+let joined = {};
 let openId = null;
 let shared = [];         // listeners that live for the whole session
 let opened = [];         // listeners of the open workspace
@@ -155,8 +160,8 @@ function install({ meta: m, global: g, workspaces, company: co }) {
   for (const [id, ws] of Object.entries(workspaces)) write(K.ws(id), ws);
 }
 
-/** The project sections this person loads: a Site user the site ones, an Office user without a money page everything but money. */
-const readable = () => (role === 'site' ? SITE_SECTIONS
+/** The project sections this person loads: a Site user the site ones (and money with a money page ticked), an Office user without a money page everything but money. */
+const readable = () => (role === 'site' ? [...SITE_SECTIONS, ...(seesMoney(role, pages) ? MONEY_SECTIONS : [])]
   : seesMoney(role, pages) ? SECTIONS : SECTIONS.filter(s => !MONEY_SECTIONS.includes(s)));
 
 /** Listen to every section of one project and keep its workspace in memory. */
@@ -245,6 +250,8 @@ export const store = {
       approver = role === 'office' && mine.approver === true;
       profile = { name: mine.name || '', title: mine.title || '' };
       assigned = mine.projects || [];
+      since = typeof mine.since === 'string' ? mine.since : '';
+      joined = mine.joined && typeof mine.joined === 'object' ? mine.joined : {};
     }
 
     // one signed-in device per person: a second device is refused until the first signs out or
@@ -261,7 +268,7 @@ export const store = {
       if (role === 'owner' && primary) await api.set('global/main', global);   // a co-owner never writes
     }
     shared.push(api.watchDoc('global/main', data => { if (data) { global = data; emit(); } }, fail));
-    if (role !== 'site') shared.push(api.watchDoc('public/booking', data => { booking = data; emit(); }, () => {}));
+    if (role === 'owner' || pages.includes('meetings')) shared.push(api.watchDoc('public/booking', data => { booking = data; emit(); }, () => {}));
     if (role === 'owner') {
       shared.push(api.watchCol('users', docs => { users = docs; emit(); }, fail));
       shared.push(api.watchCol('sessions', docs => { sessions = docs; emit(); }, () => {}));
@@ -269,11 +276,11 @@ export const store = {
       // quiet when the rules that allow requests have not been published yet
       shared.push(api.watchCol('requests', docs => { requests = docs; emit(); }, () => {}));
     }
-    // company-wide records are for the Office and the Owner; a Site user never loads them
+    // company-wide records: what each person's ticked pages show (a Site user has only the messages until given more)
     {
       for (const section of companySections(role, pages)) {
-        // the rules let an Office user read only their own division of a divided section, so the app asks for just that
-        const only = role === 'office' && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
+        // the rules let an Office or Site user read only their own division of a divided section, so the app asks for just that
+        const only = role !== 'owner' && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
         shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); }, section === 'messages' ? () => {} : fail, only));
       }
     }
@@ -313,6 +320,11 @@ export const store = {
   /** The first owner. Co-owners are Admins too, but cannot add co-owners or hand the Admin role on. */
   get isPrimary() { return !api || primary; },
   /** A co-owner: sees everything, changes nothing. */
+  /** From when this person sees a Discuss channel ('' = all of it): their access for General, their joining for a project. */
+  seesFrom(channel, generalChannel) {
+    if (role === 'owner') return '';
+    return channel === generalChannel ? since : joined[channel] || '';
+  },
   get readOnly() { return !!api && role === 'owner' && !primary; },
   get coOwners() { return coOwners; },
   /** The Admin and the co-owners. */
@@ -443,6 +455,12 @@ export const store = {
    * Change the workspace of any project, open or not, and get that workspace back.
    * In the cloud a project that is not open is read once for this, so use it sparingly.
    */
+  /** The tasks of any project this person can open, without opening it (the Schedule's Import). */
+  async readTasks(id) {
+    if (id === this.project?.id) return structuredClone(this.ws.tasks);
+    if (!api) return load(id).tasks || [];
+    return sectionFromDocs('tasks', await api.list(`projects/${id}/tasks`));
+  },
   async updateOther(id, fn) {
     if (viewOnly()) return;
     if (id === this.project?.id) { this.update(fn); return load(id); }
@@ -555,8 +573,9 @@ export const store = {
   setUser(email, patch) {
     if (viewOnly()) return;
     email = email.trim().toLowerCase();
-    const current = users.find(u => u.email === email) || { email, role: 'site', projects: [] };
-    send(api.set(`users/${email}`, { ...current, ...patch }));
+    const known = users.find(u => u.email === email);
+    const current = known || { email, role: 'site', projects: [] };
+    send(api.set(`users/${email}`, { ...current, ...patch, ...joinDates(known, patch, new Date().toISOString()) }));
   },
   /** Owner only: their own name and title. Everyone else's are set by the Owner through setUser. */
   setProfile(patch) {

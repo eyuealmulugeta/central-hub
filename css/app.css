@@ -86,7 +86,10 @@ a { color: var(--primary); }
 .top { grid-area: top; display: flex; align-items: center; gap: 12px; padding: 0 20px; min-width: 0; }
 .top h1 { margin: 0; font-size: 20px; font-weight: 600; white-space: nowrap; }
 .project-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.project-select { display: none; font-weight: 500; }
+.project-pick { display: flex; flex-direction: row; align-items: center; gap: 8px; flex: none; margin: 0; }
+.project-pick[hidden] { display: none; }
+.project-pick span { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.project-select { font-weight: 600; max-width: 260px; }
 a.btn { text-decoration: none; }
 
 .view { grid-area: main; display: grid; gap: 12px; padding: 0 20px 20px; min-height: 0; overflow: hidden; align-content: stretch; }
@@ -253,7 +256,8 @@ dialog h3 { margin: 6px 0 -6px; }
   body { grid-template: "top" auto "main" minmax(0, 1fr) "side" auto / minmax(0, 1fr); }
   .top { flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
   .top h1 { font-size: 18px; }
-  .project-select { display: block; order: -1; flex: 1 1 100%; }
+  .project-pick { order: -1; flex: 1 1 100%; }
+  .project-select { flex: 1; max-width: none; }
   .project-meta { display: none; }
   .sidebar { flex-direction: row; gap: 0; padding: 4px 6px; border-right: 0; border-top: 1px solid var(--line); overflow: visible; }
   .sidebar > :not(.nav) { display: none; }
@@ -281,7 +285,7 @@ dialog h3 { margin: 6px 0 -6px; }
   :root { --bg: #fff; --surface: #fff; --surface-2: #f3f4f6; --ink: #000; --muted: #444; --line: #c8ccd2; --shadow: none; color-scheme: light; }
   html, body { height: auto; }
   body { display: block; overflow: visible; }
-  .sidebar, .btn, .seg, form.entry, .project-select, .editor { display: none !important; }
+  .sidebar, .btn, .seg, form.entry, .project-pick, .editor { display: none !important; }
   .top { padding: 0 0 10px; }
   .view, .view[class] { display: block; overflow: visible; padding: 0; }
   .kpis { margin-bottom: 12px; }
@@ -600,7 +604,6 @@ body.side-narrow .brand-name, body.side-narrow .side-label, body.side-narrow .pr
 body.side-narrow .logo { width: 44px; height: 44px; }
 body.side-narrow .side-link { justify-content: center; padding: 0; width: 44px; }
 body.side-narrow .side-link em { position: absolute; top: 0; right: 0; }
-body.side-narrow .project-select { display: block; max-width: 220px; }
 dialog.palette { width: min(640px, calc(100vw - 32px)); padding: 12px; margin-top: 12vh; }
 dialog.palette input { width: 100%; padding: 12px 14px; font: inherit; font-size: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--ink); }
 #palette-list { list-style: none; margin: 8px 0; padding: 0; max-height: 50vh; overflow: auto; }
@@ -638,7 +641,7 @@ dialog.palette p { margin: 0; font-size: 12px; }
 .view-prices .settings { gap: 12px; }
 
 /* ---- Home: a tile per section, then the projects ---- */
-.view-home { grid-template: auto / minmax(0, 1fr); align-content: start; }
+.view-home, .view-section { grid-template: auto / minmax(0, 1fr); align-content: start; }
 .launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 24px 12px; padding: 6px 0 10px; }
 .launcher .app { display: flex; flex-direction: column; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; text-align: center; font-size: 15px; font-weight: 600; line-height: 1.25; }
 .app-ic { position: relative; width: 84px; height: 84px; border-radius: 22px; display: grid; place-items: center; transition: transform .12s ease; }
@@ -971,3 +974,7 @@ mark.find-hit.find-current { background: #ff9f1c; outline: 2px solid #c25e00; }
 .emp-stars { color: #e0a412; letter-spacing: .04em; }
 .emp-stars.muted { color: var(--muted); letter-spacing: 0; }
 .toolbar.wrap { flex-wrap: wrap; }
+
+/* v0.14.0 an app, not a web page: words are not selected by a click or a long press, except where one types */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, select, [contenteditable], [contenteditable] * { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }

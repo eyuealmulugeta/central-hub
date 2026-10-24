@@ -24,6 +24,7 @@ import * as discuss from './ui/discuss.js';
 import * as meetings from './ui/meetings.js';
 import * as contactsView from './ui/contacts.js';
 import * as evaluation from './ui/evaluation.js';
+import * as directory from './ui/directory.js';
 import * as letters from './ui/letters.js';
 import * as requests from './ui/requests.js';
 import * as payroll from './ui/payroll.js';
@@ -54,14 +55,14 @@ import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
 const APP = 'Amistad Prefab Central Hub';
 // the trading side has two pages, both drawn by the trade module
-const VIEWS = { home, dashboard, reports, schedule, ledger, evaluation, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
-const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Booked by clients and suppliers through your booking page', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
+const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -181,7 +182,7 @@ let lastShown = {};                      // the red numbers as the menu shows th
 // The apps on Home: every page this person may open in this division, one tile each, coloured by its section.
 const APP_ICON = {
   dashboard: 'dashboard', schedule: 'schedule', setup: 'apps', reports: 'reports', status: 'reports', hr: 'hr', employment: 'hr', crewletters: 'contracts',
-  attendance: 'reports', evaluation: 'hr', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
+  attendance: 'reports', evaluation: 'hr', directory: 'access', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
   expenses: 'ledger', summary: 'finance', contracts: 'contracts', documentsign: 'contracts', letters: 'contracts', requests: 'docs', contacts: 'access',
   owners: 'company', trade: 'trade', stock: 'stock', tradesummary: 'finance', discuss: 'discuss', meetings: 'meetings',
 };
@@ -353,6 +354,8 @@ function render() {
   renderSidebar(name, summaries);
   ctx.apps = launcherApps();
   ctx.counts = lastShown;
+  if (appOn(store.global, 'discuss')) discuss.announce(scoped(), name === 'discuss');   // a ring and a note for a new message
+  if (appOn(store.global, 'meetings') && store.can('meetings')) meetings.announce(scoped());   // a note for a new invitation
   store.saveSummary(summaryOf(ctx));
 
   $('#page-title').textContent = TITLES[name];

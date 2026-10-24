@@ -55,7 +55,14 @@ import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
 const APP = 'Amistad Prefab Central Hub';
 // the trading side has two pages, both drawn by the trade module
-const VIEWS = { home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+/** The grid of one section's pages: the same tiles as Home, with their red numbers. */
+const section = {
+  render: () => home.render({
+    counts: lastShown,
+    apps: sectionTabs(openSection).map(t => ({ page: t, title: TITLES[t], icon: APP_ICON[t] || openSection.icon, tone: HUB_TONE[openSection.id] || 'gray', pages: [t] })),
+  }),
+};
+const VIEWS = { section, home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
@@ -72,7 +79,11 @@ const myDivisions = () => divisionsOf({ role: store.role, divisions: store.divis
 /** The company's records of the open division only: a page cannot mix the two businesses. */
 const scoped = () => scopedCompany(store.company, division);
 const hubs = () => hubsOf(division);
-const hubOf = name => hubs().find(h => h.tabs.includes(name));
+let openSection = null;   // the section whose grid of pages is open (#s-<id>)
+const hubOf = name => (name === 'section' ? openSection : hubs().find(h => h.tabs.includes(name)));
+/** A section opens on a grid of its pages when it has more than one for this person. Settings keeps its own list. */
+const sectionTabs = h => h.tabs.filter(allowed);
+const gridded = h => h.id !== 'settings' && sectionTabs(h).length > 1;
 function setDivision(d) {
   division = d;
   setCurrentDivision(d);
@@ -163,7 +174,14 @@ const allowed = raw => {
     && (!PROJECT_PAGES.includes(sw) || pageOn(store.project, sw));
 };
 const route = () => {
-  const name = resolve(location.hash.slice(1));
+  const raw = location.hash.slice(1);
+  if (raw.startsWith('s-')) {
+    const h = hubs().find(x => x.id === raw.slice(2));
+    if (h && gridded(h)) { openSection = h; TITLES.section = h.label; return 'section'; }
+    const first = h && sectionTabs(h)[0];
+    return first || 'home';
+  }
+  const name = resolve(raw);
   if (!allowed(name)) return 'home';
   const d = divisionFor(name, division, myDivisions());
   if (d !== division) setDivision(d);   // a link into the other division opens it
@@ -182,7 +200,7 @@ let lastShown = {};                      // the red numbers as the menu shows th
 // The apps on Home: every page this person may open in this division, one tile each, coloured by its section.
 const APP_ICON = {
   dashboard: 'dashboard', schedule: 'schedule', setup: 'apps', reports: 'reports', status: 'reports', hr: 'hr', employment: 'hr', crewletters: 'contracts',
-  attendance: 'reports', evaluation: 'hr', directory: 'access', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
+  attendance: 'reports', evaluation: 'hr', directory: 'access', setup: 'apps', status: 'reports', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', income: 'ledger',
   expenses: 'ledger', summary: 'finance', contracts: 'contracts', documentsign: 'contracts', letters: 'contracts', requests: 'docs', contacts: 'access',
   owners: 'company', trade: 'trade', stock: 'stock', tradesummary: 'finance', discuss: 'discuss', meetings: 'meetings',
 };
@@ -244,6 +262,7 @@ function renderSidebar(name, summaries) {
   $('#project-select').innerHTML = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
     ${store.isAdmin ? html`<option value="${NEW_PROJECT}">+ New project</option>` : ''}`);
   $('#btn-new-project').hidden = !store.isAdmin || !installation;
+  $('#project-pick').hidden = !installation || !(store.projects.length || store.isAdmin);
   $('#btn-settings').hidden = !store.isAdmin || !p;
   $('#btn-settings').href = `#${lastTab.settings || 'prices'}`;
   // deleting and settings are the Admin's: their buttons are hidden for everyone else
@@ -272,7 +291,7 @@ function renderSidebar(name, summaries) {
   $('#nav-hubs').innerHTML = String(html`${!p ? '' : hubs().map(h => {
     const tabs = h.tabs.filter(allowed);
     if (!tabs.length) return '';
-    const to = tabs.includes(lastTab[h.id]) ? lastTab[h.id] : tabs[0];
+    const to = gridded(h) ? `s-${h.id}` : tabs[0];
     return html`
       <a href="#${to}" class="side-link ${h === here ? 'on' : ''}" title="${h.label}" ${h === here ? html`aria-current="page"` : ''}>
         ${icon(h.icon)}<span>${h.label}</span>${badge(tabs.reduce((n, t) => n + (count[t] || 0), 0))}
@@ -286,7 +305,7 @@ function renderSidebar(name, summaries) {
     ${tabs.some(t => count[t]) ? html`<button type="button" class="tab mark-read" data-markread="hub" title="Hide the red numbers of this section until something new needs attention">✓ Mark as read</button>` : ''}`);
   // a section with a single page needs no row of tabs
   // Settings lists its pages down the left of the page instead
-  $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings';
+  $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings' || name === 'section';
 
   $('#nav-foot').innerHTML = String(html`
     ${store.cloud ? html`<div class="side-user"><span title="${store.user.email}">${store.user.email}</span><button type="button" class="btn ghost small" id="btn-signout">Sign out</button></div>` : ''}`);
@@ -321,7 +340,7 @@ function render() {
     ctx = null;
     renderSidebar(name, store.projects.map(x => ({ project: x, progress: x.summary?.progress || 0, basis: x.summary?.basis, slip: x.summary?.slip || 0 })));
     $('#page-title').textContent = p ? TITLES[name] : APP;
-    $('#project-meta').textContent = p?.name || '';
+    $('#project-meta').textContent = '';
       root.className = 'view';
     root.innerHTML = String(html`<p class="empty">${p ? 'Loading project…'
       : isSite() ? 'No project has been assigned to you yet. Ask the Admin to add you to one.'
@@ -359,8 +378,8 @@ function render() {
   store.saveSummary(summaryOf(ctx));
 
   $('#page-title').textContent = TITLES[name];
-  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) || [p.name, p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the currency only where money is shown
-  if (hubOf(name)) lastTab[hubOf(name).id] = name;
+  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) || [p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the project is in the chooser; the currency only where money is shown
+  if (hubOf(name) && name !== 'section') lastTab[hubOf(name).id] = name;
   document.title = COMPANY_VIEWS[name] ? `${TITLES[name]} · ${APP}` : `${TITLES[name]} · ${p.name} · ${APP}`;
 
   // keep focus and scroll position across the re-render

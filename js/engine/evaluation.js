@@ -10,11 +10,11 @@
 import { sum } from '../core/util.js';
 
 /** Ranks a signed-in person can hold (users/<email>.ranks). A person may hold more than one. */
-export const RANKS = [['site_engineer', 'Site Engineer'], ['project_manager', 'Project Manager'], ['general_manager', 'General Manager']];
+export const RANKS = [['site_engineer', 'Site Engineer'], ['project_manager', 'Project Engineer'], ['general_manager', 'General Manager']];
 /** What the Admin holds without being asked. firestore.rules lets the Owner write at any level. */
 export const OWNER_RANKS = ['general_manager', 'project_manager'];
 /** The level of the person being rated, kept on each team member (`level`). */
-export const LEVELS = [['crew', 'Site staff and crew'], ['site_engineer', 'Site Engineer'], ['project_manager', 'Project Manager']];
+export const LEVELS = [['crew', 'Site staff and crew'], ['site_engineer', 'Site Engineer'], ['project_manager', 'Project Engineer']];
 /** rank -> the level it rates. Must match mayRate() in firestore.rules. */
 export const RATES = { site_engineer: 'crew', project_manager: 'site_engineer', general_manager: 'project_manager' };
 

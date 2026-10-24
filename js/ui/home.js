@@ -8,7 +8,7 @@ export function render(c) {
   const counts = c.counts || {};
   return html`<nav class="launcher" aria-label="Apps">${(c.apps || []).map(a => {
     const n = a.pages.reduce((s, t) => s + (counts[t] || 0), 0);
-    return html`<a class="app" href="#${a.page}"><span class="app-ic tone-${a.tone}">${icon(a.icon, 28)}${n ? html`<em>${n}</em>` : ''}</span><span class="app-name">${a.title}</span></a>`;
+    return html`<a class="app" href="#${a.page}"><span class="app-ic tone-${a.tone}">${icon(a.icon, 40)}${n ? html`<em>${n}</em>` : ''}</span><span class="app-name">${a.title}</span></a>`;
   })}</nav>`;
 }
 

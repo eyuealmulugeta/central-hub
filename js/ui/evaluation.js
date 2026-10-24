@@ -32,7 +32,7 @@ export function render(c) {
   const ranks = store.ranks;
   if (!ranks.length) {
     return html`<section class="card"><h2>Evaluation</h2>
-      <p class="empty">You have not been given a rank yet. The Admin sets it under Settings, People and access (Site Engineer, Project Manager or General Manager).</p></section>`;
+      <p class="empty">You have not been given a rank yet. The Admin sets it under Settings, People and access (Site Engineer, Project Engineer or General Manager).</p></section>`;
   }
   const list = people(c);
   const person = list.find(m => m.id === selected) || null;

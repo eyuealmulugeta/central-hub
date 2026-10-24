@@ -40,7 +40,7 @@ import { alertCount as hrAlerts } from './engine/hr.js';
 import { unseenAlerts, unseenCount, alertKeys, summaryOf, headline, moneyOf, markKeysSeen } from './ui/seen.js';
 import * as badges from './core/badges.js';
 import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
-import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, permKey } from './core/access.js';
+import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
 import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel } from './core/nav.js';
 import { openPalette } from './ui/palette.js';
@@ -61,7 +61,7 @@ for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Booked by clients and suppliers through your booking page', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Prices and currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -287,9 +287,7 @@ function renderSidebar(name, summaries) {
   // Settings lists its pages down the left of the page instead
   $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings';
 
-  const unread = Object.values(count).reduce((n, v) => n + (v || 0), 0) + summaries.reduce((n, s) => n + (s.unseen || 0), 0);
   $('#nav-foot').innerHTML = String(html`
-    ${unread ? html`<button type="button" class="mark-all" data-markread="all" title="Hide every red number until something new needs attention">✓ Mark all as read <b>${unread}</b></button>` : ''}
     ${store.cloud ? html`<div class="side-user"><span title="${store.user.email}">${store.user.email}</span><button type="button" class="btn ghost small" id="btn-signout">Sign out</button></div>` : ''}`);
   $('#role-badge').textContent = store.cloud ? (store.readOnly ? 'Executive Partner, view only' : ROLE_NAME[store.role] || '') : 'Demo';
   $('#role-badge').title = store.cloud ? `Signed in as ${store.user.email}` : 'Demo data kept in this browser. Nobody is signed in.';
@@ -358,7 +356,7 @@ function render() {
   store.saveSummary(summaryOf(ctx));
 
   $('#page-title').textContent = TITLES[name];
-  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) ||  `${p.name} · ${store.global.regions.find(r => r.id === p.regionId)?.name || ''} · ${p.currency}`;
+  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) || [p.name, p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the currency only where money is shown
   if (hubOf(name)) lastTab[hubOf(name).id] = name;
   document.title = COMPANY_VIEWS[name] ? `${TITLES[name]} · ${APP}` : `${TITLES[name]} · ${p.name} · ${APP}`;
 
@@ -773,7 +771,7 @@ function gate(state, user, canLeave = false) {
   $('#gate-msg').textContent = state === 'signin' ? 'Sign in to continue.'
     : state === 'waiting' ? `${user.email} is waiting for the Admin's approval. Your request has been sent. You can come in as soon as the Admin approves it.`
     : state === 'locked' ? `${user.email} is already signed in on another device (${describeSession(store.lockedBy)}). Only one device can be signed in at a time. Sign out there, or ask the Admin to reset your session, then click Check again. If that device is lost or broken, only the Admin can free it.`
-    : state === 'unassigned' ? `${user.email} has access, but the Admin has not assigned a department yet (Installation or Trading). Nobody comes in before that. Ask the Admin to choose one under Settings, People and access, then click Check again.`
+    : state === 'unassigned' ? `${user.email} has access, but the Admin has not assigned a division yet (Installation or Trading). Nobody comes in before that. Ask the Admin to choose one under Settings, People and access, then click Check again.`
     : state === 'refused' ? `${user.email} has not been given access yet. Ask the Admin to add this address under Settings, People and access.`
     : state === 'sent' ? "An activation email has been successfully sent. Check your spam folder if you don't get it within 3 minutes."
     : state;

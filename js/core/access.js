@@ -23,12 +23,18 @@ const ALL = GRANTABLE.map(([k]) => k);
 /** What a role opens when the Admin has not chosen pages for the person. Must match firestore.rules. */
 export const ROLE_PAGES = { office: ALL, site: ['dashboard', 'reports', 'schedule', 'requests'] };
 
+/** A person who signs in to Installation works on the projects only: the Trading pages are never theirs. */
+const inInstallation = user => user?.role !== 'owner' && (user?.divisions || [])[0] === 'installation';
+/** The pages the Admin can tick for this person. */
+export const grantableFor = user => GRANTABLE.filter(([k]) => !(inInstallation(user) && TRADING_PAGES.includes(k)));
+
 /** The pages a person (a users/<email> record) may open. A Site user is always limited to the site pages. */
 export function pagesOf(user) {
   // Evaluation is not a page the Admin ticks: whoever holds a rank (users/<email>.ranks) has it
   const ranked = user?.ranks?.length ? ['evaluation'] : [];
   if (user?.role === 'site') return [...ROLE_PAGES.site, ...ranked];
-  return [...(Array.isArray(user?.pages) ? user.pages.filter(p => ALL.includes(p)) : ROLE_PAGES.office), ...ranked];
+  const may = grantableFor(user).map(([k]) => k);
+  return [...(Array.isArray(user?.pages) ? user.pages : ROLE_PAGES.office).filter(p => may.includes(p)), ...ranked];
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).

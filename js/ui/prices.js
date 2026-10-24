@@ -1,22 +1,21 @@
 import { store } from '../core/store.js';
-import { convert } from '../engine/pricing.js';
 import { ALLOWED, isForeign, foreignSummary, convertGlobal, convertProject, convertCompany } from '../engine/currencies.js';
 import { uid } from '../core/util.js';
 import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
 import { PROJECT_TYPES } from '../core/seed.js';
-import { GRANTABLE, SWITCHABLE, APPS, appOn, pagesOf, pageOn } from '../core/access.js';
+import { GRANTABLE, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor } from '../core/access.js';
 import { icon } from './dom.js';
 import { checkPack, packSummary, applyToWorkspace, applyToCompany, applyToProject } from '../core/pack.js';
 import { OWNER_SECTIONS } from '../core/schema.js';
 import { LEVELS, levelOf, levelLabel } from '../engine/evaluation.js';
-import { positionChoices } from '../engine/positions.js';
-import { chooseOptions, chosenValue } from './choose.js';
-import { TITLES, GROUPS, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
+import { positionGroups } from '../engine/positions.js';
+import { chooseGroups, groupOptions, chosenValue } from './choose.js';
+import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
-import { assign, assignmentOf, unlinked } from '../engine/people.js';
+import { assign, assignmentOf, unlinked, accountOf } from '../engine/people.js';
 import { focusOn as focusPerson } from './hr.js';
 import { describe as describeSession } from '../engine/session.js';
 import { targetFor, parseDates } from '../engine/calendar.js';
@@ -26,13 +25,8 @@ import { money, num, fmtFull } from '../core/util.js';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ROLES = [['office', 'Office: the pages ticked below, on every project'], ['site', 'Site: Overview, Daily report and Schedule on chosen projects']];
 const PAGE_NAME = Object.fromEntries(GRANTABLE);
-const ADD_REGION = '__add';
-let notice = '';
-let noticeBad = false;
-// returns false for an error, so a form that reports one keeps what was typed
-const say = (text, bad = false) => { notice = text; noticeBad = bad; return !bad; };
 
-// Settings is five pages, one per tab: this project, people and access, prices and currencies,
+// Settings is five pages, one per tab: this project, people and access, currencies,
 // company details, and Field Report and import. Each shows its cards in full, so nothing has to
 // be unfolded and nothing moves when a value is changed.
 let section = 'prices';
@@ -51,7 +45,7 @@ export function indexText(c) {
   } finally { ({ projTab, accTab, linkTab } = keep); }
   return parts.join(' ');
 }
-const SECTION_OF = { prices: 'catalog', fx: 'catalog', company: 'company', field: 'links', import: 'links' };
+const SECTION_OF = { fx: 'catalog', company: 'company', field: 'links', import: 'links' };
 /** Jump to the tab that holds a card (Setup's "Do this" buttons use the card's id). */
 const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team', rates: 'week' };
 export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
@@ -77,7 +71,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // The pages of Settings, listed down the left with their icons, the way a settings screen
 // usually is: the list stays put and only the right side changes.
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
-  ['catalog', 'Prices and currencies', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
+  ['catalog', 'Currencies', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
 const nav = () => html`
   <nav class="card set-nav" aria-label="Settings pages">
     ${NAV.map(([k, label, ic]) => html`
@@ -184,8 +178,8 @@ function personDetail(u) {
         <div class="set-box">
           <h3>Role</h3>
           <select data-chg="userRole" data-id="${u.email}" data-fk="ur-${u.email}" aria-label="Role of ${u.email}">${options(ROLES, u.role)}</select>
-          <h3>Department <span class="muted">signs in to this one only</span></h3>
-          <select data-chg="userDivision" data-id="${u.email}" data-fk="ud-${u.email}" aria-label="Department of ${u.email}">${divisionsOf(u).length ? '' : html`<option value="">Not assigned: cannot sign in</option>`}${options(DIVISIONS, divisionsOf(u)[0] || null)}</select>
+          <h3>Division <span class="muted">signs in to this one only</span></h3>
+          <select data-chg="userDivision" data-id="${u.email}" data-fk="ud-${u.email}" aria-label="Division of ${u.email}">${divisionsOf(u).length ? '' : html`<option value="">Not assigned: cannot sign in</option>`}${options(DIVISIONS, divisionsOf(u)[0] || null)}</select>
           <h3>Signed in</h3>
           ${s ? html`<div class="split"><span class="muted">${describeSession(s)}</span><button class="btn small" data-act="resetSession" data-id="${u.email}" title="Ends that session so this person can sign in on another device">Reset session</button></div>`
             : html`<span class="muted">Not signed in on any device</span>`}
@@ -194,11 +188,11 @@ function personDetail(u) {
         <div class="set-box">
           ${u.role === 'office' ? html`
             <h3>Pages this person may open</h3>
-            ${pills(GRANTABLE.map(([k, label]) => html`<label class="check pill"><input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${pagesOf(u).includes(k) ? 'checked' : ''}> ${label}</label>`))}
+            ${pills(grantableFor(u).map(([k, label]) => html`<label class="check pill"><input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${pagesOf(u).includes(k) ? 'checked' : ''}> ${label}</label>`))}
             <label class="check"><input type="checkbox" data-chg="userApprover" data-id="${u.email}" ${u.approver ? 'checked' : ''}> May approve and issue client reports</label>
 ` : html`
             <h3>Pages</h3><p class="muted">A Site person opens Overview, Daily report and Schedule on the projects ticked below.</p>`}
-          <h3>Projects <span class="muted">${titleOf(u) === 'project_manager' ? 'a Project Manager is on one only' : 'one or several'}</span></h3>
+          <h3>Projects <span class="muted">${ONE_PROJECT.includes(titleOf(u)) ? `a ${titleLabel(titleOf(u))} is on one only` : 'one or several'}</span></h3>
           ${pills(store.projects.map(p => html`<label class="check pill"><input type="checkbox" data-chg="userProject" data-id="${u.email}" data-p="${p.id}" ${(u.projects || []).includes(p.id) ? 'checked' : ''}> ${p.name}</label>`))}
           ${(u.projects || []).length ? '' : html`<p class="bad">Not on any project: they sign in and see nothing yet.</p>`}
         </div>
@@ -218,7 +212,7 @@ function peopleTab() {
           <li class="split">
             <span><b>${r.name || r.email}</b> <span class="muted">${r.name ? `${r.email}, ` : ''}asked ${fmtFull(String(r.at || '').slice(0, 10))}</span></span>
             <span class="actions">
-              <select class="req-dept" aria-label="Department of ${r.email}"><option value="">Choose department…</option>${options(DIVISIONS, null)}</select>
+              <select class="req-dept" aria-label="Division of ${r.email}"><option value="">Choose division…</option>${options(DIVISIONS, null)}</select>
               <button class="btn small primary" data-act="answer" data-id="${r.email}" data-r="site">Approve as Site</button>
               <button class="btn small" data-act="answer" data-id="${r.email}" data-r="office">Approve as Office</button>
               <button class="btn ghost small" data-act="answer" data-id="${r.email}" data-r="">Decline</button>
@@ -231,7 +225,7 @@ function peopleTab() {
           <input type="email" name="email" placeholder="Add: name@gmail.com" required aria-label="Google account email">
           <input name="name" placeholder="Full name" aria-label="Full name">
           <select name="role" aria-label="Role">${options([['site', 'Site'], ['office', 'Office']], 'site')}</select>
-          <select name="division" required aria-label="Department"><option value="">Choose department…</option>${options(DIVISIONS, null)}</select>
+          <select name="division" required aria-label="Division"><option value="">Choose division…</option>${options(DIVISIONS, null)}</select>
           <select name="projectId" class="span2" aria-label="Link to a project"><option value="">No project yet</option>${options(store.projects.map(p => [p.id, `Link to ${p.name}`]), null)}</select>
           <button class="btn primary span2">Add person</button>
         </form>
@@ -241,7 +235,7 @@ function peopleTab() {
           return html`<li class="pwho-row ${u && x.email === u.email ? 'on' : ''}"><button type="button" class="pwho" data-act="pickUser" data-id="${x.email}">
             <span class="who-avatar">${initialsOf(x.name || x.email)}</span>
             <span class="who-text"><b>${x.name || x.email}</b><span class="muted">${x.title || x.email}</span></span>
-            ${divisionsOf(x).length ? html`<span class="chip ${x.role === 'office' ? 'info' : ''}">${ROLE_NAME[x.role] || x.role}</span>` : html`<span class="chip warn" title="Cannot sign in until a department is chosen">No department</span>`}
+            ${divisionsOf(x).length ? html`<span class="chip ${x.role === 'office' ? 'info' : ''}">${ROLE_NAME[x.role] || x.role}</span>` : html`<span class="chip warn" title="Cannot sign in until a division is chosen">No division</span>`}
             <i class="dot ${live ? 'live' : ''}" title="${live ? 'Signed in now' : 'Not signed in'}"></i>
           </button>
           <label class="switch" title="${linkedHere ? 'Linked to this project. Switch off to unlink' : 'Switch on to link to this project'}"><input type="checkbox" data-chg="userLink" data-id="${x.email}" ${linkedHere ? 'checked' : ''} aria-label="Linked to ${store.project?.name || 'the open project'}"><i></i></label></li>`;
@@ -262,7 +256,7 @@ function youTab() {
         </div>
         <p class="muted">Documents you approve are signed "${store.signature}".</p>`)}
       ${store.isPrimary ? box('coowners', 'Executive Partners', html`
-        <p class="muted">An Executive Partner sees everything in both departments, including HR and payroll, but cannot add, edit or delete anything, or change settings and permissions. Only you add or remove Executive Partners.</p>
+        <p class="muted">An Executive Partner sees everything in both divisions, including HR and payroll, but cannot add, edit or delete anything, or change settings and permissions. Only you add or remove Executive Partners.</p>
         ${store.coOwners.length ? html`<ul class="list">${store.coOwners.map(e => html`<li class="split"><span>${e}</span><button class="btn ghost small" data-act="removeCoOwner" data-id="${e}">Remove</button></li>`)}</ul>` : html`<p class="muted">No Executive Partner yet.</p>`}
         <form data-form="coOwner" class="entry">
           <input type="email" name="email" placeholder="partner@gmail.com" required aria-label="Executive Partner's Google account" class="wide">
@@ -306,8 +300,6 @@ const projectBar = (c, what) => html`
     <span class="chip ${statusLabel(c.project) === 'Active' ? 'ok' : 'warn'}">${statusLabel(c.project)}</span>
   </div>`;
 
-/** The roles a team member can be given: the same list as an employee's job position and their role on a project. */
-const rolesOf = (ws, company, current) => positionChoices({ trades: Object.keys(ws.laborRates || {}), extra: [...company.staff.map(x => x.title), ...ws.team.map(m => m.role)], current });
 
 /** Field Report and import: the connection (three steps) and the data pack, one tab each. */
 function linksPage(c) {
@@ -334,7 +326,6 @@ function projectPage(c) {
         <div class="grid2">
           <label>Type of work <select data-chg="project" data-f="type" data-fk="pj-type">${options(PROJECT_TYPES, p.type || 'steel')}</select></label>
           <label>Currency <select data-chg="project" data-f="currency" data-fk="pj-cur">${options(currencies, p.currency)}</select></label>
-          <label>Price region <select data-chg="project" data-f="regionId" data-fk="pj-region">${options(g.regions.map(r => [r.id, r.name]), p.regionId)}<option value="${ADD_REGION}">+ Add a country…</option></select></label>
           <label>Budget <input type="number" min="0" step="any" data-chg="project" data-f="budget" data-fk="pj-budget" value="${p.budget}"></label>
           <label>Contract value <input type="number" min="0" step="any" data-chg="project" data-f="contractValue" data-fk="pj-contract" value="${p.contractValue}"></label>
         </div>`)}
@@ -375,11 +366,11 @@ function projectPage(c) {
             <span>${levelLabel(levelOf(m))}</span>
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
             <span class="muted nowrap">${m.dayRate ? `${m.dayRate} ${p.currency}` : 'No rate'}</span>
-            ${store.isAdmin ? html`<button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button>` : html`<span></span>`}
+            ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
           </li>` : html`
           <li class="team-row">
             <input data-chg="member" data-id="${m.id}" data-f="name" data-fk="tm-n-${m.id}" value="${m.name}" placeholder="Name" aria-label="Name">
-            <select data-chg="member" data-id="${m.id}" data-f="role" data-what="role" data-fk="tm-r-${m.id}" aria-label="Role of ${m.name}">${chooseOptions(rolesOf(ws, c.company, m.role), m.role, 'Role…')}</select>
+            <select data-chg="member" data-id="${m.id}" data-f="role" data-what="role" data-fk="tm-r-${m.id}" aria-label="Role of ${m.name}">${chooseGroups(positionGroups(m.role), m.role, 'Role…')}</select>
             <input data-chg="member" data-id="${m.id}" data-f="contact" data-fk="tm-c-${m.id}" value="${m.contact || ''}" placeholder="Email or phone" aria-label="Contact of ${m.name}">
             <select data-chg="member" data-id="${m.id}" data-f="level" data-fk="tm-l-${m.id}" aria-label="Evaluation level of ${m.name}" title="Decides who evaluates this person">${options(LEVELS, levelOf(m))}</select>
             <label class="check" title="Untick when the person leaves this project"><input type="checkbox" data-chg="memberActive" data-id="${m.id}" ${m.active === false ? '' : 'checked'}> On site</label>
@@ -389,13 +380,13 @@ function projectPage(c) {
           <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.currency}.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
         ${store.isAdmin && c.company.staff.some(x => x.status !== 'left' && !assignmentOf(x, p.id)) ? html`<form data-form="fromDirectory" class="entry">
           <select name="personId" aria-label="Person from the directory">${options(c.company.staff.filter(x => x.status !== 'left' && !assignmentOf(x, p.id)).map(x => [x.id, x.title ? `${x.name}, ${x.title}` : x.name]), null)}</select>
-          <select name="role" aria-label="Role here"><option value="">Role: same as their job</option>${options(rolesOf(ws, c.company, '').map(v => [v, v]), null)}</select>
+          <select name="role" aria-label="Role here"><option value="">Role: same as their job</option>${groupOptions(positionGroups(), null)}</select>
           <input name="dayRate" type="number" min="0" step="any" placeholder="Day rate" aria-label="Day rate" class="amount">
           <button class="btn primary">Add from the directory</button></form>` : ''}
         ${store.isAdmin && unlinked(ws.team).length ? html`<p class="muted">${unlinked(ws.team).length} on this team ${unlinked(ws.team).length === 1 ? 'is' : 'are'} not in the directory. <a href="#hr">Add them under Crew, Employee data</a>.</p>` : ''}
         <form data-form="member" class="entry"><span class="muted">Not in the directory, for example a casual worker:</span>
           <input name="name" placeholder="Name" required aria-label="Name" class="wide">
-          <select name="role" aria-label="Role"><option value="">Role…</option>${options(rolesOf(ws, c.company, '').map(v => [v, v]), null)}</select>
+          <select name="role" aria-label="Role"><option value="">Role…</option>${groupOptions(positionGroups(), null)}</select>
           <input name="contact" placeholder="Email or phone" aria-label="Email or phone" class="wide">
           <select name="level" aria-label="Evaluation level">${options(LEVELS, 'crew')}</select>
           <button class="btn">Add</button>
@@ -476,51 +467,12 @@ export function render(c) {
   if (section === 'prices') return html`${nav()}${projectPage(c)}`;
   if (section === 'access') return html`${nav()}${accessPage(c)}`;
   if (section === 'links') return html`${nav()}${linksPage(c)}`;
-  const { global: g, project: p, ws } = c;
-  const currencies = Object.keys(g.fx.rates).filter(k => ALLOWED.includes(k)).map(k => [k, k]);
+  const { global: g, project: p } = c;
   const co = g.company || {};
 
   return html`
     ${nav()}
     <div class="side settings">
-    ${panel('prices', 'Material prices by region', `${plural(g.materials.length, 'material')}, ${plural(g.regions.length, 'country', 'countries')}. Shared by all projects`, () => html`
-      <p class="muted">The highlighted column prices ${p.name}.</p>
-      <form data-form="region" class="entry" id="add-region">
-        <b>Add a country</b>
-        <input name="name" placeholder="Country, e.g. Israel" required aria-label="Country name" class="wide">
-        <input name="currency" list="currency-codes" placeholder="ETB, USD or AED" required pattern="[A-Za-z]{3}" maxlength="3" title="ETB, USD or AED" aria-label="Currency code" class="amount">
-        <datalist id="currency-codes">${currencies.map(([k]) => html`<option value="${k}"></option>`)}</datalist>
-        <input type="number" name="rate" min="0" step="any" placeholder="Per 1 ${g.fx.base}" title="Exchange rate: units per 1 ${g.fx.base}. Only needed for a currency that is not listed yet." aria-label="Exchange rate per 1 ${g.fx.base}, for a new currency" class="amount">
-        <select name="from" aria-label="Starting prices">
-          <option value="">Start with no prices</option>
-          ${g.regions.map(r => html`<option value="${r.id}">Copy ${r.name} prices</option>`)}
-        </select>
-        <button class="btn primary">Add country</button>
-      </form>
-      ${notice ? html`<p class="${noticeBad ? 'bad' : 'ok'}">${notice}</p>` : ''}
-      <table class="table compact matrix">
-        <thead><tr>
-          <th>Material</th><th>Unit</th><th class="r">Waste %</th><th class="r">Lead days</th>
-          ${g.regions.map(r => html`<th class="r ${r.id === p.regionId ? 'hl' : ''}">${r.name} <span class="muted">${r.currency}</span></th>`)}
-        </tr></thead>
-        <tbody>${g.materials.map(m => html`
-          <tr>
-            <td>${m.name}<span class="muted note">${m.category}</span></td>
-            <td>${m.unit}</td>
-            <td class="r"><input class="narrow" type="number" min="0" step="any" data-chg="material" data-m="${m.id}" data-f="waste" data-fk="w-${m.id}" value="${m.waste}" aria-label="Waste percent, ${m.name}"></td>
-            <td class="r"><input class="narrow" type="number" min="0" data-chg="material" data-m="${m.id}" data-f="leadDays" data-fk="l-${m.id}" value="${m.leadDays}" aria-label="Lead days, ${m.name}"></td>
-            ${g.regions.map(r => html`
-              <td class="r ${r.id === p.regionId ? 'hl' : ''}"><input class="price" type="number" min="0" step="any" data-chg="price" data-m="${m.id}" data-r="${r.id}" data-fk="pr-${m.id}-${r.id}"
-                value="${g.prices[r.id]?.[m.id]?.price ?? ''}" aria-label="${m.name} price, ${r.name}"></td>`)}
-          </tr>`)}</tbody>
-      </table>
-      <form data-form="material" class="entry">
-        <input name="name" placeholder="New material" required aria-label="Material name" class="wide">
-        <input name="unit" placeholder="Unit" required aria-label="Unit" class="amount">
-        <input name="category" placeholder="Category" aria-label="Category">
-        <button class="btn">Add material</button>
-      </form>`)}
-
     ${panel('fx', 'Exchange rates', Object.keys(g.fx.rates).join(', '), () => html`
         <p class="muted">Central Hub works in ETB, USD and AED. Units per 1 ${g.fx.base}. Sample values: enter your own.</p>
         <div class="grid2">${Object.entries(g.fx.rates).map(([k, v]) => html`
@@ -609,7 +561,7 @@ export const actions = {
     const as = el.dataset.r;
     if (!as && !confirm(`Decline ${el.dataset.id}? They can ask again by signing in.`)) return;
     const division = el.closest('li')?.querySelector('.req-dept')?.value || '';
-    if (as && !division) { say('Choose the department first: nobody is approved without one.', true); alert('Choose the department (Installation or Trading) first. Nobody is approved without one.'); return; }
+    if (as && !division) { alert('Choose the division (Installation or Trading) first. Nobody is approved without one.'); return; }
     store.answerRequest(el.dataset.id, as, division);
   },
   clearFaults() { if (confirm('Clear the list of reported problems?')) store.clearFaults(); },
@@ -639,8 +591,18 @@ export const actions = {
   },
   removeUser(el) { if (confirm(`Remove access for ${el.dataset.id}?`)) store.removeUser(el.dataset.id); },
   removeLogo() { store.updateGlobal(g => { g.company = { ...g.company, logo: '' }; }); },
-  removeMember(el) {
+  /** Take someone off this project's team. A person from the directory keeps their record there; only this project is taken off it. */
+  removeMember(el, c) {
     const id = el.dataset.id;
+    const m = c.ws.team.find(x => x.id === id);
+    if (!m || !confirm(`Remove ${m.name || 'this person'} from the team of ${c.project.name}?${m.personId ? ' Their record in the directory stays.' : ''}`)) return;
+    const person = m.personId && c.company.staff.find(x => x.id === m.personId);
+    if (person) {
+      store.updateCompany(co => { const x = co.staff.find(y => y.id === person.id); if (x) x.assignments = (x.assignments || []).filter(a => a.projectId !== c.project.id); });
+      // their sign-in is unlinked from the project too, as when HR takes them off it
+      const u = store.users.find(x => x.email === accountOf(person));
+      if (u) store.setUser(u.email, { projects: (u.projects || []).filter(id => id !== c.project.id) });
+    }
     store.update(ws => {
       ws.team = ws.team.filter(m => m.id !== id);
       for (const t of ws.tasks) if (t.assigneeId === id) t.assigneeId = '';
@@ -699,8 +661,12 @@ export const changes = {
     store.setUser(u.email, { projects });
     tell(`${el.checked ? '✓ Linked' : '✓ Unlinked'} ${u.name || u.email} ${el.checked ? 'to' : 'from'} ${project.name}.`);
   },
-  /** The one department a person signs in to (Installation or Trading). */
-  userDivision(el) { store.setUser(el.dataset.id, { divisions: [el.value] }); },
+  /** The one division a person signs in to (Installation or Trading). */
+  userDivision(el) {
+    const u = store.users.find(x => x.email === el.dataset.id);
+    const next = { ...u, divisions: [el.value] };
+    store.setUser(el.dataset.id, { divisions: [el.value], ...(Array.isArray(u?.pages) ? { pages: u.pages.filter(p => grantableFor(next).some(([k]) => k === p)) } : {}) });
+  },
   /** The dates nobody works on the open project, one per line. */
   nonWorking(el) { store.updateProject(p => { p.nonWorking = parseDates(el.value); }); },
   /** Open a person's directory record, on its Projects tab. */
@@ -715,7 +681,7 @@ export const changes = {
     const u = store.users.find(x => x.email === el.dataset.id);
     const now = pagesOf(u).filter(k => k !== el.dataset.p);
     if (el.checked) now.push(el.dataset.p);
-    store.setUser(el.dataset.id, { pages: GRANTABLE.map(([k]) => k).filter(k => now.includes(k)) });
+    store.setUser(el.dataset.id, { pages: grantableFor(u).map(([k]) => k).filter(k => now.includes(k)) });
   },
   /** Switch a page on or off for the open project. */
   pageOn(el) {
@@ -748,18 +714,6 @@ export const changes = {
       tell(sizeNote('Logo', r) || 'Logo added.');
     } catch (err) { tell(err.message); }
   },
-  price(el) {
-    const { m, r } = el.dataset;
-    store.updateGlobal(g => {
-      const region = g.regions.find(x => x.id === r);
-      g.prices[r] ??= {};
-      if (el.value === '') delete g.prices[r][m];
-      else g.prices[r][m] = { price: Math.round(Math.max(0, +el.value) * 100) / 100, currency: region.currency };
-    });
-  },
-  material(el) {
-    store.updateGlobal(g => { g.materials.find(x => x.id === el.dataset.m)[el.dataset.f] = Math.max(0, field(el)); });
-  },
   fx(el) {
     const rate = field(el);
     if (rate > 0) store.updateGlobal(g => { g.fx.rates[el.dataset.k] = rate; });
@@ -767,18 +721,6 @@ export const changes = {
   project(el) {
     const f = el.dataset.f;
     const value = field(el);
-    if (value === ADD_REGION) {
-      // not a region: jump to the form that adds one (the dropdown snaps back on the re-render)
-      say('Enter the country and its currency here, then choose it as the price region.');
-      // countries live on the Prices and currencies page
-      location.hash = '#catalog';
-      setTimeout(() => {
-        const input = document.querySelector('#add-region [name=name]');
-        input?.scrollIntoView({ block: 'center' });
-        input?.focus();
-      }, 250);
-      return;
-    }
     if (f === 'name' && !value.trim()) return;
     store.updateProject(p => { p[f] = typeof value === 'number' ? Math.max(0, value) : value; });
   },
@@ -805,29 +747,6 @@ export const changes = {
 
 export const submits = {
   ...fieldprojects.submits,
-  /**
-   * A new price column, optionally filled from another region's prices converted into the new
-   * currency. A currency that is not in the exchange-rate table yet is added with the rate given.
-   */
-  region(fd) {
-    const name = fd.get('name').trim();
-    const currency = fd.get('currency').trim().toUpperCase();
-    const rate = +fd.get('rate');
-    const g0 = store.global;
-    if (g0.regions.some(r => r.name.toLowerCase() === name.toLowerCase())) return say(`${name} is already in the list.`, true);
-    if (!ALLOWED.includes(currency)) return say('Use ETB, USD or AED: Central Hub works in these three only.', true);
-    if (!g0.fx.rates[currency] && !(rate > 0)) return say(`${currency} is a new currency: also enter its exchange rate per 1 ${g0.fx.base}.`, true);
-    store.updateGlobal(g => {
-      if (!g.fx.rates[currency]) g.fx.rates[currency] = rate;
-      const id = uid('rg');
-      g.regions.push({ id, name, currency });
-      g.prices[id] = Object.fromEntries(Object.entries(g.prices[fd.get('from')] || {}).map(([materialId, p]) => {
-        const price = convert(p.price, p.currency, currency, g.fx);
-        return [materialId, { price: price >= 100 ? Math.round(price) : Math.round(price * 100) / 100, currency }];
-      }));
-    });
-    return say(`${name} added. Choose it as the Price region of a project to use its prices.`);
-  },
   currency(fd) {
     const code = fd.get('code').trim().toUpperCase();
     const rate = +fd.get('rate');
@@ -835,7 +754,7 @@ export const submits = {
   },
   coOwner(fd) {
     const email = String(fd.get('email') || '').trim().toLowerCase();
-    if (!confirm(`Make ${email} an Executive Partner? They can view everything in both departments, including HR and payroll, but cannot edit, delete or change settings and permissions.`)) return false;
+    if (!confirm(`Make ${email} an Executive Partner? They can view everything in both divisions, including HR and payroll, but cannot edit, delete or change settings and permissions.`)) return false;
     coOwnerNotice = '';
     store.addCoOwner(email).then(() => { coOwnerNotice = `${email} is an Executive Partner (view only). Publish the latest access rules first, or they will not see the data.`; coOwnerBad = false; store.notify(); })
       .catch(err => { coOwnerNotice = /permission/i.test(`${err.code} ${err.message}`) ? 'The database refused it. Publish the latest access rules first, then try again.' : err.message; coOwnerBad = true; store.notify(); });
@@ -851,22 +770,16 @@ export const submits = {
     });
     return false;
   },
-  /** Give a person access, in one department and, when chosen, linked to a project; then show them. */
+  /** Give a person access, in one division and, when chosen, linked to a project; then show them. */
   user(fd) {
     const email = String(fd.get('email') || '').trim().toLowerCase();
     const division = fd.get('division');
-    if (!email || !DIVISIONS.some(([k]) => k === division)) { alert('Choose the department first: nobody is given access without one.'); return false; }
+    if (!email || !DIVISIONS.some(([k]) => k === division)) { alert('Choose the division first: nobody is given access without one.'); return false; }
     const role = fd.get('role') === 'office' ? 'office' : 'site';
     const pid = String(fd.get('projectId') || '');
     store.setUser(email, { role, projects: pid ? [pid] : [], name: String(fd.get('name') || '').trim(), title: '', divisions: [division] });
     who = email;
     accTab = 'people';
-  },
-  material(fd) {
-    store.updateGlobal(g => g.materials.push({
-      id: uid('m'), name: fd.get('name').trim(), unit: fd.get('unit').trim(),
-      category: fd.get('category').trim() || 'Other', waste: 0, leadDays: 7,
-    }));
   },
   /** Put a person from the directory on this project's team; their record keeps the role and day rate. */
   fromDirectory(fd, c) {

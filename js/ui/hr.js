@@ -16,8 +16,8 @@ import { passportBlock, toggleZoom, resetZoom } from './docimage.js';
 import { divOf, stamp, TRADING, INSTALLATION } from '../core/division.js';
 import { scanInto, scanButton } from './ocr.js';
 import { TITLES, GROUPS, titleOf, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
-import { positionChoices, departmentChoices, nationalityChoices } from '../engine/positions.js';
-import { chooseOptions, chosenValue } from './choose.js';
+import { positionGroups, departmentChoices, nationalityChoices } from '../engine/positions.js';
+import { chooseOptions, chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { ownerFromStaff } from '../engine/owners.js';
 import { paperHtml } from '../sync/mail.js';
 import { letterhead } from './docs.js';
@@ -207,7 +207,6 @@ function directoryNotes(c) {
 }
 
 /** The job positions to choose from for the open project: titles, its trades, what the staff already hold. */
-const positionOf = (c, current) => positionChoices({ trades: Object.keys(c.ws?.laborRates || {}), extra: [...c.company.staff.map(x => x.title), ...(c.ws?.team || []).map(m => m.role)], current });
 
 /** The Projects tab of a person: where they work, in what role, at what day rate. */
 function projectsPane(p, c) {
@@ -221,14 +220,14 @@ function projectsPane(p, c) {
       <thead><tr><th>Project</th><th>Role on the project</th><th class="r">Day rate</th><th>On site</th><th></th></tr></thead>
       <tbody>${mine.map(a => html`<tr>
         <td>${named(a.projectId)?.name || 'A project that was removed'}</td>
-        <td><select data-chg="assign" data-pid="${a.projectId}" data-f="role" data-what="role" data-fk="as-r-${a.projectId}" aria-label="Role on the project">${chooseOptions(positionOf(c, a.role || p.title), a.role || '', p.title ? `Same as job: ${p.title}` : 'Role…')}</select></td>
+        <td><select data-chg="assign" data-pid="${a.projectId}" data-f="role" data-what="role" data-fk="as-r-${a.projectId}" aria-label="Role on the project">${chooseGroups(positionGroups(a.role), a.role || '', p.title ? `Same as job: ${p.title}` : 'Role…')}</select></td>
         <td class="r nowrap"><input class="price" type="number" min="0" step="any" data-chg="assign" data-pid="${a.projectId}" data-f="dayRate" data-fk="as-d-${a.projectId}" value="${a.dayRate || ''}" aria-label="Day rate"> <span class="muted">${named(a.projectId)?.currency || ''}</span></td>
         <td><input type="checkbox" data-chg="assign" data-pid="${a.projectId}" data-f="active" ${a.active === false ? '' : 'checked'} aria-label="On site"></td>
         <td class="r"><button class="btn ghost small" data-act="unassign" data-pid="${a.projectId}">Take off</button></td></tr>`)}</tbody>
     </table>` : html`<p class="muted">Not on any project yet.</p>`}
     ${free.length ? html`<form data-form="assign" class="entry">
       <select name="projectId" aria-label="Project">${options(free.map(x => [x.id, x.name]), null)}</select>
-      <select name="role" aria-label="Role on the project"><option value="">${p.title ? `Role: same as job (${p.title})` : 'Role on the project…'}</option>${options(positionOf(c, p.title).map(v => [v, v]), null)}</select>
+      <select name="role" aria-label="Role on the project"><option value="">${p.title ? `Role: same as job (${p.title})` : 'Role on the project…'}</option>${groupOptions(positionGroups(), null)}</select>
       <input name="dayRate" type="number" min="0" step="any" class="amount" placeholder="Day rate" aria-label="Day rate">
       <button class="btn">Put on the project</button></form>` : ''}`;
 }
@@ -278,7 +277,7 @@ function form({ p, alerts, monthly }, c) {
         ${text('Work mobile', 'phone', 'hr-phone')}
         ${text('Work email', 'email', 'hr-email')}
         <label>Department <select data-chg="pick" data-f="department" data-what="department" data-fk="hr-dept-f">${chooseOptions(departmentChoices({ staff: c.company.staff, current: p.department }), p.department)}</select></label>
-        <label>Job position <select data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title">${chooseOptions(positionOf(c, p.title), p.title)}</select></label>
+        <label>Job position <select data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title">${chooseGroups(positionGroups(p.title), p.title)}</select></label>
         <label>Evaluation level <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person">${options(LEVELS, levelOf(p))}</select></label>
         <label>Manager <select data-chg="set" data-f="managerId" data-fk="hr-manager"><option value="">None</option>${options(others, p.managerId || null)}</select></label>
         <label>Division <select data-chg="division" data-fk="hr-division">${options([[INSTALLATION, 'Installation'], [TRADING, 'Trading']], divOf(p))}</select></label>
@@ -404,7 +403,7 @@ function form({ p, alerts, monthly }, c) {
         </div>
         <div class="emp-id">
           <input class="emp-name" data-chg="set" data-f="name" data-fk="hr-name" value="${p.name || ''}" placeholder="Employee's name" aria-label="Full name">
-          <select class="emp-job" data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title-h" aria-label="Job position">${chooseOptions(positionOf(c, p.title), p.title, 'Job position…')}</select>
+          <select class="emp-job" data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title-h" aria-label="Job position">${chooseGroups(positionGroups(p.title), p.title, 'Job position…')}</select>
           <label class="emp-line"><span>Email</span><input type="email" data-chg="set" data-f="email" data-fk="hr-email-h" value="${p.email || ''}" placeholder="Work email" aria-label="Work email"></label>
           <label class="emp-line"><span>Phone</span><input type="tel" data-chg="set" data-f="phone" data-fk="hr-phone-h" value="${p.phone || ''}" placeholder="Work phone" aria-label="Work phone"></label>
           <span class="emp-tags">${p.status === 'left' ? chip('Left') : chip('Working', 'ok')} ${chip(agreementLabel(a.type), a.type ? 'info' : 'warn')}

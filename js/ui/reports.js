@@ -14,6 +14,7 @@ import { html, options, chip } from './dom.js';
 import { connected } from './fieldsetup.js';
 import { openPanel } from './prices.js';
 import { toTrash, inBin, restore as restoreTrash, purge, isExpired, daysLeft, RETENTION_DAYS } from '../engine/trash.js';
+import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
 
 const WEATHER = ['Clear', 'Cloudy', 'Rain', 'Wind', 'Heat'];
 const GROUND = ['Dry', 'Wet', 'Muddy'];
@@ -35,6 +36,8 @@ let replying = false;
 let sentBack = null;    // { id, decision, text }: the reply just sent from the review, shown until "Go back"
 let viewing = null;     // id of a report opened for reading (its PDF on top, the history beside it)
 let binNotice = '';
+let tab = '';           // 'list' (the reports) or 'enter' (the Daily report form); '' until chosen: the site starts on the form
+const period = { year: 0, month: 0, week: 0 };   // the reports shown: 0 is any
 
 const FIELD_STATUS = { submitted: ['Submitted by site', 'info'], approved: ['Approved', 'ok'], changes: ['Changes requested', 'warn'] };
 const REPLY_DONE = {
@@ -69,7 +72,7 @@ function sheet(r, c) {
   const task = id => ws.tasks.find(t => t.id === id);
   const fact = (k, v) => (v || v === 0 ? html`<dt>${k}</dt><dd>${v}</dd>` : '');
   const list = (title, items) => (items?.length
-    ? html`<div><span class="muted">${title}</span><ul class="plain">${items.map(x => html`<li>${x}</li>`)}</ul></div>` : '');
+    ? html`<div><span class="muted">${title}</span><ul class="plain prose">${items.map(x => html`<li>${x}</li>`)}</ul></div>` : '');
   const empty = title => html`<div><span class="muted">${title}</span><span class="none">Nothing entered</span></div>`;
   const requests = f.requests?.length ? f.requests.map(x => `${x.priority}: ${x.text}`) : r.issue ? [r.issue] : [];
 
@@ -123,10 +126,13 @@ function sheet(r, c) {
     ${list('Notes', f.notes)}
     ${f.plan?.length ? list('Next day schedule', f.plan) : empty('Next day schedule')}
     ${list('Requests', requests)}
-    ${f.pdfId ? html`<a href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>` : ''}
+    ${f.pdfId ? html`<span class="actions left"><a href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>${locate(f)}</span>` : ''}
     ${r.source === 'field' ? replyBox(r, c) : ''}
   </div>`;
 }
+
+/** A link that finds the report's PDF in Google Drive, where "Show file location" opens its folder. */
+const locate = f => (f.pdf || f.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || f.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}. In the result, right-click the file and choose Show file location">Locate the file in Drive</a>` : '');
 
 /** Status of a field report in the Field Report app, the conversation so far, and the reply to its preparer. */
 function replyBox(r, c) {
@@ -265,27 +271,36 @@ export function render(c) {
       </form>
     </section>`;
 
+  const fieldCard = c.role === 'site' ? '' : html`
+    <section class="card">
+      <div class="toolbar">
+        <h2>From Field Report</h2><span class="grow"></span>
+        <span class="muted" id="fr-checked">${autoLine(project, cfg)}</span>
+        <button class="btn" data-act="pull" ${busy ? 'disabled' : ''}>${busy ? 'Getting reports…' : 'Check now'}</button>
+      </div>
+      ${fieldNotice ? html`<p class="muted">${fieldNotice}</p>` : ''}
+      ${pending.length ? html`<ul class="list">${pending.map(r => html`
+        <li class="row">
+          <span class="row-main">
+            <span><b>${fmtDate(r.date)}</b> ${r.field?.status === 'changes' ? chip('Sent back to site', 'high') : chip('To confirm', 'warn')}</span>
+            <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}` : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site, report No. ${r.field?.no || ''}`}</span>
+          </span>
+          <button class="btn small ${r.id === reviewing ? '' : 'primary'}" data-act="review" data-fresh data-id="${r.id}">Review</button>
+        </li>`)}</ul>` : ''}
+      ${connected(project) ? '' : html`<p class="muted">Not connected to Field Report yet. Set it up under <a href="#links">Settings, Field Report and import</a>.</p>`}
+    </section>`;
+
+  const pick = periodChoices(reports.map(r => r.date), period);
+  const shown = reports.filter(r => inPeriod(r.date, period));
   const listCard = html`
     <section class="card">
-      ${c.role === 'site' ? '' : html`
-        <div class="toolbar">
-          <h2>From Field Report</h2><span class="grow"></span>
-          <span class="muted" id="fr-checked">${autoLine(project, cfg)}</span>
-          <button class="btn" data-act="pull" ${busy ? 'disabled' : ''}>${busy ? 'Getting reports…' : 'Check now'}</button>
-        </div>
-        ${fieldNotice ? html`<p class="muted">${fieldNotice}</p>` : ''}
-        ${pending.length ? html`<ul class="list">${pending.map(r => html`
-          <li class="row">
-            <span class="row-main">
-              <span><b>${fmtDate(r.date)}</b> ${r.field?.status === 'changes' ? chip('Sent back to site', 'high') : chip('To confirm', 'warn')}</span>
-              <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}` : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site, report No. ${r.field?.no || ''}`}</span>
-            </span>
-            <button class="btn small ${r.id === reviewing ? '' : 'primary'}" data-act="review" data-fresh data-id="${r.id}">Review</button>
-          </li>`)}</ul>` : ''}
-        ${connected(project) ? '' : html`<p class="muted">Not connected to Field Report yet. Set it up under <a href="#links">Settings, Field Report and import</a>.</p>`}`}
-
-      <h2>Submitted reports</h2>
-      ${reports.length ? html`<ul class="list">${reports.map(r => html`
+      <div class="toolbar">
+        <h2>Submitted reports</h2><span class="muted">${shown.length === reports.length ? reports.length : `${shown.length} of ${reports.length}`}</span><span class="grow"></span>
+        <select data-chg="period" data-f="year" aria-label="Year"><option value="0">Every year</option>${options(pick.years.map(y => [y, String(y)]), period.year)}</select>
+        <select data-chg="period" data-f="month" aria-label="Month"><option value="0">Every month</option>${options(pick.months.map(m => [m, monthName(m)]), period.month)}</select>
+        <select data-chg="period" data-f="week" aria-label="Week"><option value="0">Every week</option>${options(pick.weeks.map(w => [w, `Week ${w}`]), period.week)}</select>
+      </div>
+      ${shown.length ? html`<ul class="list">${shown.map(r => html`
         <li class="stack">
           <div class="row top">
             <span class="row-main">
@@ -298,7 +313,7 @@ export function render(c) {
             <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Delete report and re-sync the schedule">Delete</button>
           </div>
           ${expanded.has(r.id) ? sheet(r, c) : ''}
-        </li>`)}</ul>` : html`<p class="empty">No reports yet.</p>`}
+        </li>`)}</ul>` : html`<p class="empty">${reports.length ? 'No reports in this period.' : 'No reports yet.'}</p>`}
       ${binBody(c)}
     </section>`;
 
@@ -314,7 +329,13 @@ export function render(c) {
         <aside class="card rv-side" aria-label="History of reports">${historyList(reports, open.id)}</aside>
       </div>`;
   }
-  return html`${formCard}${listCard}`;
+  const now = tab || (c.role === 'site' ? 'enter' : 'list');
+  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report']];
+  // one column: Field Report first, then the tabs
+  return html`<div class="side">${fieldCard}
+    <div class="emp-tabs set-tabs" role="tablist">${tabs.map(([k, label, n]) => html`
+      <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="repTab" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>
+    ${now === 'enter' || back ? formCard : listCard}</div>`;
 }
 
 /** The report's own PDF, shown from Google Drive. */
@@ -326,7 +347,7 @@ function pdfCard(r) {
   }
   return html`<section class="card">
     <div class="toolbar"><h3>Field Report PDF, ${fmtDate(r.date)}</h3><span class="grow"></span>
-      <a class="btn small" href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a></div>
+      <a class="btn small" href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(f)}</div>
     <iframe class="rv-pdf" src="https://drive.google.com/file/d/${f.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
     <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
   </section>`;
@@ -457,6 +478,15 @@ export const submits = {
   },
 };
 
+export const changes = {
+  /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
+  period(el) {
+    period[el.dataset.f] = +el.value || 0;
+    if (el.dataset.f === 'year') { period.month = 0; period.week = 0; }
+    if (el.dataset.f === 'month') period.week = 0;
+  },
+};
+
 export const actions = {
   remove(el, c) {
     const r = c.ws.reports.find(x => x.id === el.dataset.id);
@@ -496,6 +526,7 @@ export const actions = {
   goBack() { if (sentBack?.decision === 'changes') reviewing = null; sentBack = null; replyNotice = ''; },
   /** Discard what was typed: the form is redrawn with its starting values. */
   clearForm() { notice = 'Form cleared. Nothing was saved.'; },
+  repTab(el) { tab = el.dataset.t; },
 
   /** Send approve / changes / comment / reopen to the preparer through the Field Report receiver. */
   async reply(el, c) {

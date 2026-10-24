@@ -101,7 +101,27 @@ function manpower(crew, hoursPerDay) {
  * has one record (id fr_<date>), and an unchanged report version is skipped.
  * The task entries the Office has already confirmed are kept when the site re-submits.
  */
-export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
+/**
+ * One report per day. Field Report can hold two files for one date when the day number changed after the report was
+ * sent (it is saved again under the new number and the old file stays). The newest counts: the later upload, then
+ * the higher version. Returns { reports, replaced: [{ date, kept, dropped }] } (kept and dropped are report numbers).
+ */
+export function newestPerDay(reports = []) {
+  const best = new Map();
+  const replaced = [];
+  const newer = (a, b) => String(a.uploadedAt || '').localeCompare(String(b.uploadedAt || '')) || (a.version || 1) - (b.version || 1);
+  for (const m of reports || []) {
+    if (!m?.date) continue;
+    const old = best.get(m.date);
+    if (!old) { best.set(m.date, m); continue; }
+    const [keep, drop] = newer(m, old) > 0 ? [m, old] : [old, m];
+    best.set(m.date, keep);
+    replaced.push({ date: m.date, kept: keep.reportNo || '', dropped: drop.reportNo || '' });
+  }
+  return { reports: [...best.values()], replaced };
+}
+
+export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = true } = {}) {
   let added = 0, updated = 0;
   const put = rec => {
     const i = ws.reports.findIndex(r => r.id === rec.id);
@@ -111,8 +131,9 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
   // a report deleted on purpose waits in the recycle bin; Field Report must not bring it back meanwhile
   const trashed = new Set((ws.trash || []).map(t => t.record?.id).filter(Boolean));
 
-  for (const meta of payload.reports || []) {
-    if (!meta.date) continue;
+  const { reports, replaced } = newestPerDay(payload.reports);
+  const droppedOn = new Map(replaced.map(x => [x.date, x.dropped]));
+  for (const meta of reports) {
     const id = `fr_${meta.date}`;
     if (trashed.has(id)) continue;
     const old = ws.reports.find(r => r.id === id);
@@ -147,10 +168,12 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
         // structured entries, sent once Field Report works from this project's lists (see buildSetup)
         work: meta.work || [], milestones: meta.milestones || [], attendance: meta.attendance || [],
         delayItems: meta.delayItems || [], received: meta.received || [], instructions: meta.instructions || [],
+        // an older report of the same day that this one replaced (its number), shown on the report
+        ...(droppedOn.has(meta.date) ? { replaced: droppedOn.get(meta.date) || '?' } : {}),
       },
     });
     // unknown trades appear under Settings with a zero rate, so their cost is visibly missing rather than silently skipped
-    for (const m of crew) if (!(m.trade in ws.laborRates)) ws.laborRates[m.trade] = 0;
+    if (addTrades) for (const m of crew) if (!(m.trade in ws.laborRates)) ws.laborRates[m.trade] = 0;
 
     (meta.requestItems || []).forEach((r, i) => {
       const itemId = `${id}_${i}`;
@@ -173,7 +196,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
   // attendance the site corrected after the report (script 7.27.0); the office's corrections stay final
   const attendance = siteFixes(ws, payload.attendance);
   updated += attendance;
-  return attendance ? { added, updated, attendance } : { added, updated };
+  return { added, updated, ...(attendance ? { attendance } : {}), ...(replaced.length ? { replaced } : {}) };
 }
 
 export const SETUP_VERSION = 1;
@@ -217,7 +240,8 @@ export function buildSetup({ project, ws, sched, bill, people = [], company = {}
     linked: linkedList(project, people),
     // the office's corrections of the Attendance sheet: Field Report shows these marks as final (from 1.61.0)
     attendanceFixes: fixesForField(ws.attendance, today),
-    trades: Object.keys(ws.laborRates),
+    // trade rates are pay (hidden from some office people): the team's roles count too
+    trades: [...new Set([...Object.keys(ws.laborRates || {}), ...ws.team.map(m => m.role).filter(Boolean)])],
     // what the Admin deployed for this project: where it is, what it covers, the activity types to pick from
     status: statusOf(project), location: cleanText(project.location, LIMITS.location), scope: cleanText(project.scope, LIMITS.scope),
     mapLink: cleanLink(project.mapLink), layoutLink: cleanLink(project.layoutLink), activities: cleanActivities(activitiesOf(project)),

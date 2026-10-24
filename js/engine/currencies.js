@@ -64,6 +64,8 @@ export function convertProject(project, ws, fx, on) {
   const w = { ...ws };
   const ledger = (ws.ledger || []).map(e => { const c = convertRecord(e, fx, on, from); if (c) changes.push(`Cost ${e.description || e.id}`); return c || e; });
   if (changes.length || ledger.some((e, i) => e !== ws.ledger[i])) w.ledger = ledger;
+  const paycosts = (ws.paycosts || []).map(e => { const c = convertRecord(e, fx, on, from); if (c) changes.push(`Crew pay ${e.description || e.id}`); return c || e; });
+  if (paycosts.some((e, i) => e !== ws.paycosts[i])) w.paycosts = paycosts;
   if (foreign) {
     const map = o => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, typeof v === 'number' ? round2(convert(v, from, 'USD', fx)) : v]));
     w.laborRates = map(ws.laborRates);
@@ -72,7 +74,7 @@ export function convertProject(project, ws, fx, on) {
     // a milestone given as a % of the contract stays a %; one given as an amount is converted
     if ((project.billing?.method || 'milestone_pct') !== 'milestone_pct') w.payStages = (ws.payStages || []).map(s => ({ ...s, value: round2(convert(s.value || 0, from, 'USD', fx)) }));
     w.docs = (ws.docs || []).map(d => { const m = convertMoney(d, from, fx); return m ? { ...m.out, fxFrom: noteOf(from, fx, on, m.was) } : d; });
-    w.team = (ws.team || []).map(t => (typeof t.dayRate === 'number' && t.dayRate ? { ...t, dayRate: round2(convert(t.dayRate, from, 'USD', fx)) } : t));
+    w.crewRates = (ws.crewRates || []).map(r => (+r.dayRate ? { ...r, dayRate: round2(convert(r.dayRate, from, 'USD', fx)) } : r));
   }
   return { project: p, ws: w, changes };
 }

@@ -4,6 +4,7 @@
 
 import { billingOf } from './billing.js';
 import { sum } from '../core/util.js';
+import { dayRateOf } from './people.js';
 
 const inRange = (reports, from, to) => reports.filter(r => r.date >= from && r.date <= to).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -14,7 +15,7 @@ const inRange = (reports, from, to) => reports.filter(r => r.date >= from && r.d
  */
 export function paySheet({ ws, project }, from, to) {
   const { hoursPerDay, otMultiplier } = billingOf(project);
-  const rate = new Map(ws.team.map(m => [m.id, +m.dayRate || 0]));
+  const rate = new Map(ws.team.map(m => [m.id, dayRateOf(ws, m.id)]));
   const role = new Map(ws.team.map(m => [m.id, m.role || '']));
   const people = new Map();
   const reports = inRange(ws.reports, from, to).filter(r => r.field?.attendance?.length);

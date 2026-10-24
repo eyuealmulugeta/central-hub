@@ -135,7 +135,7 @@ function record(c, l, { amount, date, method, ref }) {
   store.update(ws => {
     ensureRun(ws, p);
     (ws.payments ||= []).push(pay);
-    ws.ledger.push(cost);
+    (ws.paycosts ||= []).push(cost);
   });
 }
 
@@ -169,7 +169,7 @@ export const actions = {
   /** Admin only (it deletes): the payment goes, and its labour cost under Costs with it. */
   removePayment(el) {
     if (!confirm('Delete this payment? Its labour cost under Costs is deleted too.')) return;
-    store.update(ws => { ws.payments = (ws.payments || []).filter(x => x.id !== el.dataset.id); ws.ledger = ws.ledger.filter(x => x.payId !== el.dataset.id); });
+    store.update(ws => { ws.payments = (ws.payments || []).filter(x => x.id !== el.dataset.id); ws.paycosts = (ws.paycosts || []).filter(x => x.payId !== el.dataset.id); });
   },
   csv(el, c) {
     const p = periodOf(c);

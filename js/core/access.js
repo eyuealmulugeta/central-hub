@@ -32,7 +32,7 @@ const CAME_WITH_OFFICE = ['meetings', 'contacts', 'directory'];
 /** A person who signs in to Installation works on the projects only: the Trading pages are never theirs. */
 const inInstallation = user => user?.role !== 'owner' && (user?.divisions || [])[0] === 'installation';
 /** The pages the Admin can tick for this person. */
-export const grantableFor = user => GRANTABLE.filter(([k]) => !(inInstallation(user) && TRADING_PAGES.includes(k)));
+export const grantableFor = user => GRANTABLE.filter(([k]) => !(inInstallation(user) && TRADING_PAGES.includes(k)) && !(user?.role === 'site' && k === 'payments'));
 
 /** What a person starts with: the pages of their role, and Evaluation when their title rates someone. */
 export const defaultPages = user => [...ROLE_PAGES[user?.role === 'office' ? 'office' : 'site'], ...(user?.ranks?.length ? ['evaluation'] : [])];
@@ -71,8 +71,15 @@ export function mayOpen(role, pages, page) {
 
 /** Money records (costs, invoices, billing terms) are loaded only for people who have a page that shows them. */
 export const MONEY_PAGES = ['ledger', 'cashflow', 'payments', 'docs', 'finance'];
-export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments'];
+export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates'];
 export const seesMoney = (role, pages) => role === 'owner' || ((role === 'office' || role === 'site') && MONEY_PAGES.some(p => pages.includes(p)));
+/**
+ * Pay of named people: day rates, trade rates, pay runs, payments and their labour costs. The Admin, and Office people
+ * with Costs or Payments ticked; never Site, whatever is ticked. Must match isPay() in firestore.rules.
+ */
+export const PAY_SECTIONS = ['payruns', 'payments', 'paycosts', 'crewRates', 'laborRates'];
+export const PAY_PAGES = ['ledger', 'payments'];
+export const seesPay = (role, pages) => role === 'owner' || (role === 'office' && PAY_PAGES.some(p => pages.includes(p)));
 
 /** Records of documents sent for signature: they go with the Contracts page. */
 const SIGN_SECTIONS = ['signs', 'signkeys', 'signed'];

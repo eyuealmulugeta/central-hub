@@ -29,8 +29,11 @@ export function laborRows(ws, project) {
     .filter(r => r.amount > 0);
 }
 
+/** Every cost and receipt: the Costs list and the labour cost of each crew payment (paycosts, read only by those who see pay). */
+export const costsOf = ws => [...(ws.ledger || []), ...(ws.paycosts || [])];
+
 export function summarize(ws, project, global, sched) {
-  const rows = [...ws.ledger, ...laborRows(ws, project)]
+  const rows = [...costsOf(ws), ...laborRows(ws, project)]
     .map(r => ({ ...r, base: convert(r.amount, r.currency, project.currency, global.fx) }))
     .sort((a, b) => b.date.localeCompare(a.date));
 

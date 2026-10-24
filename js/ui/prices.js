@@ -16,7 +16,7 @@ import { chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
-import { assign, unassign, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
+import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { focusOn as focusPerson, relink } from './hr.js';
 import { describe as describeSession } from '../engine/session.js';
 import { targetFor, parseDates } from '../engine/calendar.js';
@@ -458,7 +458,7 @@ function projectPage(c) {
             <span class="muted">${m.contact || ''}</span>
             <span title="${levelLabel(levelOf(m))}">Tier ${levelOf(m).slice(1)}</span>
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
-            <span class="muted nowrap">${m.dayRate ? `${m.dayRate} ${p.currency}` : 'No rate'}</span>
+            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${p.currency}` : 'No rate'}</span>
             ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
           </li>` : html`
           <li class="team-row">
@@ -467,7 +467,7 @@ function projectPage(c) {
             <input data-chg="member" data-id="${m.id}" data-f="contact" data-fk="tm-c-${m.id}" value="${m.contact || ''}" placeholder="Email or phone" aria-label="Contact of ${m.name}">
             <select data-chg="member" data-id="${m.id}" data-f="level" data-fk="tm-l-${m.id}" aria-label="Evaluation tier of ${m.name}" title="Decides who evaluates this person: the tier above">${options(SHORT_TIERS, levelOf(m))}</select>
             <label class="check" title="Untick when the person leaves this project"><input type="checkbox" data-chg="memberActive" data-id="${m.id}" ${m.active === false ? '' : 'checked'}> On site</label>
-            <input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${m.dayRate || ''}" placeholder="Day rate" title="Day rate in ${p.currency}" aria-label="Day rate of ${m.name}">
+            <input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="Day rate" title="Day rate in ${p.currency}" aria-label="Day rate of ${m.name}">
             <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button>
           </li>`)}</ul>
           <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.currency}.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
@@ -881,7 +881,7 @@ export const changes = {
     if (f === 'name' && !value) return;
     store.update(ws => { const m = ws.team.find(x => x.id === el.dataset.id); if (m) m[f] = value; });
   },
-  memberRate(el) { store.update(ws => { const m = ws.team.find(x => x.id === el.dataset.id); if (m) m.dayRate = Math.max(0, field(el)); }); },
+  memberRate(el) { store.update(ws => { if (ws.team.some(x => x.id === el.dataset.id)) setDayRate(ws, el.dataset.id, field(el)); }); },
   labor(el) { store.update(ws => { ws.laborRates[el.dataset.t] = Math.max(0, field(el)); }); },
 };
 

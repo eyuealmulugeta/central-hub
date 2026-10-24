@@ -14,7 +14,8 @@ import { seed } from './seed.js';
 import { emptyWorkspace, emptyCompany, OWNER_SECTIONS, PUBLIC_SECTIONS, DEFAULT_MARKUPS } from './schema.js';
 import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } from './sync.js';
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
-import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, companySections, MONEY_SECTIONS } from './access.js';
+import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, seesPay, companySections, MONEY_SECTIONS, PAY_SECTIONS } from './access.js';
+import { movePayOut } from '../engine/people.js';
 import { joinDates } from '../engine/people.js';
 import { divisionsOf } from './nav.js';
 import { DIVIDED, stampPlan } from './division.js';
@@ -29,7 +30,7 @@ const COMPANY_PATH = 'company/main';
 const VERSION = 1;
 // What a Site user may read. Must match firestore.rules.
 const SUMMARY_REPEAT_MS = 10 * 60 * 1000;
-const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'laborRates', 'assemblies', 'procurement', 'requests', 'attendance'];
+const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance'];
 
 const ls = () => globalThis.localStorage;
 const read = key => { try { return JSON.parse(ls().getItem(key)); } catch { return null; } };
@@ -160,9 +161,15 @@ function install({ meta: m, global: g, workspaces, company: co }) {
   for (const [id, ws] of Object.entries(workspaces)) write(K.ws(id), ws);
 }
 
-/** The project sections this person loads: a Site user the site ones (and money with a money page ticked), an Office user without a money page everything but money. */
-const readable = () => (role === 'site' ? [...SITE_SECTIONS, ...(seesMoney(role, pages) ? MONEY_SECTIONS : [])]
-  : seesMoney(role, pages) ? SECTIONS : SECTIONS.filter(s => !MONEY_SECTIONS.includes(s)));
+/**
+ * The project sections this person loads: a Site user the site ones (and money with a money page ticked, never pay),
+ * an Office user everything but money without a money page, and pay only with Costs or Payments ticked.
+ */
+export function projectSections(role, pages) {
+  const money = seesMoney(role, pages) ? MONEY_SECTIONS.filter(s => !PAY_SECTIONS.includes(s) || seesPay(role, pages)) : [];
+  return role === 'site' ? [...SITE_SECTIONS, ...money] : SECTIONS.filter(s => !MONEY_SECTIONS.includes(s) || money.includes(s));
+}
+const readable = () => projectSections(role, pages);
 
 /** Listen to every section of one project and keep its workspace in memory. */
 function openWorkspace(id) {
@@ -333,6 +340,8 @@ export const store = {
   can(page) { return mayOpen(role, pages, page); },
   /** Costs, invoices and billing terms are loaded only for people with a page that shows them. */
   get seesMoney() { return seesMoney(role, pages); },
+  /** Day rates, trade rates and crew pay: the Admin, and Office people with Costs or Payments ticked. */
+  get seesPay() { return seesPay(role, pages); },
   /** Everyone the Owner has given access to (the Owner's own entry is left out). */
   get users() { return users.filter(u => u.email !== me?.email && !coOwners.includes(u.email) && u.role !== 'owner'); },
   get profile() { return profile; },
@@ -555,7 +564,7 @@ export const store = {
     if (viewOnly(true)) return;
     const p = this.project;
     // someone who does not load the money records would work out a poorer figure than the one already saved
-    if (!api || !seesMoney(role, pages) || !p || loading) return;
+    if (!api || !seesPay(role, pages) || !p || loading) return;
     const alerts = (summary.alerts || []).join('\n');
     const cash = m => (m ? `${m.invoiced}|${m.received}|${m.spent}|${m.owed}|${m.currency}` : '');
     if (p.summary?.progress === summary.progress && p.summary?.slip === summary.slip && p.summary?.basis === summary.basis && cash(p.summary?.money) === cash(summary.money) && (p.summary?.alerts || []).join('\n') === alerts) return;
@@ -646,6 +655,19 @@ export const store = {
   notify: emit,
   onError(fn) { errorSubscribers.add(fn); return () => errorSubscribers.delete(fn); },
 
+  /** The first Admin only, once (0.18.0): day rates kept on team records move to crewRates, which Site cannot read. Returns how many moved. */
+  async movePay() {
+    if (role !== 'owner' || !primary && api) return 0;
+    let moved = 0;
+    for (const p of meta.projects) {
+      // only the team list is read first: once everything has moved, nothing more is loaded
+      const [team, ledger] = api && p.id !== openId
+        ? await Promise.all([api.list(`projects/${p.id}/team`), api.list(`projects/${p.id}/ledger`)])
+        : [load(p.id).team || [], load(p.id).ledger || []];
+      if (team.some(m => 'dayRate' in m) || ledger.some(e => e.payId)) await this.updateOther(p.id, ws => { moved += movePayOut(ws); });
+    }
+    return moved;
+  },
   /** The first Admin only: every record of a divided section that does not say its division yet is given it (once). */
   async stampDivisions() {
     if (!api || role !== 'owner' || !primary) return 0;

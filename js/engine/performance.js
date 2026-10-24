@@ -4,7 +4,7 @@
 // with the schedule at the end of it. Not a client document.
 
 import { schedule } from './gantt.js';
-import { laborRows } from './ledger.js';
+import { laborRows, costsOf } from './ledger.js';
 import { convert } from './pricing.js';
 import { billingOf } from './billing.js';
 import { calendarOf } from './calendar.js';
@@ -66,7 +66,7 @@ export function performanceReport({ project, ws, global }, from, to) {
   const taskName = id => ws.tasks.find(t => t.id === id)?.name || 'Removed task';
   const delays = reports.flatMap(r => (r.entries || []).filter(e => e.delayDays > 0)
     .map(e => ({ date: r.date, task: taskName(e.taskId), days: e.delayDays, note: e.note || '' })));
-  const money = type => sum([...ws.ledger, ...laborRows(ws, project)].filter(e => e.type === type && !e.estimate && within(e.date)),
+  const money = type => sum([...costsOf(ws), ...laborRows(ws, project)].filter(e => e.type === type && !e.estimate && within(e.date)),
     e => convert(e.amount, e.currency, project.currency, global.fx));
 
   return {

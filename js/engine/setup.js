@@ -81,7 +81,7 @@ export function checklist({ project: p, ws, company, users = [], cloud = false }
   add('tasks', 'Plan', 'Add the schedule', 'Progress, the forecast finish and alerts come from it.', ws.tasks.length > 0, true, { page: 'schedule' });
 
   add('team', 'People', 'Add the people on this project', 'Attendance, tasks and Field Report lists use them.', ws.team.length > 0, true, { page: 'prices', focus: '#panel-team' });
-  add('rates', 'People', 'Set the day rates', 'Labour cost and the pay sheet need them.', positive(ws.laborRates) || ws.team.some(m => +m.dayRate > 0), method === 'daily', { page: 'prices', focus: '#panel-rates' });
+  add('rates', 'People', 'Set the day rates', 'Labour cost and the pay sheet need them.', positive(ws.laborRates) || (ws.crewRates || []).some(r => +r.dayRate > 0), method === 'daily', { page: 'prices', focus: '#panel-rates' });
   if (cloud) add('linked', 'People', 'Link the site engineers to the project', 'A project appears for a Site user only when their email is linked.', users.some(u => (u.projects || []).includes(p.id)), false, { page: 'prices', focus: '#panel-linked' });
 
   if (method === 'milestone_pct' || method === 'milestone_fixed') add('stages', 'Money', 'Enter the payment stages', 'A milestone that is reached becomes ready to invoice.', ws.payStages.length > 0, true, { page: 'invoices', click: '[data-act=tab][data-t=terms]' });

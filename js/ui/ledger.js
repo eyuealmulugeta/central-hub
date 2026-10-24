@@ -52,6 +52,7 @@ export function render(c) {
             <td class="r">${r.auto || r.payId ? '' : html`<button class="btn ghost small" data-act="remove" data-id="${r.id}">Delete</button>`}</td>
           </tr>`)}</tbody>
       </table>
+      ${store.seesPay ? '' : html`<p class="muted">Crew pay is not shown to you. The Admin and office people with Costs or Payments see it here.</p>`}
       ${rows.length ? '' : html`<p class="empty">${led.rows.length ? `No ${only === 'income' ? 'payments received' : 'expenses'} yet.` : 'No entries yet.'}</p>`}
     </section>
 

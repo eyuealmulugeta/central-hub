@@ -6,6 +6,7 @@
 
 import { register, daysBetween, keyOf } from './attendance.js';
 import { billingOf } from './billing.js';
+import { dayRateOf } from './people.js';
 
 export const METHODS = [['cash', 'Cash'], ['bank', 'Bank transfer'], ['mobile', 'Mobile money']];
 export const methodLabel = k => METHODS.find(([m]) => m === k)?.[1] || k || '';
@@ -23,7 +24,8 @@ export function wageOf(row, { ws, project, staff = [] }) {
   const a = person?.agreement || {};
   const currency = a.currency || project.currency;
   if (a.payPer === 'month' && +a.pay > 0) return { per: 'month', wage: +a.pay, currency, from: 'agreement' };
-  if (+member?.dayRate > 0) return { per: 'day', wage: +member.dayRate, currency: project.currency, from: 'project' };
+  const day = member ? dayRateOf(ws, member.id) : 0;
+  if (day > 0) return { per: 'day', wage: day, currency: project.currency, from: 'project' };
   if (a.payPer === 'day' && +a.pay > 0) return { per: 'day', wage: +a.pay, currency, from: 'agreement' };
   const trade = ws.laborRates?.[member?.role || row.role];
   if (+trade > 0) return { per: 'day', wage: +trade, currency: project.currency, from: 'trade' };
@@ -118,6 +120,7 @@ export const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', paid: 'Paid'
 export function paymentFor(line, { amount, date, method, ref, period, by, at, id }) {
   const pay = { id, key: line.key, personId: line.id, name: line.name, role: line.role, amount: r2(amount), currency: line.currency, date, method, ref: ref || '', periodFrom: period.from, by, at };
   const cost = {
+    // kept in paycosts, not the general Costs list, so only those who see pay read it
     id: `pay-${id}`, payId: id, date, type: 'expense', category: 'labor', amount: pay.amount, currency: line.currency,
     description: `Crew pay, ${line.name}${line.role ? ` (${line.role})` : ''}, ${period.label || `${period.from} to ${period.to}`}`,
     method, bankRef: ref || '',

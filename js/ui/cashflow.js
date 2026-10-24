@@ -5,6 +5,7 @@
 import { store } from '../core/store.js';
 import { cashflow, payrollByCurrency, csvRows, monthOf } from '../engine/cashflow.js';
 import { monthlyPay } from '../engine/hr.js';
+import { costsOf } from '../engine/ledger.js';
 import { money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options } from './dom.js';
@@ -21,7 +22,7 @@ const m = (v, cur) => money(v, cur, 0);
 function flowsOf(c) {
   // payroll comes from HR records, which only the Admin has
   const payroll = store.isAdmin ? payrollByCurrency(c.company.staff, c.project.id, monthlyPay, c.global.fx) : {};
-  return cashflow({ ledger: c.ws.ledger, docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency });
+  return cashflow({ ledger: costsOf(c.ws), docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency });
 }
 
 /** Bars of money in (green) and out (red) for each month, and the balance as a line. Forecast months are paler. */

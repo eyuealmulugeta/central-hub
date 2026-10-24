@@ -31,20 +31,56 @@ export function joinDates(before, patch, now) {
 export const assignmentOf = (person, projectId) => (person.assignments || []).find(a => a.projectId === projectId);
 export const activeProjects = person => (person.assignments || []).filter(a => a.active !== false).map(a => a.projectId);
 
+/**
+ * A team member's day rate. It is kept apart from the team (section crewRates, one record per member) so that only
+ * the Admin and Office people with Costs or Payments ticked read it; Site never does.
+ */
+export const dayRateOf = (ws, memberId) => +((ws.crewRates || []).find(r => r.id === memberId)?.dayRate) || 0;
+export function setDayRate(ws, memberId, rate) {
+  ws.crewRates ||= [];
+  const value = Math.max(0, +rate || 0);
+  const i = ws.crewRates.findIndex(r => r.id === memberId);
+  if (!value) { if (i >= 0) ws.crewRates.splice(i, 1); return; }
+  if (i >= 0) ws.crewRates[i] = { ...ws.crewRates[i], dayRate: value }; else ws.crewRates.push({ id: memberId, dayRate: value });
+}
+/**
+ * Once (0.18.0): a day rate still kept on a team record moves to crewRates, and the labour cost of a crew payment
+ * still in the Costs list moves to paycosts. Returns how many records changed.
+ */
+export function movePayOut(ws) {
+  let n = 0;
+  for (const m of ws.team || []) {
+    if (!('dayRate' in m)) continue;
+    if (+m.dayRate > 0 && !dayRateOf(ws, m.id)) setDayRate(ws, m.id, m.dayRate);
+    delete m.dayRate;
+    n++;
+  }
+  const paid = (ws.ledger || []).filter(e => e.payId);
+  if (paid.length) {
+    ws.paycosts ||= [];
+    for (const e of paid) if (!ws.paycosts.some(x => x.id === e.id)) ws.paycosts.push(e);
+    ws.ledger = ws.ledger.filter(e => !e.payId);
+    n += paid.length;
+  }
+  return n;
+}
+
 /** The team member a person's assignment makes, keeping what the project already holds about them (ids, other fields). */
 export function memberFor(person, a, existing) {
+  const { dayRate, ...kept } = existing || {};   // the day rate lives in crewRates
   return {
-    ...(existing || {}), id: existing?.id || memberId(person), personId: person.id,
+    ...kept, id: existing?.id || memberId(person), personId: person.id,
     name: person.name || '', role: a?.role || person.title || '', contact: contactOf(person),
-    dayRate: +a?.dayRate || 0, active: a?.active !== false, level: person.level || 'crew',
+    active: a?.active !== false, level: person.level || 'crew',
   };
 }
 
-/** Put a person on a project's team, or bring their place there up to date. Returns the team member. */
+/** Put a person on a project's team, or bring their place there up to date, with the day rate of the assignment. Returns the team member. */
 export function assign(ws, person, a) {
   const i = ws.team.findIndex(m => m.personId === person.id);
   const next = memberFor(person, a, ws.team[i]);
   if (i >= 0) ws.team[i] = next; else ws.team.push(next);
+  if (a && 'dayRate' in a) setDayRate(ws, next.id, a.dayRate);
   return next;
 }
 
@@ -54,10 +90,13 @@ export function unassign(ws, person) {
   if (m) m.active = false;
 }
 
-const FIELDS = ['name', 'role', 'contact', 'dayRate', 'active', 'level'];
+const FIELDS = ['name', 'role', 'contact', 'active', 'level'];
 
-/** What a linked team member should read, from the directory: { id, patch } for each one that differs. */
-export function syncPlan(team, staff, projectId) {
+/**
+ * What a linked team member should read, from the directory: { id, patch } for each one that differs. With the
+ * project's crewRates, a day rate that differs is in the patch as dayRate (syncTeam puts it in crewRates).
+ */
+export function syncPlan(team, staff, projectId, crewRates = null) {
   const out = [];
   for (const m of team) {
     if (!m.personId) continue;
@@ -65,15 +104,20 @@ export function syncPlan(team, staff, projectId) {
     if (!person) continue;
     const want = memberFor(person, assignmentOf(person, projectId), m);
     // a blank name in the directory never wipes the name on the project
-    const patch = Object.fromEntries(FIELDS.filter(f => want[f] !== m[f] && !(f === 'dayRate' && (+m.dayRate || 0) === want.dayRate) && !(f === 'name' && !want.name)).map(f => [f, want[f]]));
+    const patch = Object.fromEntries(FIELDS.filter(f => want[f] !== m[f] && !(f === 'name' && !want.name)).map(f => [f, want[f]]));
+    const rate = +assignmentOf(person, projectId)?.dayRate || 0;
+    if (crewRates && rate !== dayRateOf({ crewRates }, m.id)) patch.dayRate = rate;
     if (Object.keys(patch).length) out.push({ id: m.id, patch });
   }
   return out;
 }
-export const needsSync = (team, staff, projectId) => syncPlan(team, staff, projectId).length > 0;
+export const needsSync = (team, staff, projectId, crewRates = null) => syncPlan(team, staff, projectId, crewRates).length > 0;
 export function syncTeam(ws, staff, projectId) {
-  const plan = syncPlan(ws.team, staff, projectId);
-  for (const { id, patch } of plan) Object.assign(ws.team.find(m => m.id === id), patch);
+  const plan = syncPlan(ws.team, staff, projectId, ws.crewRates || []);
+  for (const { id, patch: { dayRate, ...rest } } of plan) {
+    Object.assign(ws.team.find(m => m.id === id), rest);
+    if (dayRate !== undefined) setDayRate(ws, id, dayRate);
+  }
   return plan.length;
 }
 
@@ -104,7 +148,7 @@ export function fromTeam(ws, staff, projectId, newId) {
       byName.set(normName(person.name), person);
     }
     const target = created.includes(person) ? person : { ...person, assignments: [...(person.assignments || [])] };
-    if (!assignmentOf(target, projectId)) target.assignments = [...(target.assignments || []), { projectId, role: m.role || person.title || '', dayRate: +m.dayRate || 0, active: m.active !== false }];
+    if (!assignmentOf(target, projectId)) target.assignments = [...(target.assignments || []), { projectId, role: m.role || person.title || '', dayRate: dayRateOf(ws, m.id), active: m.active !== false }];
     if (!created.includes(person)) updated.set(person.id, target);
     m.personId = person.id;
     linked++;

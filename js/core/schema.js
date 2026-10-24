@@ -120,6 +120,8 @@
 /** @returns {Workspace} */
 export const emptyWorkspace = () => ({
   tasks: [], reports: [], ledger: [], assemblies: [], items: [], procurement: {}, laborRates: {}, team: [],
+  // pay kept apart so only those who see pay read it (0.18.0): day rate per team member, the labour cost of each crew payment
+  crewRates: [], paycosts: [],
   docs: [], payStages: [], measure: [], billRates: {}, requests: [], trash: [],
   attendance: [],   // the office's corrections of the attendance sheet (see engine/attendance.js)
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)

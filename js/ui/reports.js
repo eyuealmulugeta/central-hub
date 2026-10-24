@@ -50,8 +50,8 @@ const REPLY_DONE = {
 // tasks the field can report on today: anything unfinished that has started or is about to
 const reportable = c => c.sched.rows.filter(r => r.progress < 100 && (r.actualStart || r.es <= toDay(c.today) + LOOKAHEAD_DAYS));
 const underReview = ws => ws.reports.find(r => r.id === reviewing && r.review === 'pending') || null;
-// trades with a day rate, plus any the field report used that have none yet
-const tradeList = (ws, cur) => [...new Set([...Object.keys(ws.laborRates), ...(cur?.manpower || []).map(m => m.trade)])];
+// trades with a day rate (read only by those who see pay), the team's roles, and any the field report used
+const tradeList = (ws, cur) => [...new Set([...Object.keys(ws.laborRates || {}), ...ws.team.map(m => m.role).filter(Boolean), ...(cur?.manpower || []).map(m => m.trade)])];
 // equipment named in earlier reports, most recent first, offered again as ready rows
 const knownEquipment = ws => [...new Set([...ws.reports].sort((a, b) => b.date.localeCompare(a.date))
   .flatMap(r => (r.field?.equipment || []).map(e => e.name)))].filter(Boolean);
@@ -359,7 +359,7 @@ function pdfCard(r) {
 /** A report that needs no confirming, read in full. */
 function readCard(r, c) {
   return html`<section class="card">
-    <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}<span class="grow"></span>
+    <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin for ${RETENTION_DAYS} days">Delete</button></div>
     ${sheet(r, c)}
   </section>`;
@@ -616,7 +616,7 @@ async function pullOther(project) {
   if (mark.print && fingerprint(out, mark.since || '') === mark.print) return;
 
   let result;
-  const ws = await store.updateOther(project.id, w => { result = importFieldReports(w, out, { hoursPerDay: billingOf(project).hoursPerDay }); });
+  const ws = await store.updateOther(project.id, w => { result = importFieldReports(w, out, { hoursPerDay: billingOf(project).hoursPerDay, addTrades: store.isAdmin }); });
   const since = importSince(ws);
   try { localStorage.setItem(markKey(project.id), JSON.stringify({ since, print: fingerprint(out, since) })); } catch { /* checked in full again next time */ }
   if (result.added || result.updated) {
@@ -665,11 +665,12 @@ Import its ${count} report(s) into the Central Hub project "${project.name}"?`))
     const noworkBefore = store.ws.reports.filter(r => r.field?.nowork).length;
     // a dry run on a copy first, so a check that brings nothing does not write to the database
     const hoursPerDay = billingOf(project).hoursPerDay;
-    const result = importFieldReports(structuredClone(store.ws), out, { hoursPerDay });
+    const result = importFieldReports(structuredClone(store.ws), out, { hoursPerDay, addTrades: store.isAdmin });
     if (result.added || result.updated) {
-      store.update(ws => { importFieldReports(ws, out, { hoursPerDay }); });
+      store.update(ws => { importFieldReports(ws, out, { hoursPerDay, addTrades: store.isAdmin }); });
       fieldNotice = `${result.added} new and ${result.updated - (result.attendance || 0)} updated from ${out.project}. Review each one to count its progress.`;
       if (result.attendance) fieldNotice += ` ${result.attendance} attendance mark(s) corrected by the site are on the Attendance sheet.`;
+      for (const x of result.replaced || []) fieldNotice += ` 2 reports for ${fmtDate(x.date)}: the newer one${x.kept ? ` (No. ${x.kept})` : ''} was kept.`;
       if (out.more) fieldNotice += ' Older reports were left out.';
       fieldNotice += weeklyNote;
       changed = true;

@@ -95,7 +95,7 @@ a.btn { text-decoration: none; }
 
 .view-dashboard { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) minmax(0, 1fr); }
 .view-dashboard .kpis { grid-column: 1 / -1; }
-.view-reports { grid-template: minmax(0, 1fr) / minmax(0, 1.25fr) minmax(0, 1fr); }
+.view-reports { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
 .view-schedule { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) auto; }
 .view-schedule > .toolbar { grid-column: 1 / -1; }
 .view-schedule .gantt:last-child { grid-column: 1 / -1; }
@@ -503,6 +503,8 @@ details.setup[open] summary { margin-bottom: 10px; }
 .sheet-detail .facts dd { text-align: left; }
 .sheet-detail .table th { position: static; background: none; }
 .sheet-detail .none { color: var(--muted); font-style: italic; }
+/* free text written on site (activities, next day tasks, notes) reads as justified paragraphs */
+.prose li, .view-reports textarea, .reply li { text-align: justify; hyphens: auto; }
 .request { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 10px; }
 
 .reply { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
@@ -637,11 +639,11 @@ dialog.palette p { margin: 0; font-size: 12px; }
 
 /* ---- Home: a tile per section, then the projects ---- */
 .view-home { grid-template: auto / minmax(0, 1fr); align-content: start; }
-.launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 18px 10px; padding: 6px 0 10px; }
-.launcher .app { display: flex; flex-direction: column; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; text-align: center; font-size: 13px; line-height: 1.25; }
-.app-ic { position: relative; width: 60px; height: 60px; border-radius: 16px; display: grid; place-items: center; transition: transform .12s ease; }
+.launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 24px 12px; padding: 6px 0 10px; }
+.launcher .app { display: flex; flex-direction: column; align-items: center; gap: 7px; color: var(--ink); text-decoration: none; text-align: center; font-size: 15px; font-weight: 600; line-height: 1.25; }
+.app-ic { position: relative; width: 84px; height: 84px; border-radius: 22px; display: grid; place-items: center; transition: transform .12s ease; }
 .launcher .app:hover .app-ic, .launcher .app:focus-visible .app-ic { transform: translateY(-2px); }
-.app-ic em { position: absolute; top: -6px; right: -9px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #c0392b; color: #fff; font-style: normal; font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.app-ic em { position: absolute; top: -7px; right: -10px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: #c0392b; color: #fff; font-style: normal; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
 .tone-teal { background: #e1f5ee; color: #085041; }
 .tone-violet { background: #eeedfe; color: #3c3489; }
 .tone-amber { background: #faeeda; color: #633806; }
@@ -786,6 +788,7 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .set-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
 .set-head h2 { margin: 0; }
 .set-tabs { margin-bottom: 14px; }
+.side > .emp-tabs { flex: none; margin-bottom: 0; }
 .badge { display: inline-block; min-width: 18px; padding: 0 6px; border-radius: 9px; background: var(--primary-soft); color: var(--primary); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .set-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .set-cols.team-cols { grid-template-columns: minmax(0, 1fr); }
@@ -928,11 +931,6 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 @media (prefers-reduced-motion: reduce) { .side-link em, .tab em, .tile-head em, em.count, .chat-ch em { animation: none; } }
 .tab.mark-read { margin-left: auto; color: var(--primary); font-weight: 700; border: 1px solid var(--primary); border-radius: 999px; padding: 4px 12px; }
 .tab.mark-read:hover { background: var(--primary-soft); }
-.mark-all { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--bad); border-radius: 10px; background: color-mix(in srgb, var(--bad) 10%, transparent); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
-.mark-all:hover { background: color-mix(in srgb, var(--bad) 18%, transparent); }
-.mark-all b { min-width: 24px; padding: 0 7px; border-radius: 12px; background: var(--bad); color: #fff; line-height: 24px; text-align: center; }
-body.side-narrow .mark-all { font-size: 0; padding: 6px; justify-content: center; }
-body.side-narrow .mark-all b { font-size: 12px; }
 
 /* ---- finding text: the marks, and the small bar that steps through them ---- */
 mark.find-hit { background: #ffe066; color: #000; border-radius: 3px; padding: 0 1px; box-shadow: 0 0 0 1px rgb(0 0 0 / .15); }

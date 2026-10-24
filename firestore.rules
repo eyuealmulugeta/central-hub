@@ -83,10 +83,19 @@ service cloud.firestore {
       allow read, write: if signedIn() && email == me();
     }
 
+    // A Project Engineer (rank project_manager) or a Site Engineer is on one project at a time. A record that already lists
+    // more (from before this rule) can still be changed, but never given another project.
+    function oneProjectOk() {
+      let d = request.resource.data;
+      let n = d.get('projects', []).size();
+      return !d.get('ranks', []).hasAny(['project_manager', 'site_engineer']) || n <= 1
+        || (resource != null && n <= resource.data.get('projects', []).size());
+    }
     match /users/{email} {
       allow get: if signedIn() && email == me();
       allow read: if seesAll();
-      allow write: if isOwner();
+      allow create, update: if isOwner() && oneProjectOk();
+      allow delete: if isOwner();
     }
 
     // One signed-in device per person (the Admin is never locked): a device claims sessions/<email>, and a second

@@ -358,7 +358,7 @@ function render() {
   // an alert that leads to a page this person cannot open, or that the project has switched off, is not shown
   ctx.flags.auto = ctx.flags.auto.filter(f => allowed(f.link));
   // the directory is the master: team members linked to it follow it. Only the Admin holds the directory, so only the Admin brings the team up to date.
-  if (store.isAdmin && !store.readOnly && !syncingTeam && needsSync(store.ws.team, store.company.staff, p.id)) {
+  if (store.isAdmin && !store.readOnly && !syncingTeam && needsSync(store.ws.team, store.company.staff, p.id, store.ws.crewRates || [])) {
     syncingTeam = true;
     queueMicrotask(() => { store.update(ws => syncTeam(ws, store.company.staff, p.id)); syncingTeam = false; });
   }
@@ -744,6 +744,8 @@ function start() {
     checkSoon = () => setTimeout(check, 1500);
     // the division lock: the first Admin's Central Hub gives the old records their division, once they have all arrived
     setTimeout(async () => { if (store.cloud && store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.stampDivisions(); } catch { /* tried again next time */ } } }, 30_000);
+    // 0.18.0: day rates move off the team records (which Site reads) into crewRates, once, by the first Admin
+    setTimeout(async () => { if (store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.movePay(); } catch { /* tried again next start */ } } }, 35_000);
     // the weekly full copy: checked a minute after start, then every 6 hours
     setTimeout(weeklyBackup, 60_000);
     setInterval(weeklyBackup, 6 * 3600_000);

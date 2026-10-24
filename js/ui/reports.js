@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fetchFieldReports, importFieldReports, importSince, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS } from '../sync/fieldreport.js';
+import { fieldConfig, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -568,8 +568,18 @@ export const actions = {
 };
 
 const autoReady = (project, cfg) => !!(cfg.url && cfg.key && project?.fieldCode && project.fieldLabel);
-const autoLine = (project, cfg) => !autoReady(project, cfg) ? ''
-  : checkedAt ? `Checks every few seconds while this page is open, last at ${checkedAt}` : 'Checks every few seconds while this page is open';
+// the server's import status, read at most once a minute (Step 1: the server imports every 5 minutes)
+let server = null, serverReadAt = 0;
+const hhmm = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function autoLine(project, cfg) {
+  if (serverFresh(server) && project?.fieldCode && project.fieldLabel) {
+    const mine = server.projects?.[project.id];
+    return mine?.error ? `The server could not check at ${hhmm(mine.checkedAt)}: ${mine.error}`
+      : `Checked by the server every 5 minutes, last at ${hhmm(mine?.checkedAt || server.lastRun)}`;
+  }
+  return !autoReady(project, cfg) ? ''
+    : checkedAt ? `Checks every few seconds while this page is open, last at ${checkedAt}` : 'Checks every few seconds while this page is open';
+}
 
 /**
  * The automatic check, run by the shell once a minute. It only works once the
@@ -579,6 +589,15 @@ const autoLine = (project, cfg) => !autoReady(project, cfg) ? ''
 export async function autoPull(openOnly = false) {
   if (store.role === 'site' || store.loading || !store.project) return;
   const cfg = fieldConfig.get();
+  if (Date.now() - serverReadAt > 60_000) {
+    serverReadAt = Date.now();
+    const was = autoLine(store.project, cfg);
+    server = await store.fieldServer();
+    const el = document.getElementById('fr-checked');
+    if (el && autoLine(store.project, cfg) !== was) el.textContent = autoLine(store.project, cfg);
+  }
+  // while the server imports, browsers leave it to the server; if it stops, they check again themselves
+  if (serverFresh(server)) return;
   if (autoReady(store.project, cfg)) await pullReports(true);
   // the other projects are looked at once a minute, not on the quick check of the open page
   if (!openOnly && store.seesMoney) await watchOthers(cfg);
@@ -592,11 +611,6 @@ export async function autoPull(openOnly = false) {
 let watching = false;
 const markKey = id => `sf:frmark:${id}`;
 const readMark = id => { try { return JSON.parse(localStorage.getItem(markKey(id))) || {}; } catch { return {}; } };
-const fingerprint = (out, since) => JSON.stringify([
-  (out.reports || []).filter(m => m.date >= since).map(m => [m.date, m.version || 1, m.status || '', (m.comments || []).length]),
-  (out.nowork || []).filter(n => n.date >= since).map(n => n.date),
-  (out.attendance || []).map(a => [a.date, a.at]),
-]);
 
 async function watchOthers(cfg) {
   if (watching) return;
@@ -613,12 +627,12 @@ async function pullOther(project) {
   const out = await fetchFieldReports({ proj: project.fieldCode, since: mark.since || '' });
   // the code now points somewhere else: left for the person to confirm with the project open
   if (out.project !== project.fieldLabel) return;
-  if (mark.print && fingerprint(out, mark.since || '') === mark.print) return;
+  if (mark.print && fieldFingerprint(out, mark.since || '') === mark.print) return;
 
   let result;
   const ws = await store.updateOther(project.id, w => { result = importFieldReports(w, out, { hoursPerDay: billingOf(project).hoursPerDay, addTrades: store.isAdmin }); });
   const since = importSince(ws);
-  try { localStorage.setItem(markKey(project.id), JSON.stringify({ since, print: fingerprint(out, since) })); } catch { /* checked in full again next time */ }
+  try { localStorage.setItem(markKey(project.id), JSON.stringify({ since, print: fieldFingerprint(out, since) })); } catch { /* checked in full again next time */ }
   if (result.added || result.updated) {
     // its sidebar figures and alerts are worked out here, because nobody has it open
     store.patchProject(project.id, { summary: summaryOf(derive(project, ws, store.global, todayISO())) });

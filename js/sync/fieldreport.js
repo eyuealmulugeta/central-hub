@@ -75,6 +75,20 @@ export async function reviewFieldReport({ name, decision, text }) {
   return out.report;
 }
 
+/**
+ * Is the server's last Field Report import (system/fieldImport, written every 5 minutes by functions/) recent
+ * enough for browsers to leave the checking to it? Older than 15 minutes, the browser checks again itself.
+ */
+export const serverFresh = (status, now = Date.now(), minutes = 15) =>
+  !!status?.lastRun && now - Date.parse(status.lastRun) < minutes * 60_000;
+
+/** What an export holds from `since` on, in short: when it is the same as last time, nothing needs importing. */
+export const fieldFingerprint = (out, since) => JSON.stringify([
+  (out.reports || []).filter(m => m.date >= since).map(m => [m.date, m.version || 1, m.status || '', (m.comments || []).length]),
+  (out.nowork || []).filter(n => n.date >= since).map(n => n.date),
+  (out.attendance || []).map(a => [a.date, a.at]),
+]);
+
 /** Earliest date worth asking for: a few days before the newest report already imported. */
 export function importSince(ws, overlapDays = OVERLAP_DAYS) {
   // reports kept in an older, thinner form are all fetched again so they can be completed

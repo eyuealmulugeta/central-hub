@@ -320,6 +320,8 @@ export const store = {
   },
 
   get cloud() { return !!api; },
+  /** The server's Field Report import status (system/fieldImport), or null locally or when it cannot be read. */
+  async fieldServer() { if (!api) return null; try { return await api.get('system/fieldImport'); } catch { return null; } },
   get user() { return me; },
   get role() { return role; },
   /** The Admin is the Owner: the only one who deletes records and changes settings. Local mode has no sign-in. */

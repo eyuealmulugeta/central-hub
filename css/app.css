@@ -881,6 +881,18 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .chat-meta .muted { font-size: 12px; }
 .chat-meta .btn { visibility: hidden; padding: 0 6px; min-height: 0; }
 .chat-msg:hover .chat-meta .btn { visibility: visible; }
+.chat-meta .btn[data-act="edit"] { visibility: visible; }
+@media (hover: none) { .chat-meta .btn { visibility: visible; } }
+.chat-main { position: relative; }
+.chat-face { flex: none; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 10px; }
+.chat-face:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.chat-card { position: absolute; top: 56px; left: 16px; right: 16px; max-width: 380px; z-index: 5; display: flex; gap: 14px; align-items: flex-start; padding: 14px; border-radius: 14px; background: var(--surface); box-shadow: 0 8px 28px rgba(0, 0, 0, .18); border: 1px solid var(--line); }
+.chat-card > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.chat-card b { font-size: 16px; }
+.chat-body p.chat-gone { background: none; border: 1px dashed var(--line); color: var(--muted); font-style: italic; }
+.chat-body p a { color: var(--primary); text-decoration: underline; overflow-wrap: anywhere; }
+.chat-edit { display: flex; gap: 6px; margin-top: 2px; }
+.chat-edit input { flex: 1; min-width: 0; }
 .chat-day { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
 .chat-day::before, .chat-day::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 .chat-form { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -897,13 +909,16 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .sign-rows { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 
 /* ---- Meetings: booked meetings and the settings of the booking page ---- */
-.view-meetings { grid-template: minmax(0, 1fr) / minmax(0, 1.1fr) minmax(0, 1fr); }
+.view-meetings { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
+.booking-page > summary { cursor: pointer; margin: 0; }
+.booking-page[open] > summary { margin-bottom: 12px; }
+.invitees { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.invitees legend { padding: 0 6px; font-weight: 600; }
 .meet-row { display: flex; flex-direction: column; gap: 4px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .meet-row.closed { opacity: .6; }
 .meet-note { padding: 6px 10px; border-left: 3px solid var(--brand-2); background: var(--surface-2); border-radius: 0 8px 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .meet-type { display: grid; grid-template-columns: minmax(0, 1.2fr) 80px minmax(0, 1.5fr) auto; gap: 8px; align-items: center; padding: 5px 0; }
 .meet-type input { min-width: 0; width: 100%; }
-@media (max-width: 900px) { .view-meetings { grid-template: auto auto / minmax(0, 1fr); overflow: auto; } }
 
 /* ---- Contracts: the list on its own, an open contract on its own page ---- */
 .view-contracts > .wide { grid-column: 1 / -1; }
@@ -940,3 +955,19 @@ mark.find-hit.find-current { background: #ff9f1c; outline: 2px solid #c25e00; }
 .find-bar[hidden] { display: none; }
 .find-bar .btn.ghost { color: inherit; }
 @media print { .find-bar { display: none; } mark.find-hit { background: none; box-shadow: none; } }
+
+/* v0.13.0 evaluation: one criterion per line, five clickable stars on the right (drawn right to left, so a chosen star lights those before it) */
+.star-form h3 { margin: 14px 0 4px; }
+.star-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.stars-in { display: inline-flex; flex-direction: row-reverse; flex: none; }
+.stars-in input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.stars-in label { font-size: 26px; line-height: 1; padding: 0 2px; color: var(--line); cursor: pointer; margin: 0; transition: color .1s; }
+.stars-in input:checked ~ label, .stars-in label:hover, .stars-in label:hover ~ label { color: #e0a412; }
+.stars-in input:focus-visible + label { outline: 2px solid var(--primary); border-radius: 4px; }
+/* v0.13.0 employee list: stars and "Locate the file in Drive" on each card */
+.emp-item { position: relative; display: flex; flex-direction: column; }
+.emp-item .emp-card { flex: 1; padding-bottom: 46px; }
+.emp-locate { position: absolute; right: 12px; bottom: 12px; }
+.emp-stars { color: #e0a412; letter-spacing: .04em; }
+.emp-stars.muted { color: var(--muted); letter-spacing: 0; }
+.toolbar.wrap { flex-wrap: wrap; }

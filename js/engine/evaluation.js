@@ -1,32 +1,54 @@
 // Crew evaluation: who may rate whom, the 1 to 5 scale, the four pillars, and the
 // figures worked out from the ratings. Pure functions; the screen is ui/evaluation.js.
 //
-// The chain of command is Site Engineer > Project Manager > General Manager, and each
-// rank rates the one level below it:
-//   Site Engineer    rates  site staff and field crew
-//   Project Manager  rates  Site Engineers
-//   General Manager  rates  Project Managers
+// Everybody sits in one of five tiers, and each tier rates the one directly below it:
+//   Tier 1  Owners and General Manager      rate everybody; nobody rates them
+//   Tier 2  Project Engineer, Operations Lead, Chief Engineer, Accountant, HSE Officer
+//   Tier 3  Site Engineer, QS, Procurement Manager, Logistics Coordinator
+//   Tier 4  Technicians, Foremen, HR/Admin Assistant, skilled and semi-skilled labourers
+//   Tier 5  Daily labourers, site guards
+// A rater's tier comes from their title (users/<email>.ranks); the tier of a team member is the one
+// chosen for them (`level`, 't2' to 't5'), else the one of their job position.
 
 import { sum } from '../core/util.js';
+import { TITLES } from './titles.js';
 
-/** Ranks a signed-in person can hold (users/<email>.ranks). A person may hold more than one. */
-export const RANKS = [['site_engineer', 'Site Engineer'], ['project_manager', 'Project Engineer'], ['general_manager', 'General Manager']];
 /** What the Admin holds without being asked. firestore.rules lets the Owner write at any level. */
 export const OWNER_RANKS = ['general_manager', 'project_manager'];
-/** The level of the person being rated, kept on each team member (`level`). */
-export const LEVELS = [['crew', 'Site staff and crew'], ['site_engineer', 'Site Engineer'], ['project_manager', 'Project Engineer']];
-/** rank -> the level it rates. Must match mayRate() in firestore.rules. */
-export const RATES = { site_engineer: 'crew', project_manager: 'site_engineer', general_manager: 'project_manager' };
+/** The tier of the person being rated, kept on each team member (`level`). Tier 1 is never rated. */
+export const LEVELS = [['t1', 'Tier 1 · Owners and General Manager (not rated)'], ['t2', 'Tier 2 · Project Engineer and heads'], ['t3', 'Tier 3 · Site Engineer, QS, procurement, logistics'],
+  ['t4', 'Tier 4 · Technicians, foremen, skilled labour'], ['t5', 'Tier 5 · Daily labourers, site guards']];
+/** Job positions by tier, for a member whose tier was never chosen. Anything else is tier 4. */
+const ROLE_TIERS = {
+  t1: ['General Manager', 'Owner'],
+  t2: ['Project Engineer', 'Project Manager', 'Operations Lead', 'Chief Engineer', 'Accountant', 'HSE Officer'],
+  t3: ['Site Engineer', 'Site Architect', 'QS', 'Procurement Manager', 'Logistics Coordinator', 'Quantity Surveyor (QS)', 'Office Engineer', 'Coordinator'],
+  t5: ['Daily Labourer', 'Labourer', 'Site Guard'],
+};
+/** The levels of before the tiers. */
+const OLD_LEVELS = { project_manager: 't2', site_engineer: 't3' };
 
-export const rankLabel = id => RANKS.find(([k]) => k === id)?.[1] || id;
-export const levelLabel = id => LEVELS.find(([k]) => k === id)?.[1] || LEVELS[0][1];
-export const levelOf = member => (LEVELS.some(([k]) => k === member?.level) ? member.level : 'crew');
+/** title key -> the rater's tier. Must match myTier() in firestore.rules. */
+export const RATER_TIER = Object.fromEntries(TITLES.map(([k, , , tier]) => [k, tier]));
+/** Tier n rates tier n + 1; tier 1 rates tiers 2 to 5. */
+export const RATES = { 1: ['t2', 't3', 't4', 't5'], 2: ['t3'], 3: ['t4'], 4: ['t5'] };
 
+export const rankLabel = id => TITLES.find(([k]) => k === id)?.[1] || id;
+export const levelLabel = id => LEVELS.find(([k]) => k === id)?.[1] || LEVELS[3][1];
+export const tierOfRole = role => {
+  const r = String(role || '').trim().toLowerCase();
+  const hit = Object.entries(ROLE_TIERS).find(([, list]) => list.some(x => x.toLowerCase() === r));
+  return hit ? hit[0] : 't4';
+};
+export const levelOf = member => (LEVELS.some(([k]) => k === member?.level) ? member.level : OLD_LEVELS[member?.level] || tierOfRole(member?.role || member?.title));
+
+/** The rater's tier: the highest of their titles' (1 is highest); 0 when none rates anybody. */
+export const raterTier = ranks => Math.min(9, ...(ranks || []).map(r => RATER_TIER[r] || 9)) % 9;
 /** Levels these ranks may rate. */
-export const ratableLevels = ranks => [...new Set((ranks || []).map(r => RATES[r]).filter(Boolean))];
+export const ratableLevels = ranks => RATES[raterTier(ranks)] || [];
 export const canRate = (ranks, level) => ratableLevels(ranks).includes(level);
-/** The rank that rates `level`, for the label on a record. */
-export const raterRank = (ranks, level) => (ranks || []).find(r => RATES[r] === level) || '';
+/** The title that rates `level`, for the label on a record. */
+export const raterRank = (ranks, level) => (ranks || []).find(r => (RATES[RATER_TIER[r]] || []).includes(level)) || '';
 
 export const SCALE = [
   [5, 'Exceptional', 'Consistently exceeds standards; shows leadership and mastery.'],

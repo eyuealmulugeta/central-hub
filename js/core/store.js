@@ -54,6 +54,7 @@ const emit = () => subscribers.forEach(fn => fn());
 // ---- cloud state ----
 let api = null;          // adapter from cloud.js; null = local mode
 let me = null;           // { email, name }
+let ownerEmail = '';     // config/setup.owner: the Admin, who is never offered for evaluation
 let coOwners = [];        // the other owners (config/setup.coOwners): the same rights as the Admin
 let primary = true;      // the first owner: the only one who adds or removes co-owners and hands the role on
 let role = 'owner';      // owner | office | site. Local mode has no sign-in, so everything is allowed.
@@ -218,6 +219,7 @@ export const store = {
       setup = await api.get('config/setup');
     }
     let assigned = [];
+    ownerEmail = setup?.owner || '';
     coOwners = Array.isArray(setup?.coOwners) ? setup.coOwners : [];
     primary = setup?.owner === me.email;
     if (primary || coOwners.includes(me.email)) {
@@ -313,6 +315,8 @@ export const store = {
   /** A co-owner: sees everything, changes nothing. */
   get readOnly() { return !!api && role === 'owner' && !primary; },
   get coOwners() { return coOwners; },
+  /** The Admin and the co-owners. */
+  get owners() { return [ownerEmail, ...coOwners].filter(Boolean); },
   /** May this person open the page? */
   can(page) { return mayOpen(role, pages, page); },
   /** Costs, invoices and billing terms are loaded only for people with a page that shows them. */

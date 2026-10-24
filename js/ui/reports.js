@@ -92,7 +92,7 @@ function sheet(r, c) {
 
     <div><span class="muted">Manpower</span>
       ${crew.length ? html`<table class="table compact">
-        <thead><tr><th>Trade</th><th class="r">Qty</th><th class="r">Hrs each</th><th class="r">Man-hrs</th></tr></thead>
+        <thead><tr><th>Trade</th><th class="r">Qty</th><th class="r">Hours</th><th class="r">Man-hrs</th></tr></thead>
         <tbody>${crew.map(m => html`<tr><td>${m.trade}</td><td class="r">${m.count}</td><td class="r">${num(hrsEach(m), 1)}</td><td class="r">${num(m.count * hrsEach(m), 1)}</td></tr>`)}
           <tr class="group"><td>Total</td><td class="r">${sum(crew, m => m.count)}</td><td></td><td class="r">${num(sum(crew, m => m.count * hrsEach(m)), 1)}</td></tr></tbody>
       </table>` : html`<span class="none">Nothing entered</span>`}</div>
@@ -131,8 +131,11 @@ function sheet(r, c) {
   </div>`;
 }
 
-/** A link that finds the report's PDF in Google Drive, where "Show file location" opens its folder. */
-const locate = f => (f.pdf || f.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || f.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}. In the result, right-click the file and choose Show file location">Locate the file in Drive</a>` : '');
+/** Opens the Drive folder that holds the report's PDF. A report that came before Field Report's script 7.26.0 does not know
+ * its folder until the next check: Drive is then searched for the file's name instead. */
+const locate = f => (f.folderId
+  ? html`<a class="btn small" href="https://drive.google.com/drive/folders/${encodeURIComponent(f.folderId)}" target="_blank" rel="noopener" title="Opens the Drive folder of ${f.pdf || 'this report'}">Locate the file in Drive</a>`
+  : f.pdf || f.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || f.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}">Locate the file in Drive</a>` : '');
 
 /** Status of a field report in the Field Report app, the conversation so far, and the reply to its preparer. */
 function replyBox(r, c) {

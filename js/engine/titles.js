@@ -4,14 +4,23 @@
 // Titles come in three groups. A Project Engineer (who manages the project) and a Site Engineer (who manages the site)
 // are on one project at a time. The key project_manager is kept for the Project Engineer: it is the rank of the chain.
 
+// [key, words, group, evaluation tier]: the tier says whom the holder rates (js/engine/evaluation.js, myTier() in firestore.rules)
 export const TITLES = [
-  ['general_manager', 'General Manager', 'Management'],
-  ['project_manager', 'Project Engineer', 'Management'],
-  ['site_engineer', 'Site Engineer', 'Management'],
-  ['technician', 'Technician', 'Site'],
-  ['office_engineer', 'Office Engineer', 'Office'],
-  ['coordinator', 'Coordinator', 'Office'],
-  ['accountant', 'Accountant', 'Office'],
+  ['general_manager', 'General Manager', 'Management', 1],
+  ['project_manager', 'Project Engineer', 'Management', 2],
+  ['operations_lead', 'Operations Lead', 'Management', 2],
+  ['chief_engineer', 'Chief Engineer', 'Management', 2],
+  ['site_engineer', 'Site Engineer', 'Management', 3],
+  ['hse_officer', 'HSE Officer', 'Site', 2],
+  ['foreman', 'Foreman', 'Site', 4],
+  ['technician', 'Technician', 'Site', 4],
+  ['accountant', 'Accountant', 'Office', 2],
+  ['qs', 'Quantity Surveyor (QS)', 'Office', 3],
+  ['procurement_manager', 'Procurement Manager', 'Office', 3],
+  ['logistics_coordinator', 'Logistics Coordinator', 'Office', 3],
+  ['office_engineer', 'Office Engineer', 'Office', 3],
+  ['coordinator', 'Coordinator', 'Office', 3],
+  ['hr_assistant', 'HR/Admin Assistant', 'Office', 4],
 ];
 export const GROUPS = ['Management', 'Site', 'Office'];
 /** Titles whose holder can be on only one project at a time. */

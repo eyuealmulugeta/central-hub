@@ -138,6 +138,7 @@ export const emptyCompany = () => ({
   signed: [],     // the signatures: written by the signer's page, never changed
   slots: [],      // times taken on the booking page (see engine/booking.js): no names, anyone reads them
   bookings: [],   // who booked a meeting: written by the booking page, read by the office
+  meetings: [],   // meetings with colleagues: { id, title, start, minutes, where, note, invitees: [{ email, name }], by, byName, status, division }
   contacts: [],   // email addresses and phone numbers documents are sent to (see engine/contacts.js): the office and the Admin
   owners: [],     // the owners of the company (see engine/owners.js): kept apart from the employees, Admin only
   payroll: [],    // one run a month (see engine/payroll.js): Admin only, built from HR pay

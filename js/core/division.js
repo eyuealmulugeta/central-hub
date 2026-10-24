@@ -23,7 +23,7 @@ export const shipmentDivision = s => (s?.projectId ? INSTALLATION : TRADING);
 export const stamp = () => ({ division: current });
 
 /** Company sections whose records belong to one division. Owners, slots, messages and settings stay shared. */
-export const DIVIDED = ['contracts', 'contacts', 'shipments', 'sales', 'bookings', 'signs', 'signkeys', 'staff', 'letters', 'payroll'];
+export const DIVIDED = ['contracts', 'contacts', 'shipments', 'sales', 'bookings', 'meetings', 'signs', 'signkeys', 'staff', 'letters', 'payroll'];
 
 /** The division a record of `section` belongs to, from what it says, or what it was before 1D. Pure. */
 export function divisionOfRecord(section, r, company = {}) {
@@ -65,6 +65,7 @@ export function scopedCompany(company, division) {
     signs: (company.signs || []).filter(r => (r.division || contractDivision.get(r.contractId) || INSTALLATION) === division),
     contacts: (company.contacts || []).filter(mine),
     bookings: (company.bookings || []).filter(mine),
+    meetings: (company.meetings || []).filter(mine),
     shipments: (company.shipments || []).filter(s => divisionOfRecord('shipments', s) === division),
     sales,
   };

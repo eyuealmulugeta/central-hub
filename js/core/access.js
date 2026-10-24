@@ -44,6 +44,7 @@ const key = permKey;
 
 /** May someone with `role` and granted `pages` open `page`? */
 export function mayOpen(role, pages, page) {
+  if (page === 'directory') return role !== 'owner';   // the staff directory is for those without the employee records
   if (role === 'owner' || page === 'home' || page === 'discuss') return true;   // Home and Discuss show each person only their own sections
   if (page === 'meetings' || page === 'contacts') return role === 'office';   // booked meetings and the address book are the office's, not the site's
   if (ADMIN_PAGES.includes(permKey(page))) return false;
@@ -58,7 +59,7 @@ export const seesMoney = (role, pages) => role === 'owner' || (role === 'office'
 /** Records of documents sent for signature: they go with the Contracts page. */
 const SIGN_SECTIONS = ['signs', 'signkeys', 'signed'];
 /** Records of the booking page: the Meetings page of the office. */
-const MEET_SECTIONS = ['slots', 'bookings'];
+const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
@@ -80,7 +81,7 @@ export const APPS = [
   { group: 'Communication', about: 'Talking to each other', apps: [
     { page: 'discuss', name: 'Discuss', does: 'Messages between the people of Amistad: one channel for everyone and one per project' },
     { page: 'contacts', name: 'Contacts', does: 'Email addresses and phone numbers saved once, found by name, and who each project\'s documents go to' },
-    { page: 'meetings', name: 'Meetings', does: 'A booking page for clients and suppliers: they pick a free time, you see it here' },
+    { page: 'meetings', name: 'Meetings', does: 'Meetings with colleagues, scheduled here, and the booking page where clients and suppliers pick a free time' },
   ] },
   { group: 'Projects', about: 'Running each construction job', apps: [
     { page: 'dashboard', name: 'Overview', does: 'Progress, forecast finish, alerts and follow-ups for one project', fixed: true },

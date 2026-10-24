@@ -6,9 +6,9 @@
 // for work details, private details, the agreement and pay, and their papers.
 
 import { store } from '../core/store.js';
-import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, agreementLabel, hrSummary } from '../engine/hr.js';
+import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, RATING_FILTERS, agreementLabel, hrSummary, filterStaff, ratingOf } from '../engine/hr.js';
 import { uid, money, fmtFull } from '../core/util.js';
-import { ratingsOf, rankLabel, scaleLabel, averages, RANKS, LEVELS, levelOf } from '../engine/evaluation.js';
+import { ratingsOf, rankLabel, scaleLabel, averages, LEVELS, levelOf } from '../engine/evaluation.js';
 import { assign, unassign, assignmentOf, activeProjects, accountOf, fromTeam as fromTeamPlan, unlinked, duplicates } from '../engine/people.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, PHOTO, PASSPORT } from '../core/image.js';
@@ -16,7 +16,7 @@ import { passportBlock, toggleZoom, resetZoom } from './docimage.js';
 import { divOf, stamp, TRADING, INSTALLATION } from '../core/division.js';
 import { scanInto, scanButton } from './ocr.js';
 import { TITLES, GROUPS, titleOf, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
-import { positionGroups, departmentChoices, nationalityChoices } from '../engine/positions.js';
+import { positionGroups, departmentChoices, nationalityChoices, normDepartment } from '../engine/positions.js';
 import { chooseOptions, chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { ownerFromStaff } from '../engine/owners.js';
 import { paperHtml } from '../sync/mail.js';
@@ -26,9 +26,7 @@ import { html, options, field, chip } from './dom.js';
 
 let selected = null;
 let tab = 'work';       // work | private | pay | papers
-let search = '';
-let dept = '';          // '' = every department
-let showLeft = false;
+const filt = { search: '', position: '', department: '', rating: '', status: 'active', project: '' };   // the employee list's filters ('' = any)
 let notice = '';
 
 const TABS = [['work', 'Work information'], ['private', 'Private information'], ['pay', 'Agreement and pay'], ['papers', 'Papers'], ['projects', 'Projects'], ['access', 'Sign-in access'], ['history', 'Work history and ratings']];
@@ -51,6 +49,9 @@ export const focusOn = (id, onTab = 'work') => { selected = id; tab = onTab; mod
 
 const find = company => company.staff.find(p => p.id === selected);
 const isLink = v => /^https?:\/\//i.test(v || '');
+/** Opens the person's file in Drive: the folder link kept on their record, else a Drive search for their name. */
+const locate = p => html`<a class="btn small emp-locate" target="_blank" rel="noopener" href="${isLink(p.folder) ? p.folder : `https://drive.google.com/drive/search?q=${encodeURIComponent(p.name || '')}`}"
+  title="${isLink(p.folder) ? 'Opens the folder of ' + (p.name || 'this person') : 'Searches Google Drive for ' + (p.name || 'this person') + '. Paste their folder link under Work information to open it directly'}">Locate the file in Drive</a>`;
 const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
 const tone = id => TONES[[...String(id)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % TONES.length];
 const avatar = (p, cls = '') => (p.photo
@@ -69,11 +70,11 @@ export function render(c) {
 
 function wall(sum, c, cur) {
   const projectName = id => store.projects.find(p => p.id === id)?.name || '';
-  const depts = [...new Set(c.company.staff.map(p => p.department).filter(Boolean))].sort();
-  const text = search.trim().toLowerCase();
-  const shown = sum.rows.filter(({ p }) => (showLeft || p.status !== 'left')
-    && (!dept || p.department === dept)
-    && (!text || [p.name, p.title, p.department, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(text))));
+  const staff = c.company.staff, evals = c.company.evaluations;
+  const used = key => [...new Set(staff.map(p => (key === 'department' ? normDepartment(p[key]) : p[key])).filter(Boolean))].sort();
+  const pass = new Set(filterStaff(staff, filt, evals));
+  const shown = sum.rows.filter(({ p }) => pass.has(p));
+  const sel = (f, label, list) => html`<select data-chg="filt" data-f="${f}" data-fk="hr-f-${f}" aria-label="${label}">${options(list, filt[f])}</select>`;
   const kpi = (label, value, sub, cls = '') => html`
     <div class="kpi"><span class="kpi-label">${label}</span><strong class="${cls}">${value}</strong><span class="muted">${sub}</span></div>`;
 
@@ -87,26 +88,33 @@ function wall(sum, c, cur) {
     ${directoryNotes(c)}
     <div class="toolbar">
       <button class="btn primary" data-act="add">New employee</button>
-      <input class="search" type="search" data-chg="search" data-fk="hr-search" value="${search}" placeholder="Search name, job, department, phone" aria-label="Search employees">
-      <select data-chg="dept" data-fk="hr-dept" aria-label="Department"><option value="">All departments</option>${options(depts.map(d => [d, d]), dept || null)}</select>
-      <label class="check"><input type="checkbox" data-chg="showLeft" ${showLeft ? 'checked' : ''}> Show people who left</label>
+      <input class="search" type="search" data-chg="filt" data-f="search" data-fk="hr-search" value="${filt.search}" placeholder="Search name, job, department, phone" aria-label="Search employees">
       <span class="grow"></span>
       <span class="muted">${notice || `${shown.length} shown`}</span>
     </div>
+    <div class="toolbar wrap">
+      ${sel('position', 'Job position', [['', 'Every job position'], ...used('title').map(x => [x, x])])}
+      ${sel('department', 'Department', [['', 'Every department'], ...used('department').map(x => [x, x])])}
+      ${sel('rating', 'Rating', RATING_FILTERS)}
+      ${sel('status', 'Status', [['active', 'Working'], ['left', 'Left'], ['all', 'Working and left']])}
+      ${sel('project', 'Project', [['', 'Every project'], ...store.projects.map(x => [x.id, x.name])])}
+    </div>
 
     <section class="emp-wall">
-      ${shown.length ? shown.map(({ p, alerts }) => html`
+      ${shown.length ? shown.map(({ p, alerts }) => html`<div class="emp-item">
         <button type="button" class="emp-card ${p.status === 'left' ? 'left' : ''}" data-act="select" data-id="${p.id}">
           ${avatar(p)}
           <span class="emp-text">
             <b>${p.name || 'New employee'}</b>
             <span>${p.title || 'No job position'}</span>
-            <span class="muted">${[p.department, projectName(p.projectId)].filter(Boolean).join(' · ') || 'Head office'}</span>
+            <span class="muted">${[normDepartment(p.department), projectName(p.projectId)].filter(Boolean).join(' · ') || 'Head office'}</span>
+            ${(r => (r == null ? html`<span class="muted emp-stars">Not rated yet</span>` : html`<span class="emp-stars" title="${scaleLabel(r)}">${stars(r)} ${score(r)}</span>`))(ratingOf(p, evals))}
             ${p.email ? html`<span class="muted">${p.email}</span>` : ''}
             ${p.phone ? html`<span class="muted">${p.phone}</span>` : ''}
             <span class="emp-tags">${p.status === 'left' ? chip('Left') : ''}${alerts.length ? chip(alerts.length === 1 ? alerts[0].text : `${alerts.length} things need attention`, alerts.some(a => a.sev === 'high') ? 'high' : 'warn') : ''}</span>
           </span>
-        </button>`)
+        </button>
+        ${locate(p)}</div>`)
       : html`<p class="empty">${c.company.staff.length ? 'Nobody matches.' : 'No employees yet. Add the first one with "New employee".'}</p>`}
     </section>
     <p class="muted">Only you, the Admin, can open this page. Office and Site users cannot, and the database does not send them these records.</p>`;
@@ -276,14 +284,15 @@ function form({ p, alerts, monthly }, c) {
       <div class="grid2">
         ${text('Work mobile', 'phone', 'hr-phone')}
         ${text('Work email', 'email', 'hr-email')}
-        <label>Department <select data-chg="pick" data-f="department" data-what="department" data-fk="hr-dept-f">${chooseOptions(departmentChoices({ staff: c.company.staff, current: p.department }), p.department)}</select></label>
+        <label>Department <select data-chg="pick" data-f="department" data-what="department" data-fk="hr-dept-f">${chooseOptions(departmentChoices({ staff: c.company.staff, current: p.department }), normDepartment(p.department))}</select></label>
         <label>Job position <select data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title">${chooseGroups(positionGroups(p.title), p.title)}</select></label>
-        <label>Evaluation level <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person">${options(LEVELS, levelOf(p))}</select></label>
+        <label>Evaluation tier <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person: the tier above">${options(LEVELS, levelOf(p))}</select></label>
         <label>Manager <select data-chg="set" data-f="managerId" data-fk="hr-manager"><option value="">None</option>${options(others, p.managerId || null)}</select></label>
         <label>Division <select data-chg="division" data-fk="hr-division">${options([[INSTALLATION, 'Installation'], [TRADING, 'Trading']], divOf(p))}</select></label>
         ${divOf(p) === TRADING ? '' : html`<label>Works on <select data-chg="set" data-f="projectId" data-fk="hr-project">
           <option value="">Head office, no project</option>${options(store.projects.map(x => [x.id, x.name]), p.projectId || null)}</select></label>`}
         ${text('Work location', 'location', 'hr-loc', 'text', html`placeholder="e.g. Modjo site, Addis office"`)}
+        ${text('Personnel file folder in Drive', 'folder', 'hr-folder', 'text', html`placeholder="Paste the Google Drive link of the person's folder"`)}
         <label>Started on <input type="date" data-chg="set" data-f="started" data-fk="hr-start" value="${p.started || ''}"></label>
         ${p.status === 'left' ? html`<label>Left on <input type="date" data-chg="set" data-f="leftOn" data-fk="hr-left" value="${p.leftOn || ''}"></label>` : ''}
       </div>
@@ -467,7 +476,7 @@ export const actions = {
   },
   tab(el) { tab = el.dataset.t; },
   add(el, c) {
-    const p = { id: uid('st'), name: '', title: '', department: dept || '', projectId: '', status: 'active', started: c.today, agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp() };
+    const p = { id: uid('st'), name: '', title: '', department: filt.department || '', projectId: '', status: 'active', started: c.today, agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp() };
     store.updateCompany(co => co.staff.push(p));
     selected = p.id;
     tab = 'work';
@@ -522,14 +531,12 @@ export const changes = {
     const key = el.dataset.k;   // ranks or divisions
     const now = (u[key] || []).filter(x => x !== el.dataset.p);
     if (el.checked) now.push(el.dataset.p);
-    const order = (key === 'ranks' ? RANKS : DIVISIONS).map(([k]) => k);
+    const order = (key === 'ranks' ? TITLES : DIVISIONS).map(([k]) => k);
     store.setUser(u.email, { [key]: order.filter(k => now.includes(k)) });
   },
   sheetOpt(el) { sheetOpts[el.dataset.k] = el.checked; },
   hist(el) { const f = el.dataset.f; store.updateCompany(co => { const h = (find(co)?.history || []).find(x => x.id === el.dataset.id); if (h) h[f] = el.value.trim(); }); },
-  search(el) { search = el.value; },
-  dept(el) { dept = el.value; },
-  showLeft(el) { showLeft = el.checked; },
+  filt(el) { filt[el.dataset.f] = el.value; },
   set(el) {
     const f = el.dataset.f;
     const value = el.value.trim();

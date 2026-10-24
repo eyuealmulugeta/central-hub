@@ -48,7 +48,7 @@ export const MENUS = {
     ...company,
     { id: 'projects', label: 'Overview', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Report', icon: 'reports', tabs: ['reports', 'status'] },
-    { id: 'crew', label: 'Crew', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'attendance', 'evaluation', 'payroll'] },
+    { id: 'crew', label: 'Crew', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'attendance', 'evaluation', 'directory', 'payroll'] },
     { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'cashflow', 'income', 'expenses', 'summary'] },
     { id: 'admin', label: 'Administration', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
     settings,

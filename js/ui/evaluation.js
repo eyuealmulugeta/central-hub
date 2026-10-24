@@ -1,11 +1,11 @@
-// Evaluation: each rank rates the one below it (Site Engineer rates the crew, Project
-// Manager rates Site Engineers, General Manager rates Project Managers), 1 to 5 on four
-// pillars, plus feedback notes written on the day. What a person wrote is seen by them and
-// by the Admin only, never by the person it is about (the database enforces it too).
+// Evaluation: five tiers, each rating the one directly below it on the same project; the General Manager
+// (and the Admin) rates everybody, and nobody rates tier 1. 1 to 5 stars on four pillars, plus feedback
+// notes written on the day. What a person wrote is seen by them and by the Admin only, never by the person
+// it is about (the database enforces it too).
 
 import { store } from '../core/store.js';
 import {
-  SCALE, PILLARS, CATEGORIES, rankLabel, levelLabel, levelOf, ratableLevels, raterRank, scaleLabel,
+  SCALE, PILLARS, CATEGORIES, rankLabel, levelOf, ratableLevels, raterRank, raterTier, scaleLabel,
   checkEvaluation, checkFeedback, averages, summarise,
 } from '../engine/evaluation.js';
 import { uid, fmtFull } from '../core/util.js';
@@ -15,41 +15,52 @@ let selected = null;      // team member id
 let mode = 'rate';        // rate | note | view (history only)
 let notice = '';
 let problems = [];
+const filters = { search: '', project: '', by: '', kind: '' };   // the table of every evaluation
 
 const stars = n => '★'.repeat(Math.round(n || 0)) + '☆'.repeat(5 - Math.round(n || 0));
 const score = n => (n == null ? '—' : n.toFixed(1));
+const tierName = id => `Tier ${String(id).slice(1)}`;
 const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
 const me = () => ({ email: (store.user?.email || '').toLowerCase(), name: store.profile.name || store.user?.name || 'Admin' });
 const emailOf = m => (String(m?.contact || '').match(/[^\s,;]+@[^\s,;]+/) || [''])[0].toLowerCase();
+const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
-/** Whom this person may rate on the open project: the level below each of their ranks, never themselves. */
-function people(c) {
-  const levels = ratableLevels(store.ranks);
-  return c.ws.team.filter(m => levels.includes(levelOf(m)) && !(emailOf(m) && emailOf(m) === me().email));
+/** Whom this person may rate on the open project: the tier below theirs, never themselves, never the Admin or an owner. */
+export function ratable(team, { ranks, email, name, owners = [] }) {
+  const levels = ratableLevels(ranks);
+  const owner = owners.map(o => o.toLowerCase());
+  return team.filter(m => m.active !== false && levels.includes(levelOf(m))
+    && !(emailOf(m) && (emailOf(m) === email || owner.includes(emailOf(m))))
+    && !(name && same(m.name, name)));
 }
+const people = c => ratable(c.ws.team, { ranks: store.ranks, email: me().email, name: store.profile.name, owners: store.owners });
+
+/** Five clickable stars for one score. Drawn right to left so a chosen star lights those before it (css .stars-in). */
+const starInput = (name, label) => html`<div class="star-row"><span>${label}</span><span class="stars-in" role="radiogroup" aria-label="${label}">
+  ${[5, 4, 3, 2, 1].map(n => html`<input type="radio" id="${name}-${n}" name="${name}" value="${n}"><label for="${name}-${n}" title="${n} ${scaleLabel(n)}">★</label>`)}</span></div>`;
 
 export function render(c) {
   const ranks = store.ranks;
-  if (!ranks.length) {
+  if (!raterTier(ranks)) {
     return html`<section class="card"><h2>Evaluation</h2>
-      <p class="empty">You have not been given a rank yet. The Admin sets it under Settings, People and access (Site Engineer, Project Engineer or General Manager).</p></section>`;
+      <p class="empty">Your title does not rate anybody yet. The Admin sets it under Settings, People and access.</p></section>`;
   }
   const list = people(c);
   const person = list.find(m => m.id === selected) || null;
-  const records = c.company.evaluations.filter(r => r.projectId === c.project.id);
-  const levelNames = ratableLevels(ranks).map(levelLabel).join(' and ');
+  const all = c.company.evaluations;
+  const tiers = ratableLevels(ranks).map(tierName).join(', ');
   return html`
     <section class="card">
-      <div class="toolbar"><h2>Evaluation</h2><span class="muted">You hold: ${ranks.map(rankLabel).join(', ')}. You rate ${levelNames}.</span></div>
+      <div class="toolbar"><h2>Evaluation</h2><span class="muted">You are tier ${raterTier(ranks)} (${ranks.map(rankLabel).join(', ')}). You rate ${tiers}.</span></div>
       <p class="muted">${store.isAdmin ? 'As Admin you see every evaluation written. ' : 'You see only the evaluations you wrote. '}The person you rate never sees them.</p>
       ${notice ? html`<p class="ok">${notice}</p>` : ''}
       ${list.length ? html`<table class="table">
-        <thead><tr><th>Person</th><th>Level</th><th class="r">Latest score</th><th class="r">Feedback stars</th><th></th></tr></thead>
+        <thead><tr><th>Person</th><th>Tier</th><th class="r">Latest score</th><th class="r">Feedback stars</th><th></th></tr></thead>
         <tbody>${list.map(m => {
-          const s = summarise(records, m.id);
+          const s = summarise(all, m.id);
           return html`<tr class="${m.id === selected ? 'on' : ''}">
             <td><b>${m.name}</b> <span class="muted">${m.role || ''}</span></td>
-            <td>${levelLabel(levelOf(m))}</td>
+            <td>${tierName(levelOf(m))}</td>
             <td class="r nowrap">${s.latest ? html`${score(s.latest.overall)} <span class="muted">${scaleLabel(s.latest.overall)}</span>${s.trend != null && s.trend !== 0 ? html` ${chip(`${s.trend > 0 ? '+' : ''}${s.trend.toFixed(1)}`, s.trend > 0 ? 'ok' : 'high')}` : ''}` : html`<span class="muted">Not rated yet</span>`}</td>
             <td class="r nowrap">${s.stars == null ? html`<span class="muted">—</span>` : html`<span title="${s.notes.length} notes">${stars(s.stars)}</span>`}</td>
             <td class="r nowrap">
@@ -58,10 +69,11 @@ export function render(c) {
               <button class="btn ghost small" data-act="view" data-id="${m.id}">History</button>
             </td></tr>`;
         })}</tbody>
-      </table>` : html`<p class="empty">Nobody on this project's team is at the level you rate. Add people under Settings, This project, Team, and set their evaluation level.</p>`}
+      </table>` : html`<p class="empty">Nobody on this project's team is in the tier you rate. Add people under Settings, This project, Team, and set their tier.</p>`}
     </section>
     ${person && mode === 'rate' ? rateForm(person) : ''}${person && mode === 'note' ? noteForm(person, c) : ''}
-    ${person ? history(person, records) : ''}`;
+    ${person ? history(person, all) : ''}
+    ${everything(all)}`;
 }
 
 function problemList() {
@@ -74,11 +86,8 @@ function rateForm(m) {
     <details class="setup"><summary>The scale</summary>
       <ul class="plain">${SCALE.map(([n, name, text]) => html`<li><b>${n} ${name}</b>: ${text}</li>`)}</ul></details>
     ${problemList()}
-    <form data-form="evaluate">
-      ${PILLARS.map(p => html`
-        <h3>${p.name}</h3>
-        <div class="grid2">${p.criteria.map(([k, label]) => html`
-          <label>${label} <select name="s-${k}" required><option value="">Score…</option>${options(SCALE.map(([n, name]) => [String(n), `${n} ${name}`]), '')}</select></label>`)}</div>`)}
+    <form data-form="evaluate" class="star-form">
+      ${PILLARS.map(p => html`<h3>${p.name}</h3>${p.criteria.map(([k, label]) => starInput(`s-${k}`, label))}`)}
       <label>Comment (optional) <textarea name="comment" rows="3" placeholder="What to keep doing, what to improve"></textarea></label>
       <div class="actions left"><button class="btn primary">Save evaluation</button></div>
     </form>
@@ -89,13 +98,13 @@ function noteForm(m, c) {
   return html`<section class="card">
     <div class="toolbar"><h2>Feedback about ${m.name}</h2><button class="btn ghost small" data-act="close">Close</button></div>
     ${problemList()}
-    <form data-form="feedback">
+    <form data-form="feedback" class="star-form">
       <div class="grid2">
         <label>Date and time of the occasion <input type="datetime-local" name="at" value="${nowLocal()}" required></label>
         <label>Project <input value="${c.project.name}" disabled></label>
         <label>Occasion <select name="category" required>${options([['', 'Choose…'], ...CATEGORIES.map(x => [x, x])], '')}</select></label>
-        <label>Stars <select name="stars" required><option value="">Choose…</option>${options(SCALE.map(([n, name]) => [String(n), `${'★'.repeat(n)} ${name}`]), '')}</select></label>
       </div>
+      ${starInput('stars', 'Stars')}
       <label>Feedback <textarea name="notes" rows="4" required placeholder="What happened, and what was done well or wrong"></textarea></label>
       <p class="muted">Written by ${me().name}, ${store.ranks.map(rankLabel).join(' / ')}.</p>
       <div class="actions left"><button class="btn primary">Save feedback</button></div>
@@ -103,21 +112,55 @@ function noteForm(m, c) {
   </section>`;
 }
 
+/** One line per evaluation or feedback note, newest first. */
+export const historyRows = records => records.map(r => {
+  const a = r.type === 'evaluation' ? averages(r.scores) : null;
+  return {
+    id: r.id, when: r.type === 'evaluation' ? r.date : String(r.at || '').slice(0, 10), kind: r.type === 'evaluation' ? 'Evaluation' : r.category,
+    who: r.subjectName, project: r.projectName || '', by: r.byName || r.by, byEmail: r.by, rank: r.byRank,
+    value: a ? a.overall : r.stars, stars: !a, detail: a ? a.pillars.map(p => `${p.name} ${score(p.value)}`).join(' · ') : '', text: a ? r.comment : r.notes,
+  };
+}).sort((a, b) => b.when.localeCompare(a.when));
+
+const resultCell = r => (r.stars ? html`<span title="${scaleLabel(r.value)}">${stars(r.value)}</span>` : html`${score(r.value)} <span class="muted">${scaleLabel(r.value)}</span>`);
+
 function history(m, records) {
-  const s = summarise(records, m.id);
-  const rows = [
-    ...s.evals.map(e => ({ when: e.date, kind: 'Evaluation', by: e, text: e.comment, value: html`${score(averages(e.scores).overall)} <span class="muted">${scaleLabel(averages(e.scores).overall)}</span>`, detail: averages(e.scores).pillars.map(p => `${p.name} ${score(p.value)}`).join(' · ') })),
-    ...s.notes.map(n => ({ when: n.at.slice(0, 10), kind: n.category, by: n, text: n.notes, value: html`<span title="${scaleLabel(n.stars)}">${stars(n.stars)}</span>`, detail: '' })),
-  ].sort((a, b) => b.when.localeCompare(a.when));
+  const rows = historyRows(records.filter(r => r.subjectId === m.id || (m.personId && r.subjectPersonId === m.personId)));
   return html`<section class="card">
     <h2>History of ${m.name}</h2>
     ${rows.length ? html`<table class="table">
-      <thead><tr><th>Date</th><th>What</th><th>Score</th><th>Written by</th><th>Notes</th></tr></thead>
+      <thead><tr><th>Date</th><th>What</th><th>Result</th><th>Project</th><th>Evaluator</th><th>Comments</th></tr></thead>
       <tbody>${rows.map(r => html`<tr>
-        <td class="nowrap">${fmtFull(r.when)}</td><td>${r.kind}</td><td class="nowrap">${r.value}</td>
-        <td>${r.by.byName || r.by.by}<span class="muted note">${rankLabel(r.by.byRank)}</span></td>
+        <td class="nowrap">${fmtFull(r.when)}</td><td>${r.kind}</td><td class="nowrap">${resultCell(r)}</td><td>${r.project}</td>
+        <td>${r.by}<span class="muted note">${rankLabel(r.rank)}</span></td>
         <td>${r.detail ? html`<span class="muted">${r.detail}</span><br>` : ''}${r.text || ''}</td></tr>`)}</tbody>
     </table>` : html`<p class="empty">Nothing written about ${m.name} yet.</p>`}
+  </section>`;
+}
+
+/** Every evaluation and note that this person may see, on every project, with filters. */
+function everything(records) {
+  const rows = historyRows(records);
+  if (!rows.length) return '';
+  const pick = (list, key) => [...new Set(list.map(r => r[key]).filter(Boolean))].sort();
+  const q = filters.search.trim().toLowerCase();
+  const shown = rows.filter(r => (!q || `${r.who} ${r.text} ${r.detail}`.toLowerCase().includes(q))
+    && (!filters.project || r.project === filters.project) && (!filters.by || r.by === filters.by)
+    && (!filters.kind || (filters.kind === 'Evaluation' ? r.kind === 'Evaluation' : r.kind !== 'Evaluation')));
+  return html`<section class="card">
+    <div class="toolbar"><h2>All evaluations</h2><span class="muted">${shown.length} of ${rows.length}</span></div>
+    <div class="toolbar">
+      <input type="search" placeholder="Search a name or a word" value="${filters.search}" data-chg="filter" data-f="search" data-fk="ev-search">
+      <select data-chg="filter" data-f="project" data-fk="ev-project">${options([['', 'Every project'], ...pick(rows, 'project').map(x => [x, x])], filters.project)}</select>
+      <select data-chg="filter" data-f="by" data-fk="ev-by">${options([['', 'Every evaluator'], ...pick(rows, 'by').map(x => [x, x])], filters.by)}</select>
+      <select data-chg="filter" data-f="kind" data-fk="ev-kind">${options([['', 'Evaluations and feedback'], ['Evaluation', 'Evaluations'], ['note', 'Feedback notes']], filters.kind)}</select>
+    </div>
+    <table class="table">
+      <thead><tr><th>Date</th><th>Person</th><th>Project</th><th>What</th><th>Result</th><th>Evaluator</th><th>Comments</th></tr></thead>
+      <tbody>${shown.map(r => html`<tr>
+        <td class="nowrap">${fmtFull(r.when)}</td><td><b>${r.who}</b></td><td>${r.project}</td><td>${r.kind}</td><td class="nowrap">${resultCell(r)}</td>
+        <td>${r.by}<span class="muted note">${rankLabel(r.rank)}</span></td><td>${r.text || ''}</td></tr>`)}</tbody>
+    </table>
   </section>`;
 }
 
@@ -128,9 +171,13 @@ export const actions = {
   close() { selected = null; problems = []; },
 };
 
+export const changes = {
+  filter(el) { filters[el.dataset.f] = el.value; },
+};
+
 export const submits = {
   evaluate(fd, c) {
-    const m = c.ws.team.find(x => x.id === selected);
+    const m = people(c).find(x => x.id === selected);
     if (!m) return false;
     const scores = {};
     for (const [k, v] of fd.entries()) if (k.startsWith('s-')) scores[k.slice(2)] = +v;
@@ -145,7 +192,7 @@ export const submits = {
     mode = 'view';
   },
   feedback(fd, c) {
-    const m = c.ws.team.find(x => x.id === selected);
+    const m = people(c).find(x => x.id === selected);
     if (!m) return false;
     const rec = {
       id: uid('fb'), type: 'feedback', projectId: c.project.id, projectName: c.project.name, subjectPersonId: m.personId || '', subjectId: m.id, subjectName: m.name, subjectEmail: emailOf(m), level: levelOf(m),

@@ -6,15 +6,24 @@
 import { NATIONALITY } from './docread.js';
 
 export const ROLE_GROUPS = [
-  ['Management', ['General Manager', 'Project Engineer', 'Site Engineer', 'Site Architect']],
-  ['Supervision', ['General Foreman', 'Steel Structure Foreman']],
+  ['Management', ['General Manager', 'Project Engineer', 'Operations Lead', 'Chief Engineer', 'Site Engineer', 'Site Architect']],
+  ['Supervision', ['General Foreman', 'Steel Structure Foreman', 'HSE Officer']],
   ['Technicians', ['Container House Technician', 'Technician', 'Welder', 'Mason', 'Electrician', 'Plumber']],
-  ['Labour', ['Labourer']],
-  ['Office', ['Office Engineer', 'Coordinator', 'Accountant']],
+  ['Labour', ['Skilled Labourer', 'Semi-skilled Labourer', 'Labourer', 'Daily Labourer', 'Site Guard']],
+  ['Office', ['Accountant', 'Quantity Surveyor (QS)', 'Procurement Manager', 'Logistics Coordinator', 'Office Engineer', 'Coordinator', 'HR/Admin Assistant']],
 ];
 export const ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
 
-export const DEPARTMENTS = ['Management', 'Engineering', 'Site', 'Finance and accounts', 'Administration', 'Procurement and logistics', 'Sales'];
+export const DEPARTMENTS = ['Executive & General Management', 'Project Management & Site Supervision', 'Engineering & Technical Services',
+  'Procurement, Supply Chain & Logistics', 'Finance, Accounting & Administration', 'Commercial, Sales & International Trade'];
+/** The departments of before v0.13.0, and the one each became. A record keeps its old word until it is changed; it is read as the new one. */
+const OLD_DEPARTMENTS = {
+  management: DEPARTMENTS[0], site: DEPARTMENTS[1], engineering: DEPARTMENTS[2], 'procurement and logistics': DEPARTMENTS[3],
+  'finance and accounts': DEPARTMENTS[4], administration: DEPARTMENTS[4], sales: DEPARTMENTS[5],
+};
+export const normDepartment = d => OLD_DEPARTMENTS[String(d || '').trim().toLowerCase()] || String(d || '').trim();
+/** Departments whose people work on site (the others are office people). */
+export const SITE_DEPARTMENTS = [DEPARTMENTS[1], DEPARTMENTS[2]];
 
 const unique = list => [...new Set(list.map(x => String(x || '').trim()).filter(Boolean))];
 
@@ -33,4 +42,4 @@ export const nationalityChoices = ({ used = [], current = '' } = {}) =>
 
 /** Departments: the fixed ones, then those already used by the staff, then `current`. */
 export const departmentChoices = ({ staff = [], current = '' } = {}) =>
-  unique([...DEPARTMENTS, ...staff.map(p => p.department), current]);
+  unique([...DEPARTMENTS, ...staff.map(p => normDepartment(p.department)), normDepartment(current)]);

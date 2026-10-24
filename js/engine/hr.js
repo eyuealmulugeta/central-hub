@@ -3,10 +3,12 @@
 
 import { toDay, sum } from '../core/util.js';
 import { convert } from './pricing.js';
+import { ratingsOf } from './evaluation.js';
+import { normDepartment } from './positions.js';
 
 export const AGREEMENT_TYPES = [
   ['permanent', 'Permanent employment'], ['fixed', 'Fixed term'], ['probation', 'Probation'],
-  ['daily', 'Daily labour'], ['consultant', 'Consultant or freelance'], ['intern', 'Internship'],
+  ['contract', 'Contract-based'], ['daily', 'Daily wage'], ['consultant', 'Consultant or freelance'], ['intern', 'Internship'],
 ];
 export const agreementLabel = id => AGREEMENT_TYPES.find(([k]) => k === id)?.[1] || 'No agreement recorded';
 export const PAY_PERIODS = [['month', 'per month'], ['day', 'per day'], ['hour', 'per hour']];
@@ -66,3 +68,23 @@ export function hrSummary(staff, fx, today, currency) {
 
 /** For the number beside HR in the sidebar. */
 export const alertCount = (staff, today) => sum(staff, p => staffAlerts(p, today).length);
+
+/** A person's rating for the employee list: the average of their evaluations, else of their feedback stars; null if never rated. */
+export const ratingOf = (person, evaluations = []) => { const r = ratingsOf(evaluations, person); return r.overall ?? r.stars ?? null; };
+export const RATING_FILTERS = [['', 'Any rating'], ['4', '4 stars and up'], ['3', '3 to 4 stars'], ['low', 'Below 3 stars'], ['none', 'Not rated yet']];
+const RATING_TESTS = { 4: n => n != null && n >= 4, 3: n => n != null && n >= 3 && n < 4, low: n => n != null && n < 3, none: n => n == null };
+
+/**
+ * The employees the Admin's filters let through. f: { search, position, department, rating, status ('active' | 'left' | 'all'), project }.
+ * Departments are compared in their v0.13.0 names, so an old record matches its new department.
+ */
+export function filterStaff(people, f = {}, evaluations = []) {
+  const text = String(f.search || '').trim().toLowerCase();
+  const status = f.status || 'active';
+  return people.filter(p => (status === 'all' || (status === 'left' ? p.status === 'left' : p.status !== 'left'))
+    && (!f.position || p.title === f.position)
+    && (!f.department || normDepartment(p.department) === f.department)
+    && (!f.project || p.projectId === f.project || (p.assignments || []).some(a => a.active !== false && a.projectId === f.project))
+    && (!f.rating || RATING_TESTS[f.rating](ratingOf(p, evaluations)))
+    && (!text || [p.name, p.title, p.department, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(text))));
+}

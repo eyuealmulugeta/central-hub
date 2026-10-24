@@ -6,6 +6,7 @@
 import { statusOf, activitiesOf, cleanActivities, cleanText, cleanLink, cleanEmail, LIMITS } from '../engine/deployment.js';
 import { targetFor } from '../engine/calendar.js';
 import { toDay, fromDay } from '../core/util.js';
+import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { fieldProjectOf, problemsOf, differences } from '../engine/fieldproject.js';
 
 const KEY = 'sf:fieldreport';
@@ -119,8 +120,8 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
     if (sameVersion && old.field.v === FIELD_SCHEMA) {
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
-      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length) {
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '' } });
+      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || (meta.folderId && old.field.folderId !== meta.folderId)) {
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', folderId: meta.folderId || old.field.folderId || '' } });
       }
       continue;
     }
@@ -134,7 +135,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8 } = {}) {
       // every entry the Field Report app collects, kept as the site wrote it
       field: {
         v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted', pdfId: meta.pdfId || '',
-        pdf: meta.pdf || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '',
+        pdf: meta.pdf || '', folderId: meta.folderId || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '',
         position: meta.position || '', location: meta.location || '', activities: meta.activities || [],
         hours: meta.hours || null, tempC: meta.weather?.tempC ?? null, ground: meta.weather?.ground || '',
         delays: meta.delays || [],
@@ -181,13 +182,12 @@ export const REQUEST_CATEGORIES = ['Material', 'Equipment', 'Manpower', 'Informa
  * the open tasks with their units, the payment milestones, the crew by name, the trades
  * and the equipment seen so far. Built from the open project; sent with sendSetup.
  */
-/** Departments and titles of people who work in the office: they are left out of the site roll in Field Report. */
-const OFFICE_DEPTS = ['Management', 'Finance and accounts', 'Administration', 'Procurement and logistics', 'Sales'];
-const OFFICE_ROLE = /\b(admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|cashier|secretary|human resources|hr)\b/i;
+/** Titles of people who work in the office: they are left out of the site roll in Field Report. */
+const OFFICE_ROLE = /\b(admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|procurement|logistics|cashier|secretary|human resources|hr)\b/i;
 /** Whether a project's team member works on site: their HR department decides; without one, their role. Pure. */
 export function onSite(member, staff = []) {
   const person = member.personId ? staff.find(p => p.id === member.personId) : null;
-  if (person && person.department) return !OFFICE_DEPTS.includes(person.department);   // the HR department decides when there is one
+  if (person && person.department) return SITE_DEPARTMENTS.includes(normDepartment(person.department));   // the HR department decides when there is one
   return !OFFICE_ROLE.test(String(member.role || ''));
 }
 

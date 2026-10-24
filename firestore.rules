@@ -9,10 +9,14 @@ rules_version = '2';
 //   Office  every project, but only the pages the Admin ticked for them (users/<email>.pages;
 //           all pages when the Admin has not chosen). Money records need a money page
 //           (Costs, Documents or Finance). Issuing a client report needs the approver tick.
-//   Site    only the projects assigned to them: reads the schedule and site data,
-//           writes daily reports and follow-ups. No costs, invoices or billing terms.
+//   Site    only the active projects assigned to them: reads the schedule and site data,
+//           writes daily reports and follow-ups. Since v0.15.0 the Admin ticks pages for Site people
+//           too: a money page ticked lets them read money records (and write costs or draft documents).
 //
-// The section lists below must match SITE_SECTIONS in js/core/store.js and MONEY_SECTIONS in js/core/access.js.
+//   Pay     day rates (crewRates), trade rates (laborRates), pay runs, payments and their labour costs (paycosts):
+//           the Admin, and Office people with Costs or Payments ticked. Never Site, whatever is ticked (0.18.0).
+//
+// The section lists below must match SITE_SECTIONS in js/core/store.js and MONEY_SECTIONS and PAY_SECTIONS in js/core/access.js.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -42,29 +46,52 @@ service cloud.firestore {
     }
     // Office people are assigned to projects like Site people: they open only the projects in their list (several allowed).
     function officeOn(pid) { return isOffice() && pid in user().get('projects', []); }
-    // the pages an Office user may open; all of them until the Admin chooses
+    // The pages a person may open. Keep in step with pagesOf in js/core/access.js. A record the Admin has ticked since
+    // v0.15.0 holds them all (pagesV 2). An older one: a Site person had the site pages; an Office person the pages
+    // ticked (all until chosen) plus Meetings, Contacts and the staff directory, which came with the role.
     function pages() {
-      return user().get('pages', ['dashboard', 'reports', 'schedule', 'ledger', 'estimator', 'docs', 'requests', 'cashflow', 'trade', 'finance', 'contracts']);
+      let u = user();
+      return u.get('pagesV', 0) == 2 ? u.get('pages', [])
+        : u.role == 'site' ? ['dashboard', 'reports', 'schedule', 'requests', 'directory']
+        : u.get('pages', ['dashboard', 'reports', 'schedule', 'ledger', 'estimator', 'docs', 'requests', 'cashflow', 'trade', 'finance', 'contracts'])
+            .concat(['meetings', 'contacts', 'directory']);
     }
     function officeWith(list) { return isOffice() && pages().hasAny(list); }
+    function isSite() { return hasUser() && user().role == 'site'; }
+    // an Office or Site person with one of these pages ticked
+    function staffWith(list) { return (isOffice() || isSite()) && pages().hasAny(list); }
+    function moneyPages() { return ['ledger', 'cashflow', 'payments', 'docs', 'finance']; }
     // An Office user works in one division (users/<email>.divisions): a record of a divided section is theirs only
     // when it carries that division. Every record says its division since 1D (the first Admin's Central Hub stamped the old ones).
     function mine(d) { return d.get('division', '') in user().get('divisions', []); }
     // a record changed by an Office user: it is theirs before (or new) and stays theirs after
     function keptMine() { return (resource == null || mine(resource.data)) && mine(request.resource.data); }
-    function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates']; }
-    // billing terms are settings of the contract: only the Admin changes them
-    function isSetting(section) { return section in ['payStages', 'measure', 'billRates']; }
+    function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates']; }
+    // pay of named people: read by Office only with Costs or Payments ticked, never by Site
+    function isPay(section) { return section in ['payruns', 'payments', 'paycosts', 'crewRates', 'laborRates']; }
+    function officeSeesPay(section) { return !isPay(section) || officeWith(['ledger', 'payments']); }
+    // billing terms and rates are settings: only the Admin changes them
+    function isSetting(section) { return section in ['payStages', 'measure', 'billRates', 'crewRates', 'laborRates']; }
     // may this Office user see the records of a project section at all?
-    function officeReads(section) { return isOffice() && (!isMoney(section) || officeWith(['ledger', 'cashflow', 'docs', 'finance'])); }
+    function officeReads(section) { return isOffice() && (!isMoney(section) || officeWith(moneyPages())) && officeSeesPay(section); }
     function officeWrites(section) { return officeReads(section) && !isSetting(section); }
-    function officeReadsIn(pid, section) { return officeOn(pid) && (!isMoney(section) || officeWith(['ledger', 'cashflow', 'docs', 'finance'])); }
-    function officeWritesIn(pid, section) { return officeReadsIn(pid, section) && !isSetting(section); }
-    // Evaluations. Each rank rates the one below it: Site Engineer rates crew, Project Manager rates
-    // Site Engineers, General Manager rates Project Managers. Keep in step with RATES in js/engine/evaluation.js.
+    function officeReadsIn(pid, section) { return officeOn(pid) && (!isMoney(section) || officeWith(moneyPages())) && officeSeesPay(section); }
+    // crew pay (Payments) is written only by those with the Payments page ticked
+    function officeWritesIn(pid, section) { return officeReadsIn(pid, section) && !isSetting(section) && (!(section in ['payruns', 'payments', 'paycosts']) || officeWith(['payments'])); }
+    // Evaluations. Five tiers; each rates the one directly below it, and tier 1 (General Manager) rates
+    // everybody. The tier comes from the title. Keep in step with TITLES in js/engine/titles.js.
     function ranks() { return hasUser() ? user().get('ranks', []) : []; }
+    function myTier() {
+      return ranks().hasAny(['general_manager']) ? 1
+        : ranks().hasAny(['project_manager', 'operations_lead', 'chief_engineer', 'accountant', 'hse_officer']) ? 2
+        : ranks().hasAny(['site_engineer', 'qs', 'procurement_manager', 'logistics_coordinator', 'office_engineer', 'coordinator']) ? 3
+        : ranks().hasAny(['technician', 'foreman', 'hr_assistant']) ? 4 : 9;
+    }
     function mayRate(level) {
-      return (level == 'crew' && 'site_engineer' in ranks())
+      return (level in ['t2', 't3', 't4', 't5'] && myTier() == 1)
+        || (level == 't3' && myTier() == 2) || (level == 't4' && myTier() == 3) || (level == 't5' && myTier() == 4)
+        // records written before the tiers
+        || (level == 'crew' && 'site_engineer' in ranks())
         || (level == 'site_engineer' && 'project_manager' in ranks())
         || (level == 'project_manager' && 'general_manager' in ranks());
     }
@@ -140,9 +167,9 @@ service cloud.firestore {
     // their long random id: that is the link a signer is sent, and signers do not sign in.
     // A signature (signed) is created once, under the signer's own secret key, while the request
     // is open, and is never changed. The keys (signkeys) are for the office only.
-    function signStaff() { return isOwner() || officeWith(['contracts']); }
-    function signStaffOf(d) { return isOwner() || (officeWith(['contracts']) && mine(d)); }
-    function signWriter() { return isOwner() || (officeWith(['contracts']) && keptMine()); }
+    function signStaff() { return isOwner() || staffWith(['contracts']); }
+    function signStaffOf(d) { return isOwner() || (staffWith(['contracts']) && mine(d)); }
+    function signWriter() { return isOwner() || (staffWith(['contracts']) && keptMine()); }
     match /company/main/signs/{id} {
       allow get: if true;
       allow list: if seesAll() || signStaffOf(resource.data);
@@ -180,7 +207,7 @@ service cloud.firestore {
       allow create: if id.matches('^[0-9]{8}T[0-9]{4}Z$')
         && request.resource.data.keys().hasOnly(['id', 'start', 'minutes'])
         && request.resource.data.id == id;
-      allow delete: if isOwner() || isOffice();
+      allow delete: if isOwner() || staffWith(['meetings']);
     }
     match /company/main/bookings/{id} {
       allow create: if request.resource.data.keys().hasOnly(['id', 'start', 'minutes', 'step', 'type', 'typeName', 'where', 'name', 'company', 'email', 'phone', 'note', 'at', 'status', 'division'])
@@ -190,8 +217,8 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
         && request.resource.data.email is string && request.resource.data.email.size() <= 160
         && request.resource.data.note is string && request.resource.data.note.size() <= 1000;
-      allow read: if seesAll() || (isOffice() && mine(resource.data));
-      allow update: if isOwner() || (isOffice() && mine(resource.data) && mine(request.resource.data));
+      allow read: if seesAll() || (staffWith(['meetings']) && mine(resource.data));
+      allow update: if isOwner() || (staffWith(['meetings']) && mine(resource.data) && mine(request.resource.data));
     }
 
     // Evaluations and feedback notes: read only by the person who wrote them and by the Admin, never by the
@@ -204,18 +231,37 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
-    // Discuss messages: everyone with access reads them and writes their own; nobody edits one afterwards.
+    // Discuss messages: everyone with access reads them and writes their own. The sender may correct the text within
+    // a minute of sending (the app allows 30 seconds; the rest is for a slow connection), and take a message back at
+    // any time, which empties it and marks it deleted. The Admin may take back anyone's. Nothing else changes.
+    function messageKept() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'deleted', 'deletedAt'])
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+    }
+    function messageTakenBack() { return request.resource.data.get('deleted', false) == true && request.resource.data.text == ''; }
+    function messageCorrected() {
+      return request.resource.data.get('deleted', false) == false && resource.data.get('deleted', false) == false
+        && request.time.toMillis() < resource.data.get('sentMs', 0) + 60000;
+    }
+    match /company/main/messages/{record} {
+      allow update: if messageKept() && ((resource.data.by == me() && (messageTakenBack() || messageCorrected()))
+        || (isOwner() && messageTakenBack()));
+    }
+
     match /company/main/{section}/{record} {
       allow read: if seesAll()
         || (section == 'messages' && hasUser())
-        || (section in ['shipments', 'sales'] && officeWith(['trade', 'finance']) && mine(resource.data))
-        || (section == 'contracts' && officeWith(['contracts']) && mine(resource.data))
-        || (section == 'contacts' && isOffice() && mine(resource.data));
+        || (section in ['shipments', 'sales'] && staffWith(['trade', 'finance']) && mine(resource.data))
+        || (section == 'contracts' && staffWith(['contracts']) && mine(resource.data))
+        || (section == 'contacts' && staffWith(['contacts']) && mine(resource.data))
+        || (section == 'meetings' && staffWith(['meetings']) && mine(resource.data));
       allow create: if section == 'messages' && (isOwner() || hasUser()) && request.resource.data.by == me();
       allow create, update: if (isOwner() && section != 'messages')
-        || (section in ['shipments', 'sales'] && officeWith(['trade']) && keptMine())
-        || (section == 'contracts' && officeWith(['contracts']) && keptMine())
-        || (section == 'contacts' && isOffice() && keptMine());
+        || (section in ['shipments', 'sales'] && staffWith(['trade']) && keptMine())
+        || (section == 'contracts' && staffWith(['contracts']) && keptMine())
+        || (section == 'contacts' && staffWith(['contacts']) && keptMine())
+        // meetings with colleagues: anyone of the division with Meetings ticked schedules one; only its organiser changes it
+        || (section == 'meetings' && staffWith(['meetings']) && keptMine() && request.resource.data.by == me() && (resource == null || resource.data.by == me()));
       allow delete: if isOwner();
     }
 
@@ -230,15 +276,22 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
-          || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'laborRates', 'assemblies', 'procurement', 'requests']);
+          || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance'])
+          // a Site person with a money page ticked reads the money records of their projects, never pay
+          || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
         allow create: if isOwner()
           || (officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
+          // with Costs ticked a Site person enters costs; with Invoices and documents, drafts (never issued)
+          || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
+          || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data))
           // a Site user may only raise a request, as one waiting for approval
           || (isSiteOn(pid) && section == 'requests' && request.resource.data.status == 'requested');
         allow update: if isOwner()
           || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
+          || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
+          || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data) && !isIssued(resource.data))
           // ...and change or withdraw it only while nobody has answered it
           || (isSiteOn(pid) && section == 'requests' && resource.data.status == 'requested' && request.resource.data.status in ['requested', 'cancelled']);
         // nobody but the Admin deletes a record

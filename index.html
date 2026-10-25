@@ -7,7 +7,7 @@
   <title>Amistad Prefab Central Hub</title>
   <link rel="icon" type="image/png" href="assets/logo.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#0a3440">
+  <meta name="theme-color" content="#0b4f9c">
   <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -15,7 +15,8 @@
     <a class="brand" href="#home" title="Home"><span class="logo"><img src="assets/logo.png" alt=""></span><span class="brand-name"><small>Amistad Prefab</small>Central Hub</span></a>
     <div class="app-version" id="app-version" title="Version of Central Hub"></div>
     <div class="division" id="division" role="group" aria-label="Division" hidden></div>
-    <label class="side-project" id="side-project" hidden><span>Select project</span><select id="side-project-select" aria-label="Select project"></select></label>
+    <label class="side-project" id="side-project" hidden><span>Project</span><select id="side-project-select" aria-label="Select project"></select></label>
+    <div class="side-health" id="side-health" hidden></div>
     <nav class="nav" id="nav-hubs" aria-label="Sections"></nav>
     <button class="side-link" id="btn-new-project" type="button"><span>+ New project</span></button>
     <span class="grow"></span>
@@ -42,6 +43,7 @@
   <nav id="tabs" class="tabs" aria-label="Pages of this section"></nav>
 
   <main id="view" class="view"></main>
+  <nav id="phone-tabs" class="phone-tabs" aria-label="Main"></nav>
 
   <dialog id="dlg-project" class="wizard-dialog">
     <div id="wizard"></div>

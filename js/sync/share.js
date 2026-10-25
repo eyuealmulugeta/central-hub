@@ -155,9 +155,11 @@ export async function makePdf(paper, name) {
     });
     const pdf = new JsPdf({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
     // the mark's top point is pulled up to the line under the letterhead of this sheet (the same place on every page)
-    const head = element.querySelector('.p-head');
+    const head = element.querySelector('.p-head, .dsr-head');
     const line = head ? (head.getBoundingClientRect().bottom - element.getBoundingClientRect().top) * scale : null;
-    pageBreaks(total, unbreakable(element)).forEach(([from, to], i) => {
+    const pieces = pageBreaks(total, unbreakable(element));
+    const foot = paper.dataset?.foot || '';   // the house documents' footer (v0.22.1): on every page, with its number
+    pieces.forEach(([from, to], i) => {
       // every page is a whole A4 page: the text of this piece of the sheet at the top, the watermark across the page, behind the text
       const page = document.createElement('canvas');
       page.width = SHEET_WIDTH * scale;
@@ -170,6 +172,12 @@ export async function makePdf(paper, name) {
       stamp(ctx, page.width, page.height, mark, undefined, line);
       if (i) pdf.addPage();
       pdf.addImage(page.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297);
+      if (foot) {
+        pdf.setFontSize(7);
+        pdf.setTextColor(85, 85, 85);
+        pdf.text(foot.length > 140 ? `${foot.slice(0, 139)}…` : foot, 12, 292);
+        pdf.text(`Page ${i + 1} of ${pieces.length}`, 198, 292, { align: 'right' });
+      }
     });
     return new File([pdf.output('blob')], `${clean(name)}.pdf`, { type: 'application/pdf' });
   } finally {

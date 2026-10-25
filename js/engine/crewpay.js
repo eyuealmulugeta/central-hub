@@ -14,16 +14,27 @@ export const runId = from => `run_${from}`;
 const r2 = v => Math.round((+v || 0) * 100) / 100;
 const daysInMonth = iso => { const [y, m] = iso.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
 
+/** The positions paid by the month unless their HR agreement says otherwise (Settings, Company). Everyone else is paid per day. */
+export const MONTHLY_ROLES = ['Project Engineer', 'Site Engineer'];
+export const monthlyRolesOf = g => (Array.isArray(g?.monthlyRoles) ? g.monthlyRoles : MONTHLY_ROLES);
+const norm = v => String(v || '').trim().toLowerCase();
+
 /**
  * How a person on the sheet is paid: { per: 'day'|'month', wage, currency, from } where `from` says where the wage
  * was found: the person's place on this project (Crew, Employee data, Projects), their HR agreement, or the trade rates.
+ * A position paid monthly with no monthly wage in the agreement comes back with from 'missing' and wage 0: it is
+ * flagged, never quietly paid per day. An agreement that says "per day" wins over the position.
  */
-export function wageOf(row, { ws, project, staff = [] }) {
+export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_ROLES }) {
   const member = ws.team.find(m => m.id === row.id) || ws.team.find(m => keyOf({ name: m.name }) === row.key);
   const person = member?.personId ? staff.find(p => p.id === member.personId) : null;
   const a = person?.agreement || {};
   const currency = a.currency || project.currency;
   if (a.payPer === 'month' && +a.pay > 0) return { per: 'month', wage: +a.pay, currency, from: 'agreement' };
+  const role = norm(member?.role || row.role || person?.title);
+  if (a.payPer !== 'day' && role && monthlyRoles.some(r => norm(r) === role)) {
+    return +a.pay > 0 && !a.payPer ? { per: 'month', wage: +a.pay, currency, from: 'agreement' } : { per: 'month', wage: 0, currency, from: 'missing' };
+  }
   const day = member ? dayRateOf(ws, member.id) : 0;
   if (day > 0) return { per: 'day', wage: day, currency: project.currency, from: 'project' };
   if (a.payPer === 'day' && +a.pay > 0) return { per: 'day', wage: +a.pay, currency, from: 'agreement' };
@@ -152,3 +163,36 @@ export function csvRows(lines, period) {
     ...lines.map(l => [period.from, period.to, l.name, l.role, l.per === 'month' ? 'monthly' : 'daily', l.wage, l.currency, l.present, l.ot, l.earned, l.adjust, l.brought, l.due, l.paid, l.paidToDate, l.outstanding])];
 }
 
+
+/**
+ * The printed pay sheets (v0.21.2): the daily crew's site pay sheet and the monthly staff's own page, so the crew's
+ * cash sheet never shows a salary.
+ */
+export const splitLines = lines => ({ crew: lines.filter(l => l.per !== 'month'), staff: lines.filter(l => l.per === 'month') });
+
+/**
+ * Labour cost of a period by trade or position and pay type: people, man-days, overtime hours and cost (earned plus
+ * adjustments), each currency apart. `share` is each group's part of the total when everything is in one currency.
+ * @returns { groups: [{ trade, per, people, days, ot, cost: { [currency]: amount }, share }], total: { [currency]: amount } }
+ */
+export function labourByTrade(lines) {
+  const groups = new Map();
+  const total = {};
+  for (const l of lines) {
+    const per = l.per === 'month' ? 'month' : 'day';
+    const trade = String(l.role || '').trim() || 'No trade';
+    const k = `${per}|${trade.toLowerCase()}`;
+    if (!groups.has(k)) groups.set(k, { trade, per, people: 0, days: 0, ot: 0, cost: {} });
+    const g = groups.get(k);
+    const cost = r2((+l.earned || 0) + (+l.adjust || 0));
+    g.people += 1; g.days += +l.present || 0; g.ot += +l.ot || 0;
+    g.cost[l.currency] = r2((g.cost[l.currency] || 0) + cost);
+    total[l.currency] = r2((total[l.currency] || 0) + cost);
+  }
+  const one = Object.keys(total).length === 1 ? Object.keys(total)[0] : null;
+  const sum = one ? total[one] : 0;
+  const out = [...groups.values()]
+    .map(g => ({ ...g, share: one && sum > 0 ? (g.cost[one] || 0) / sum * 100 : null }))
+    .sort((a, b) => (a.per === b.per ? a.trade.localeCompare(b.trade) : a.per === 'month' ? -1 : 1));
+  return { groups: out, total };
+}

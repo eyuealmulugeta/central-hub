@@ -571,10 +571,11 @@ export const store = {
     if (!api || !seesPay(role, pages) || !p || loading) return;
     const alerts = (summary.alerts || []).join('\n');
     const cash = m => (m ? `${m.invoiced}|${m.received}|${m.spent}|${m.owed}|${m.currency}` : '');
-    if (p.summary?.progress === summary.progress && p.summary?.slip === summary.slip && p.summary?.basis === summary.basis && cash(p.summary?.money) === cash(summary.money) && (p.summary?.alerts || []).join('\n') === alerts) return;
+    if (p.summary?.progress === summary.progress && p.summary?.slip === summary.slip && p.summary?.basis === summary.basis && cash(p.summary?.money) === cash(summary.money) && (p.summary?.alerts || []).join('\n') === alerts
+      && (p.summary?.waiting || 0) === (summary.waiting || 0) && (p.summary?.lastReport || '') === (summary.lastReport || '')) return;
     // Two people whose computers are on different dates work out different figures and would
     // keep overwriting each other, so the same figures are not written again straight away.
-    const key = `${summary.progress}|${summary.basis}|${summary.slip}|${cash(summary.money)}|${alerts}`;
+    const key = `${summary.progress}|${summary.basis}|${summary.slip}|${cash(summary.money)}|${alerts}|${summary.waiting || 0}|${summary.lastReport || ''}`;
     const last = sentSummary.get(p.id);
     if (last?.key === key && Date.now() - last.at < SUMMARY_REPEAT_MS) return;
     sentSummary.set(p.id, { key, at: Date.now() });

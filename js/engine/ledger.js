@@ -19,7 +19,8 @@ export function laborRows(ws, project) {
     return m.count * rate + (m.ot || 0) * rate / hoursPerDay * otMultiplier;
   };
   return ws.reports
-    .filter(r => r.manpower?.length)
+    // a Field Report report adds its labour cost once approved (v0.20.0)
+    .filter(r => r.manpower?.length && r.review !== 'pending')
     .map(r => ({
       id: 'auto-' + r.id, date: r.date, type: 'expense', category: 'labor', auto: true, ...(estimate ? { estimate: true } : {}),
       description: `Site labour, ${sum(r.manpower, m => m.count)} on site (from daily report)`,

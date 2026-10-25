@@ -59,10 +59,23 @@ export const fixId = (date, key) => `af_${date}_${key.replace(/[^a-z0-9]+/gi, '-
 export const liveFixes = fixes => (fixes || []).filter(f => !f.undone);
 
 /**
- * The daily reports with the office's corrections applied: a mark changed, added or cleared (state 'none').
- * A day with corrections but no report gets a stand-in report that only carries the attendance.
+ * Reports that count for attendance, pay and labour cost (v0.20.0): a Field Report report counts once it is approved
+ * in Central Hub; while it waits for approval (or was sent back) it does not. Reports typed in Central Hub count.
  */
-export function withFixes(reports, fixes) {
+export const counts = r => r.review !== 'pending';
+export const waiting = (reports, p) => (reports || []).filter(r => !counts(r) && (!p || (r.date >= p.from && r.date <= p.to))).length;
+/** The line shown on the attendance and pay pages while reports of the period wait for approval, or ''. */
+export const waitingNote = (reports, p) => {
+  const n = waiting(reports, p);
+  return n ? `${n} daily report${n === 1 ? '' : 's'} of this period ${n === 1 ? 'waits' : 'wait'} for approval and ${n === 1 ? 'is' : 'are'} not counted yet. Approve ${n === 1 ? 'it' : 'them'} under Daily reports.` : '';
+};
+
+/**
+ * The daily reports that count, with the office's corrections applied: a mark changed, added or cleared (state 'none').
+ * A day with corrections but no counted report gets a stand-in report that only carries the attendance.
+ */
+export function withFixes(all, fixes) {
+  const reports = (all || []).filter(counts);
   const live = liveFixes(fixes);
   if (!live.length) return reports;
   const byDate = new Map();
@@ -128,6 +141,28 @@ export function register(project, ws, period, crew = []) {
   for (const f of liveFixes(ws.attendance)) if (f.state === 'none' && f.date >= from && f.date <= to) { const p = people.get(f.key); if (p && !p.cells[f.date]) p.cells[f.date] = { mark: '', state: 'none', ot: 0, fixed: true }; }
   const rows = [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
   return { days, off, rows, reportedDays: reportedDays.size, heads };
+}
+
+/**
+ * The rows of the sheet in the order it prints (v0.21.0): the monthly-paid staff first, then the daily crew trade by
+ * trade, each group with its totals. `perOf(row)` says 'month' or 'day'. Groups with nobody are left out.
+ */
+export function groupRows(rows, perOf) {
+  const totals = list => ({
+    present: list.reduce((s, x) => s + x.present, 0), absent: list.reduce((s, x) => s + x.absent, 0), sick: list.reduce((s, x) => s + x.sick, 0),
+    leave: list.reduce((s, x) => s + x.leave, 0), ot: list.reduce((s, x) => s + x.ot, 0),
+  });
+  const monthly = rows.filter(r => perOf(r) === 'month');
+  const trades = new Map();
+  for (const r of rows.filter(x => perOf(x) !== 'month')) {
+    const t = r.role || 'Other';
+    if (!trades.has(t)) trades.set(t, []);
+    trades.get(t).push(r);
+  }
+  return [
+    { title: 'Monthly staff', per: 'month', rows: monthly },
+    ...[...trades].sort(([a], [b]) => a.localeCompare(b)).map(([t, list]) => ({ title: `Daily crew · ${t}`, per: 'day', rows: list })),
+  ].filter(g => g.rows.length).map(g => ({ ...g, totals: totals(g.rows) }));
 }
 
 /** What a day shows for a person before the office changes it: the mark from the reports (with earlier corrections). */

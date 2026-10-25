@@ -236,7 +236,8 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
 export const SETUP_VERSION = 1;
 export const DELAY_CAUSES = ['Weather', 'Material not on site', 'Equipment', 'Manpower', 'Client instruction or approval', 'Drawings or information', 'Access to the work area', 'Other'];
 export const DELAY_PARTIES = ['Client', 'Supplier', 'Weather', 'Amistad', 'Other'];
-export const REQUEST_CATEGORIES = ['Material', 'Equipment', 'Manpower', 'Information', 'Payment', 'Other'];
+/** The owner's request types (25 Oct 2026); Field Report gets them with the next Send lists. */
+export const REQUEST_CATEGORIES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Other'];
 
 /**
  * The lists Field Report needs so the site picks from them and does not type free text:

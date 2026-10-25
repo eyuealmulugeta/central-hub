@@ -57,7 +57,7 @@ export function convertProject(project, ws, fx, on) {
   if (foreign) {
     const was = {};
     p = { ...project, currency: 'USD' };
-    for (const k of ['budget', 'contractValue']) if (typeof project[k] === 'number') { was[k] = project[k]; p[k] = round2(convert(project[k], from, 'USD', fx)); }
+    for (const k of ['budget', 'labourBudget', 'contractValue']) if (typeof project[k] === 'number') { was[k] = project[k]; p[k] = round2(convert(project[k], from, 'USD', fx)); }
     p.fxFrom = noteOf(from, fx, on, was);
     changes.push(`Project ${project.name}: ${from} to USD`);
   }

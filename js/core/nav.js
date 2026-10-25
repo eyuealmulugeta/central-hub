@@ -1,6 +1,6 @@
 // The menu. Two divisions, Installation and Trading, each with its own sections. In Installation the sections
-// work on the open project (Overview, Report, Crew, Finance, Administration); in Trading they cover buying,
-// shipping and selling. A section is a row of pages along the top.
+// work on the open project (Project, Reports, People, Money, Documents); in Trading they cover buying,
+// shipping and selling. A section is one row of pages along the top.
 //
 // A page id normally names one screen. An ALIAS is a second way into a screen that is already there, opened
 // with a preset (for example Invoices is the documents screen showing only invoices), so a screen can appear
@@ -35,33 +35,38 @@ export const baseOf = page => ALIASES[page]?.view || page;
 export const switchOf = page => ALIASES[page]?.switch || baseOf(page);
 export const resolve = page => REDIRECT[page] || page;
 
-const company = [
-  { id: 'home', label: 'Home', icon: 'home', tabs: ['home'] },
-  { id: 'discuss', label: 'Discuss', icon: 'discuss', tabs: ['discuss'] },
-  { id: 'meetings', label: 'Meetings', icon: 'meetings', tabs: ['meetings'] },
+// v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
+// project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
+const today = { id: 'home', label: 'Today', icon: 'home', tabs: ['home'] };
+const team = [
+  { id: 'discuss', label: 'Discuss', icon: 'discuss', tabs: ['discuss'], team: true },
+  { id: 'meetings', label: 'Meetings', icon: 'meetings', tabs: ['meetings'], team: true },
+  { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['apps', 'prices', 'access', 'catalog', 'company', 'links'], team: true },
 ];
-const settings = { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['apps', 'prices', 'access', 'catalog', 'company', 'links'] };
 
 export const MENUS = {
-  // Login > Division > Projects (the open project) > Report, Crew, Finance, Administration
+  // Today > the open project: Project, Reports, People, Money, Documents > Team
   installation: [
-    ...company,
-    { id: 'projects', label: 'Overview', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
-    { id: 'report', label: 'Report', icon: 'reports', tabs: ['reports', 'status'] },
-    { id: 'crew', label: 'Crew', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'attendance', 'evaluation', 'directory', 'payroll'] },
-    { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'cashflow', 'payments', 'income', 'expenses', 'summary'] },
-    { id: 'admin', label: 'Administration', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
-    settings,
+    today,
+    { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
+    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'evaluation', 'directory', 'payroll'] },
+    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'cashflow', 'income', 'expenses', 'summary'] },
+    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
+    ...team,
   ],
   trading: [
-    ...company,
+    today,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['trade', 'stock'] },
-    { id: 'crew', label: 'Staff', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'payroll'] },
-    { id: 'finance', label: 'Finance', icon: 'finance', tabs: ['tradesummary'] },
-    { id: 'admin', label: 'Administration', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
-    settings,
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'payroll'] },
+    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
+    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
+    ...team,
   ],
 };
+
+/** The phone's five tabs (v0.22.0): Today, Project (Trading in the trading division), Reports, Money, and More for everything else. */
+export const PHONE_TABS = [['home', 'Today'], ['projects', 'Project'], ['trading', 'Trading'], ['report', 'Reports'], ['finance', 'Money']];
 
 export const hubsOf = division => MENUS[division] || MENUS.installation;
 export const pagesIn = division => hubsOf(division).flatMap(h => h.tabs);

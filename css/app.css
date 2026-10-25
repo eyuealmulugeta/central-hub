@@ -1046,7 +1046,6 @@ mark.find-hit.find-current { background: #ff9f1c; outline: 2px solid #c25e00; }
 /* v0.13.0 employee list: stars and "Locate the file in Drive" on each card */
 .emp-item { position: relative; display: flex; flex-direction: column; }
 .emp-item .emp-card { flex: 1; padding-bottom: 46px; }
-.emp-locate { position: absolute; right: 12px; bottom: 12px; }
 .emp-stars { color: #e0a412; letter-spacing: .04em; }
 .emp-stars.muted { color: var(--muted); letter-spacing: 0; }
 .toolbar.wrap { flex-wrap: wrap; }
@@ -1417,3 +1416,74 @@ body.side-narrow .side-health { display: none; }
   :root, :root[data-theme] { --bg: #fff; --surface: #fff; --surface-2: #f3f4f6; --ink: #000; --ink-2: #333; --muted: #444; --line: #c8ccd2; --line-2: #e3e7ee; --shadow: none; color-scheme: light; }
   html, body { background: #fff !important; }
 }
+
+/* v0.22.2 invoices, quotations and purchase orders; the stamp box */
+.doc-stamp { display: block; height: 62px; border: 1px dashed #98a2b3; border-radius: 6px; margin-top: 6px; }
+.paper.bill-paper .bill-to { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+.paper.bill-paper .bill-to .p-block { background: var(--dsr-soft); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 1px; }
+.paper.bill-paper table.dsr-t td { padding: 5px 7px; border-bottom: 1px solid #e3e7ee; font-size: 12px; }
+.paper.bill-paper table.dsr-t tr.group td { background: #f4f7fb; font-weight: 600; }
+.paper.bill-paper .bill-sum { display: grid; grid-template-columns: 1fr minmax(240px, auto); gap: 18px; align-items: start; margin-top: 8px; }
+.bill-words { margin: 0; background: var(--dsr-soft); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.bill-words span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.paper.bill-paper .totals { margin: 0; }
+.paper.bill-paper .totals .grand { border-top: 1.5px solid var(--dsr); color: var(--dsr); }
+.bill-bank { margin: 0; font-size: 12px; }
+@media screen and (max-width: 640px) { .paper.bill-paper .bill-to, .paper.bill-paper .bill-sum { grid-template-columns: 1fr; } }
+.paper.doc-paper table.dsr-t td { padding: 4px 7px; border-bottom: 1px solid #e3e7ee; font-size: 11.5px; vertical-align: top; }
+.paper.doc-paper table.dsr-t tfoot td { font-weight: 700; border-top: 1.5px solid var(--dsr); border-bottom: 0; }
+.paper.doc-paper table.dsr-t td.bad { color: #b42318; }
+.paper.doc-paper .dsr-kpis { margin: 10px 0 4px; }
+.paper.doc-paper .dsr-kpis b { font-size: 16px; }
+.paper.doc-paper h3:not(.dsr-sec h3) { color: var(--dsr); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #d9dee6; padding-bottom: 3px; margin: 14px 0 7px; }
+.led-t .led-open td { background: #f4f7fb; font-style: italic; }
+.fin-bar { width: 22%; } .fin-bar i { display: block; height: 8px; background: #eef1f5; border-radius: 3px; } .fin-bar i b { display: block; height: 100%; background: var(--dsr); border-radius: 3px; }
+@media print { .paper.doc-paper table.dsr-t thead { display: table-header-group; } .paper.doc-paper table.dsr-t tr { break-inside: avoid; } }
+.paper.doc-paper .dsr-sec { break-inside: auto; } .paper.doc-paper .dsr-sec h3 { break-after: avoid; }
+.paper.doc-paper .doc-sign { break-inside: avoid; }
+.cf-key .cf-k.cf-in { background: #188038; } .cf-key .cf-k.cf-out { background: #d93025; }
+.doc-facts { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.paper.doc-paper .p-to { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 10px 0; }
+.paper.doc-paper .p-to .p-block { display: flex; flex-direction: column; gap: 1px; }
+@media screen and (max-width: 640px) { .paper.doc-paper .p-to { grid-template-columns: 1fr; } }
+@media screen and (max-width: 640px) {
+  .paper.dsr .dsr-kpis { grid-template-columns: 1fr 1fr !important; }
+  .paper.doc-paper { overflow-x: auto; }
+}
+
+/* v0.22.4 letters, requests, crew profile and the payroll sheets on the print engine */
+.paper.letter-paper .letter-body { margin: 16px 0 8px; font-size: 13px; line-height: 1.55; }
+.paper.letter-paper .letter-to { display: flex; flex-direction: column; gap: 1px; margin: 0 0 12px; }
+.paper.letter-paper .letter-to span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.paper.letter-paper .letter-subj { font-weight: 700; color: var(--dsr); margin: 0 0 10px; }
+.paper.profile-paper .profile-top { margin-top: 12px; width: 100%; }
+.paper.profile-paper .profile-top td { border: 0; vertical-align: top; }
+.paper.profile-paper .profile-top h2 { text-transform: none; font-size: 20px; margin: 0 0 4px; }
+.paper.doc-paper table.dsr-t { width: 100%; border-collapse: collapse; }
+.paper.doc-paper table.dsr-t th.r, .paper.doc-paper table.dsr-t td.r { text-align: right; }
+
+/* v0.22.4 the programme (Gantt) on one A3 landscape sheet */
+@page a3 { size: A3 landscape; margin: 0 0 10mm; @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 9px "Segoe UI", sans-serif; color: #555; margin-right: 12mm; } }
+.paper.dsr.a3 { max-width: 1560px; }
+.gp-chart { margin: 12px 0 6px; border: 1px solid #dde2ea; border-radius: 6px; overflow: hidden; }
+.gp-svg { display: block; font-family: "Segoe UI", system-ui, sans-serif; }
+.gp-svg .gp-m { font-size: 12.5px; font-weight: 700; fill: #0b4f9c; }
+.gp-svg .gp-w { font-size: 8.5px; fill: #8a94a6; }
+.gp-svg .gp-n { font-size: 12.5px; fill: #1d2939; } .gp-svg .gp-n.crit { font-weight: 700; fill: #b42318; }
+.gp-svg .gp-d, .gp-svg .gp-s { font-size: 9px; fill: #475467; } .gp-svg .gp-s { fill: #b42318; font-weight: 600; }
+.gp-svg .gp-t { font-size: 9px; fill: #d93025; font-weight: 700; }
+.gp-key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11px; color: #475467; margin: 4px 0 10px; }
+.gp-key span { display: inline-flex; align-items: center; gap: 5px; }
+.gp-key i { width: 18px; height: 8px; border-radius: 2px; display: inline-block; }
+.gp-key i.plan { height: 3px; background: #b8c2d0; } .gp-key i.crit { border: 1.5px solid #b42318; background: #fff; }
+.gp-key i.today { width: 0; height: 12px; border-left: 1.5px dashed #d93025; border-radius: 0; }
+.gp-key b { color: #0b57d0; font-size: 12px; }
+@media print {
+  .gantt-sheet .paper.dsr.a3 { page: a3; padding: 9mm 11mm 6mm; max-width: none; }
+  .gp-chart { break-inside: avoid; }
+}
+
+/* v0.22.4 meeting minutes */
+.min-form h3 { margin: 12px 0 6px; }
+.paper.doc-paper .min-list { margin: 4px 0 0 18px; padding: 0; font-size: 12.5px; line-height: 1.5; }
+

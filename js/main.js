@@ -95,6 +95,8 @@ const QUICK = [
   { label: 'Contract', view: 'contracts', act: 'add' },
 ];
 let pending = null;   // a quick action waiting for its screen to be drawn
+/** "+ New" offers only what belongs to the open division: no daily report or invoice while in Trading (v0.22.3). */
+const quickOk = q => allowed(q.view) && pagesIn(division).includes(q.view) && !(q.office && isSite());
 const ROLE_NAME = { owner: 'Admin', office: 'Office', site: 'Site' };
 const SIDE_KEY = 'sf:side';
 const NEW_PROJECT = '__new';
@@ -285,7 +287,7 @@ function renderSidebar(name, summaries) {
     ${store.cloud ? html`<div class="side-user"><span title="${store.user.email}">${store.user.email}</span><button type="button" class="btn ghost small" id="btn-signout">Sign out</button></div>` : ''}`);
   $('#role-badge').textContent = store.cloud ? (store.readOnly ? 'Executive Partner, view only' : ROLE_NAME[store.role] || '') : 'Demo';
   $('#role-badge').title = store.cloud ? `Signed in as ${store.user.email}` : 'Demo data kept in this browser. Nobody is signed in.';
-  $('#quick-menu').innerHTML = String(html`${!p ? '' : QUICK.filter(q => allowed(q.view) && !(q.office && isSite())).map((q, i) => html`<button type="button" data-q="${i}">${q.label}</button>`)}`);
+  $('#quick-menu').innerHTML = String(html`${!p ? '' : QUICK.filter(q => quickOk(q)).map((q, i) => html`<button type="button" data-q="${i}">${q.label}</button>`)}`);
   $('#quick').hidden = !p || !$('#quick-menu').children.length;
 }
 
@@ -351,7 +353,7 @@ function render() {
   store.saveSummary(summaryOf(ctx));
 
   $('#page-title').textContent = TITLES[name];
-  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) || [p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the project is in the chooser; the currency only where money is shown
+  $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : name === 'home' && division === 'trading' ? 'What needs you in Trading' : COMPANY_VIEWS[name]) || [p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the project is in the chooser; the currency only where money is shown
   if (hubOf(name)) lastTab[hubOf(name).id] = name;
   document.title = COMPANY_VIEWS[name] ? `${TITLES[name]} · ${APP}` : `${TITLES[name]} · ${p.name} · ${APP}`;
 
@@ -452,7 +454,7 @@ function searchItems() {
     seen.add(t);
     add('Page', TITLES[t], h.label, () => goTo(t));
   }
-  for (const q of QUICK.filter(x => allowed(x.view) && !(x.office && isSite()))) add('New', q.label, 'Start a new one', () => startNew(q));
+  for (const q of QUICK.filter(x => quickOk(x))) add('New', q.label, 'Start a new one', () => startNew(q));
   if (installation) for (const p of store.projects) {
     add('Project', p.name, 'Open this project', () => { store.switchTo(p.id); goTo(allowed('dashboard') ? 'dashboard' : 'home'); });
     if (p.client?.name && store.can('docs')) add('Client', p.client.name, p.name, () => { store.switchTo(p.id); goTo('docs'); });

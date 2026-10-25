@@ -1029,6 +1029,7 @@ mark.find-hit.find-current { background: #ff9f1c; outline: 2px solid #c25e00; }
 .emp-stars.muted { color: var(--muted); letter-spacing: 0; }
 .toolbar.wrap { flex-wrap: wrap; }
 
-/* v0.14.0 an app, not a web page: words are not selected by a click or a long press, except where one types */
-body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* v0.19.3 page text can be selected and copied (reports, messages, figures); only controls are not, so a tap or a
+   long press on a button, the menu or a tab does not highlight words */
+button, .btn, nav, .tabs, .chip, summary, label.check { -webkit-user-select: none; user-select: none; }
 input, textarea, select, [contenteditable], [contenteditable] * { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }

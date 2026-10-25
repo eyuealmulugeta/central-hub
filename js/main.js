@@ -827,6 +827,9 @@ async function startCloud() {
   try {
     const { connectCloud } = await import('./core/cloud.js');
     api = await connectCloud(firebaseConfig);
+    // 1C: Field Report requests go through the server, which holds the key and checks who asks
+    const { fieldServer } = await import('./sync/fieldreport.js');
+    fieldServer.call = body => api.call('fieldAction', { body });
   } catch (err) {
     console.warn(err);
     gate('Could not reach the server. Check the internet connection and reload.');

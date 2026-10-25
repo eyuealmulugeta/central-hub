@@ -23,6 +23,7 @@ import { targetFor, parseDates } from '../engine/calendar.js';
 import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUsers, LIMITS } from '../engine/deployment.js';
 import { money, num, fmtFull } from '../core/util.js';
 import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
+import { monthlyRolesOf } from '../engine/crewpay.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ROLES = [['office', 'Office: works from the office, on the projects ticked'], ['site', 'Site: works on site, on the projects ticked (active ones only)']];
@@ -47,7 +48,7 @@ export function indexText(c) {
   } finally { ({ projTab, accTab, linkTab } = keep); }
   return parts.join(' ');
 }
-const SECTION_OF = { fx: 'catalog', company: 'company', field: 'links', import: 'links' };
+const SECTION_OF = { fx: 'catalog', company: 'company', monthly: 'company', field: 'links', import: 'links' };
 /** Jump to the tab that holds a card (Setup's "Do this" buttons use the card's id). */
 const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team', rates: 'week' };
 export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
@@ -421,6 +422,7 @@ function projectPage(c) {
           <label>Currency <select data-chg="project" data-f="currency" data-fk="pj-cur">${options(currencies, p.currency)}</select></label>
           <label>Budget <input type="number" min="0" step="any" data-chg="project" data-f="budget" data-fk="pj-budget" value="${p.budget}"></label>
           <label>Contract value <input type="number" min="0" step="any" data-chg="project" data-f="contractValue" data-fk="pj-contract" value="${p.contractValue}"></label>
+          <label title="The labour line of the budget: crew and staff pay. Printed on the labour cost sheet (Payments).">Labour budget <input type="number" min="0" step="any" data-chg="project" data-f="labourBudget" data-fk="pj-labour" value="${p.labourBudget || ''}"></label>
         </div>`)}
       <div class="set-stack">
         ${box('markups', 'Markups %', html`<div class="grid4">${MARKUPS.map(([k, label]) => html`
@@ -605,6 +607,10 @@ export function render(c) {
           <label>Logo <input type="file" accept="image/*" data-chg="logo"></label>
           ${co.logo ? html`<div class="split"><img class="logo-preview" src="${co.logo}" alt="Company logo"><button class="btn ghost small" data-act="removeLogo">Remove logo</button></div>` : ''}
         </div>`)}
+
+    ${panel('monthly', 'Paid monthly', monthlyRolesOf(g).join(', ') || 'Nobody: everyone is paid per day', () => html`
+        <p class="muted">These positions are paid by the month; everyone else on site is paid per day. Attendance is taken for everyone: for the monthly-paid it is a record and does not change the pay. An HR agreement that says "per day" or "per month" wins. A monthly position with no monthly wage in its agreement is flagged on Payments, never paid per day.</p>
+        ${positionGroups().filter(([grp]) => grp !== 'Old').map(([grp, list]) => html`<h4 class="tick-group">${grp}</h4>${pills(list.map(r => html`<label class="check pill"><input type="checkbox" data-chg="monthlyRole" data-v="${r}" ${monthlyRolesOf(g).includes(r) ? 'checked' : ''}> ${r}</label>`))}`)}`)}
     </div>`;
 }
 
@@ -843,6 +849,12 @@ export const changes = {
     store.setUser(el.dataset.id, { projects });
   },
   company(el) { store.updateGlobal(g => { g.company = { ...g.company, [el.dataset.f]: el.value.trim() }; }); },
+  monthlyRole(el) {
+    store.updateGlobal(g => {
+      const list = monthlyRolesOf(g).filter(r => r !== el.dataset.v);
+      g.monthlyRoles = el.checked ? [...list, el.dataset.v] : list;
+    });
+  },
   /** Any picture is accepted: it is scaled down to fit (about 200 KB), keeping a transparent background. */
   async logo(el) {
     const file = el.files[0];

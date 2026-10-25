@@ -11,6 +11,8 @@ import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
 import { letterhead } from './docs.js';
+import { docHead, docFoot, footText, signoff } from './print.js';
+import { companyCode } from '../engine/docref.js';
 import { withFixes } from '../engine/attendance.js';
 import { paidOnSite } from '../engine/crewpay.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
@@ -34,6 +36,7 @@ const todayMonth = today => String(today).slice(0, 7);
 export function render(c) {
   const run = find(c.company);
   if (!run) return list(c);
+  if (slip === '*' && run.lines.length) return payslip(run, null, c);
   const line = slip && run.lines.find(l => l.id === slip);
   return line ? payslip(run, line, c) : detail(run, c);
 }
@@ -92,6 +95,7 @@ function detail(run, c) {
       ${draft ? html`<button class="btn" data-act="refill" title="Reads days and overtime again from the daily reports of the open project">Refill attendance</button><button class="btn primary" data-act="approve">Approve</button>` : ''}
       ${run.status === 'approved' ? html`<button class="btn" data-act="reopen">Reopen</button><button class="btn primary" data-act="markPaid">Mark as paid</button>` : ''}
       <button class="btn" data-act="csv">Download CSV</button>
+      ${run.lines.length ? html`<button class="btn" data-act="allSlips" title="Every payslip of the month, one per page">Print all payslips</button>` : ''}
       <button class="btn" data-act="print">Print</button>
       <button class="btn danger" data-act="removeRun">Delete</button>
     </div>
@@ -133,34 +137,46 @@ function detail(run, c) {
     </div></section>`;
 }
 
-function payslip(run, l, c) {
+/** One payslip in the house style (v0.21.2): earnings and deductions side by side, net pay, sign-off, and a tear-off stub. */
+function slipPaper(run, l, c) {
   const r = compute(l, run.settings);
+  const ref = `${companyCode(c.global.company)}-PS-${run.month}-${String(run.lines.indexOf(l) + 1).padStart(2, '0')}`;
+  const foot = footText(c, 'Payslip', monthLabel(run.month), { project: false, note: 'confidential' });
   const row = (k, v) => (v ? html`<tr><td>${k}</td><td class="r">${m(v, l.currency)}</td></tr>` : '');
+  const basis = l.payPer === 'month' ? 'Monthly' : l.payPer === 'day' ? 'Daily' : 'Hourly';
+  return html`<div class="paper slip-paper dsr" data-foot="${foot}">
+    ${docHead(c, { title: 'Payslip', sub: `${monthLabel(run.month)} · confidential`, ref, status: statusLabel(run.status), tone: run.status === 'draft' ? 'warn' : 'ok', facts: [['Employee', l.name], ['Position', l.title || '—'], ['Month', monthLabel(run.month)], ['Paid', basis]] })}
+    <div class="slip-two">
+      <div><h3 class="pay-k">Earnings</h3><table class="pay-t"><tbody>
+        <tr><td>${l.payPer === 'month' ? 'Monthly wage' : l.payPer === 'day' ? `${l.days} days at ${m(l.rate, l.currency)}` : `${l.days} days of ${run.settings.hoursPerDay} hours at ${m(l.rate, l.currency)} per hour`}${l.unpaidDays ? ` (${l.unpaidDays} unpaid days taken off)` : ''}</td><td class="r">${m(r.basic, l.currency)}</td></tr>
+        ${row(`Overtime, ${l.ot} hours`, r.overtime)}${row('Allowances', r.allowances)}
+      </tbody><tfoot><tr><td>Gross pay</td><td class="r">${m(r.gross, l.currency)}</td></tr></tfoot></table></div>
+      <div><h3 class="pay-k">Deductions</h3><table class="pay-t"><tbody>
+        ${row(`Pension, ${run.settings.pensionEmployee}%`, r.pensionEmployee)}${row('Income tax', r.tax)}${row('Other deductions', r.other)}
+        ${r.deductions ? '' : html`<tr><td class="muted">None</td><td></td></tr>`}
+      </tbody><tfoot><tr><td>Total deductions</td><td class="r">${m(r.deductions, l.currency)}</td></tr></tfoot></table></div>
+    </div>
+    <div class="slip-net"><span>Net pay</span><b>${m(r.net, l.currency)}</b></div>
+    <p class="muted p-notes">${l.payPer === 'month' ? '' : `Days worked: ${l.days || 0}. `}${r.pensionEmployer ? `Employer pension ${run.settings.pensionEmployer}%: ${m(r.pensionEmployer, l.currency)} (not deducted). ` : ''}${run.paidOn ? `Paid on ${fmtFull(run.paidOn)}.` : ''}${l.notes ? ` ${l.notes}` : ''}</p>
+    ${signoff([{ label: 'Prepared by · Office' }, { label: 'Approved by', name: run.approvedBy || '' }, { label: 'Received by · Employee', name: l.name }])}
+    <div class="slip-tear"><span>✂ Tear here: the office keeps this part</span></div>
+    <dl class="slip-stub"><div><dt>Employee</dt><dd>${l.name}</dd></div><div><dt>Month</dt><dd>${monthLabel(run.month)}</dd></div><div><dt>Net pay</dt><dd>${m(r.net, l.currency)}</dd></div><div><dt>Received, signature</dt><dd class="slip-line"></dd></div></dl>
+    ${docFoot(`${foot} · ${ref}`)}
+  </div>`;
+}
+
+/** One payslip on screen, or every payslip of the run (slip '*'), each on its own page. */
+function payslip(run, l, c) {
+  const all = !l;
   return html`
     <div class="toolbar no-print">
       <button class="btn ghost" data-act="slipBack">← ${monthLabel(run.month)}</button>
-      <span class="muted">${notice}</span><span class="grow"></span>
-      <button class="btn" data-act="emailSlip">Email as PDF</button>
-      <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
+      <span class="muted">${all ? `${run.lines.length} payslips, one per page. ` : ''}${notice}</span><span class="grow"></span>
+      ${all ? '' : html`<button class="btn" data-act="emailSlip">Email as PDF</button>
+      <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>`}
       <button class="btn primary" data-act="print">Print</button>
     </div>
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, 'Payslip', [['Employee', l.name], ['Job title', l.title || '—'], ['Month', monthLabel(run.month)], ['Status', statusLabel(run.status)]])}
-      <h3>Earnings</h3>
-      <table><tbody>
-        <tr><td>${l.payPer === 'month' ? 'Monthly wage' : l.payPer === 'day' ? `${l.days} days at ${m(l.rate, l.currency)}` : `${l.days} days of ${run.settings.hoursPerDay} hours at ${m(l.rate, l.currency)} per hour`}${l.unpaidDays ? ` (${l.unpaidDays} unpaid days taken off)` : ''}</td><td class="r">${m(r.basic, l.currency)}</td></tr>
-        ${row(`Overtime, ${l.ot} hours`, r.overtime)}${row('Allowances', r.allowances)}
-        <tr class="group"><td>Gross pay</td><td class="r">${m(r.gross, l.currency)}</td></tr>
-      </tbody></table>
-      <h3>Deductions</h3>
-      <table><tbody>
-        ${row(`Pension, ${run.settings.pensionEmployee}%`, r.pensionEmployee)}${row('Income tax', r.tax)}${row('Other deductions', r.other)}
-        ${r.deductions ? '' : html`<tr><td class="muted">None</td><td></td></tr>`}
-      </tbody></table>
-      <dl class="totals"><dt>Net pay</dt><dd class="grand">${m(r.net, l.currency)}</dd></dl>
-      ${l.notes ? html`<p class="muted p-notes">${l.notes}</p>` : ''}
-      <div class="p-sign"><div>Prepared by</div><div>Received by ${l.name}</div></div>
-    </div></section>`;
+    <section class="card sheet slip-sheet">${all ? run.lines.map(x => slipPaper(run, x, c)) : slipPaper(run, l, c)}</section>`;
 }
 
 export const actions = {
@@ -168,6 +184,7 @@ export const actions = {
   back() { selected = null; slip = null; notice = ''; },
   slip(el) { slip = el.dataset.id; notice = ''; },
   slipBack() { slip = null; notice = ''; },
+  allSlips() { slip = '*'; notice = ''; },
   print() { print(); },
   refill(el, c) {
     store.updateCompany(co => {

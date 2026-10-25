@@ -12,6 +12,7 @@ import { uid, money, num, fmtDate, fmtFull, fmtDay, toDay, fromDay, sum, clamp }
 import { html, options, field, chip, meter } from './dom.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail, emailIn } from './maildialog.js';
+import { statusPaper } from './status.js';
 
 let tab = 'docs';
 let mode = null;     // invoices | quotations | status: what the menu opened this screen as (null = everything)
@@ -486,7 +487,7 @@ export function preset(p = {}) {
   mode = p.mode || null;
   tab = 'docs';
   notice = '';
-  sel = mode === 'status' ? { kind: 'performance' } : null;
+  sel = mode === 'status' ? { kind: 'status' } : null;
   if (mode === 'status' && period === 'daily') period = 'weekly';
 }
 const KINDS = { invoices: ['invoice'], quotations: ['quote', 'po'], status: ['report'] };
@@ -507,7 +508,8 @@ export function render(c) {
       </div>` : ''}
       <span class="muted">${notice}</span>
       <span class="grow"></span>
-      ${shows('tools') ? html`<button class="btn" data-act="paySheet" title="Pay sheet from the attendance taken on site">Pay sheet</button>
+      ${shows('tools') ? html`<button class="btn" data-act="status" title="One page on how the project stands today">Status report</button>
+      <button class="btn" data-act="paySheet" title="Pay sheet from the attendance taken on site">Pay sheet</button>
       <button class="btn" data-act="claim" title="Delays reported from site, by cause and responsible party">Delays</button>
       <button class="btn" data-act="performance" title="Internal weekly or monthly performance">Performance</button>
       <button class="btn" data-act="report">Progress report</button>
@@ -593,6 +595,8 @@ export function render(c) {
         ${EMAIL_BUTTON}
       </div>
       ${performancePaper(c)}`;
+  } else if (sel?.kind === 'status') {
+    preview = html`<div class="toolbar no-print"><span class="muted">As the project stands today</span><span class="grow"></span>${EMAIL_BUTTON}</div>${statusPaper(c)}`;
   } else if (sel?.kind === 'schedule') {
     preview = html`<div class="toolbar no-print"><span class="muted">Schedule as it stands today</span><span class="grow"></span>${EMAIL_BUTTON}</div>${schedulePaper(c)}`;
   }
@@ -622,6 +626,7 @@ export const actions = {
   open(el) { sel = { kind: 'doc', id: el.dataset.id }; notice = ''; },
   report() { tab = 'docs'; sel = { kind: 'report' }; notice = ''; },
   schedule() { tab = 'docs'; sel = { kind: 'schedule' }; notice = ''; },
+  status() { tab = 'docs'; sel = { kind: 'status' }; notice = ''; },
   paySheet() { tab = 'docs'; sel = { kind: 'pay' }; if (period === 'daily') period = 'weekly'; notice = ''; },
   claim() { tab = 'docs'; sel = { kind: 'claim' }; if (period === 'daily') period = 'monthly'; notice = ''; },
   performance() { tab = 'docs'; sel = { kind: 'performance' }; if (period === 'daily') period = 'weekly'; notice = ''; },
@@ -696,7 +701,7 @@ export const actions = {
     const d = current(c.ws);
     const p = c.project;
     const sender = c.global.company?.name || 'Amistad Prefab';
-    const kind = d ? TITLE[d.type] : { schedule: 'Project schedule', pay: 'Site pay sheet', claim: 'Record of delays' }[sel?.kind] || 'Performance report';
+    const kind = d ? TITLE[d.type] : { schedule: 'Project schedule', pay: 'Site pay sheet', claim: 'Record of delays', status: 'Project status report' }[sel?.kind] || 'Performance report';
     const name = d ? `${kind} ${d.number}` : `${kind}, ${p.name}`;
     const who = d?.party?.name || p.client?.name || '';
     const line = !d ? `Please find attached the ${kind.toLowerCase()} for ${p.name} as of ${fmtFull(c.today)}.`

@@ -15,6 +15,11 @@ import { connected } from './fieldsetup.js';
 import { openPanel } from './prices.js';
 import { toTrash, inBin, restore as restoreTrash, purge, isExpired, daysLeft, RETENTION_DAYS } from '../engine/trash.js';
 import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
+import { checksOf, approveSummary, pinsMessage, SECTIONS, sectionLabel } from '../engine/review.js';
+import { dailyDoc } from './dailyreport.js';
+import { clientBrief } from './brief.js';
+import { paperHtml } from '../sync/mail.js';
+import { openMail } from './maildialog.js';
 
 const WEATHER = ['Clear', 'Cloudy', 'Rain', 'Wind', 'Heat'];
 const GROUND = ['Dry', 'Wet', 'Muddy'];
@@ -37,6 +42,9 @@ let sentBack = null;    // { id, decision, text }: the reply just sent from the 
 let viewing = null;     // id of a report opened for reading (its PDF on top, the history beside it)
 let binNotice = '';
 let tab = '';           // 'list' (the reports) or 'enter' (the Daily report form); '' until chosen: the site starts on the form
+let docOf = null;       // id of the report shown as the Daily Site Report (v0.21.0)
+let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
+let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
 const period = { year: 0, month: 0, week: 0 };   // the reports shown: 0 is any
 
 const FIELD_STATUS = { submitted: ['Submitted by site', 'info'], approved: ['Approved', 'ok'], changes: ['Changes requested', 'warn'] };
@@ -57,77 +65,104 @@ const knownEquipment = ws => [...new Set([...ws.reports].sort((a, b) => b.date.l
   .flatMap(r => (r.field?.equipment || []).map(e => e.name)))].filter(Boolean);
 const lines = text => String(text || '').split('\n').map(s => s.trim()).filter(Boolean);
 
-/** Every entry of one report, laid out like the Field Report sheet. */
-function sheet(r, c) {
+/**
+ * One report laid out as a document (v0.20.0): a header with the facts of the day, then one section per kind of entry,
+ * as tables where the entries have columns. Used to read a report and, above the decision, to review one.
+ */
+function sheet(r, c, { reviewing: inReview = false } = {}) {
   const f = r.field || {};
   if (f.nowork) {
-    return html`<div class="sheet-detail">
-      <b>No work reported</b><span>${f.reason}${f.note ? ` (${f.note})` : ''}</span>
-    </div>`;
+    return html`<div class="rep-doc"><div class="rep-sec"><h4>No work reported</h4><p>${f.reason}${f.note ? ` (${f.note})` : ''}</p></div></div>`;
   }
   const { ws } = c;
   const hoursPerDay = billingOf(c.project).hoursPerDay;
   const crew = r.manpower || [];
   const hrsEach = m => m.hrs ?? (m.count ? hoursPerDay + (m.ot || 0) / m.count : 0);
   const task = id => ws.tasks.find(t => t.id === id);
-  const fact = (k, v) => (v || v === 0 ? html`<dt>${k}</dt><dd>${v}</dd>` : '');
-  const list = (title, items) => (items?.length
-    ? html`<div><span class="muted">${title}</span><ul class="plain prose">${items.map(x => html`<li>${x}</li>`)}</ul></div>` : '');
-  const empty = title => html`<div><span class="muted">${title}</span><span class="none">Nothing entered</span></div>`;
-  const requests = f.requests?.length ? f.requests.map(x => `${x.priority}: ${x.text}`) : r.issue ? [r.issue] : [];
+  const unit = id => task(id)?.unit || '';
+  const sec = (title, body, extra = '', id = '') => html`<section class="rep-sec ${extra}" ${id ? `id="sec-${id}"` : ''}><h4>${title}${pinned(r, id)}</h4>${body}</section>`;
+  const none = text => html`<p class="none">${text || 'Nothing entered'}</p>`;
+  const ul = items => html`<ul class="plain prose">${items.map(x => html`<li>${x}</li>`)}</ul>`;
+  const table = (head, rows, right = []) => html`<table class="table compact rep-table">
+    <thead><tr>${head.map((h, k) => html`<th class="${right.includes(k) ? 'r' : ''}">${h}</th>`)}</tr></thead>
+    <tbody>${rows.map(row => html`<tr>${row.map((v, k) => html`<td class="${right.includes(k) ? 'r nowrap' : ''}">${v}</td>`)}</tr>`)}</tbody></table>`;
+  const requests = f.requests?.length ? f.requests : r.issue ? [{ priority: 'Normal', text: r.issue }] : [];
+  const att = f.attendance || [];
+  const present = att.filter(a => (a.state || 'present') === 'present').length;
+  const delayH = sum(f.delayItems?.length ? f.delayItems : f.delays || [], d => +(d.hours ?? d.h) || 0);
+  const kv = (k, v) => (v || v === 0 ? html`<div><span>${k}</span><b>${v}</b></div>` : '');
 
-  return html`<div class="sheet-detail">
-    <dl class="facts">
-      ${fact('Report No.', f.no)}
-      ${fact('Prepared by', [r.by, f.position].filter(Boolean).join(', '))}
-      ${fact('Activities', (f.activities || []).join(', '))}
-      ${fact('Location', f.location)}
-      ${fact('Working hours', f.hours?.start ? `${f.hours.start} to ${f.hours.end}` : '')}
-      ${fact('Weather', [r.weather, f.tempC != null && f.tempC !== '' ? `${f.tempC}°C` : ''].filter(Boolean).join(', '))}
-      ${fact('Ground', f.ground)}
-      ${fact('Safety', f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : '')}
-      ${fact('Toolbox talk', f.toolbox == null ? '' : f.toolbox ? 'Held' : 'Not held')}
-      ${fact('Photos', f.photos ? `${f.photos} in the PDF` : '')}
-    </dl>
+  return html`<div class="rep-doc">
+    <div class="rep-head">
+      ${kv('Report No.', f.no)}
+      ${kv('Date', fmtDate(r.date))}
+      ${kv('Prepared by', [r.by, f.position].filter(Boolean).join(', '))}
+      ${kv('Working hours', f.hours?.start ? `${f.hours.start} to ${f.hours.end}` : '')}
+      ${kv('Weather', [r.weather, f.tempC != null && f.tempC !== '' ? `${f.tempC}°C` : '', f.ground].filter(Boolean).join(', '))}
+      ${kv('Location', f.location)}
+      ${kv('On site', `${sum(crew, m => m.count)} people, ${num(sum(crew, m => m.count * hrsEach(m)), 1)} man-hours`)}
+      ${kv('Delays', delayH ? `${num(delayH)} h` : 'None')}
+    </div>
 
-    <div><span class="muted">Manpower</span>
-      ${crew.length ? html`<table class="table compact">
+    ${f.work?.length ? sec('Work done today', table(['Task', 'Today', 'Location', 'Note'],
+      f.work.map(w => [task(w.taskId)?.name || 'Unknown task', w.pct != null ? `${w.pct} %` : `${num(w.qty)} ${unit(w.taskId)}`, w.location || '', w.note || '']), [1]), '', 'work') : ''}
+    ${f.milestones?.some(m => m.reached) ? sec('Milestones reached', ul(f.milestones.filter(m => m.reached).map(m => `${task(m.taskId)?.name || 'Unknown milestone'}${m.note ? `. ${m.note}` : ''}`))) : ''}
+    ${inReview ? '' : sec('Progress against the schedule', r.entries?.length ? table(['Task', 'Done', 'Delay', 'Note'],
+      r.entries.map(e => [task(e.taskId)?.name || 'Removed task', e.qty > 0 ? `+${num(e.qty)} ${unit(e.taskId)}` : e.progress != null ? `${e.progress} %` : '', e.delayDays ? `+${e.delayDays} d` : '', e.note || '']), [1, 2])
+      : none(r.review === 'pending' ? 'Not approved yet' : 'Nothing entered'))}
+    ${sec("Today's activities", f.progress?.length || (f.extra || []).length
+      ? html`${f.progress?.length ? ul(f.progress) : ''}${(f.extra || []).map(x => html`<p class="muted">${x.activity}</p>${ul(x.items || [])}`)}`
+      : none(), '', 'activities')}
+
+    <div class="rep-two">
+      ${sec('Manpower', crew.length ? html`<table class="table compact rep-table">
         <thead><tr><th>Trade</th><th class="r">Qty</th><th class="r">Hours</th><th class="r">Man-hrs</th></tr></thead>
         <tbody>${crew.map(m => html`<tr><td>${m.trade}</td><td class="r">${m.count}</td><td class="r">${num(hrsEach(m), 1)}</td><td class="r">${num(m.count * hrsEach(m), 1)}</td></tr>`)}
           <tr class="group"><td>Total</td><td class="r">${sum(crew, m => m.count)}</td><td></td><td class="r">${num(sum(crew, m => m.count * hrsEach(m)), 1)}</td></tr></tbody>
-      </table>` : html`<span class="none">Nothing entered</span>`}</div>
+      </table>` : none(), '', 'manpower')}
+      ${sec('Equipment', f.equipment?.length ? table(['Equipment', 'Qty', 'Hours', 'Status'], f.equipment.map(e => [e.name, e.qty, e.hrs, e.status || '']), [1, 2]) : none(), '', 'equipment')}
+    </div>
 
-    <div><span class="muted">Equipment</span>
-      ${f.equipment?.length ? html`<table class="table compact">
-        <thead><tr><th>Equipment</th><th class="r">Qty</th><th class="r">Hours</th><th>Status</th></tr></thead>
-        <tbody>${f.equipment.map(e => html`<tr><td>${e.name}</td><td class="r">${e.qty}</td><td class="r">${e.hrs}</td><td>${e.status || ''}</td></tr>`)}</tbody>
-      </table>` : html`<span class="none">Nothing entered</span>`}</div>
-
-    ${f.delays?.length
-      ? list(`Work delay, ${num(sum(f.delays, d => +d.h || 0))} h in total`, f.delays.map(d => `${d.k}${d.h != null ? `: ${d.h} h` : ''}`))
-      : html`<div><span class="muted">Work delay</span><span>No delays reported</span></div>`}
-
-    <div><span class="muted">Progress against the schedule</span>
-      ${r.entries?.length ? html`<ul class="plain">${r.entries.map(e => html`
-        <li>${task(e.taskId)?.name || 'Removed task'}${e.qty > 0 ? html` <b>+${num(e.qty)} ${task(e.taskId)?.unit || ''}</b>` : ''}${e.progress != null ? html` <b>${e.progress}%</b>` : ''}${e.delayDays ? html` ${chip(`+${e.delayDays} d`, 'warn')}` : ''}
-          ${e.note ? html`<span class="muted"> ${e.note}</span>` : ''}</li>`)}</ul>`
-      : html`<span class="none">${r.review === 'pending' ? 'Not confirmed yet' : 'Nothing entered'}</span>`}</div>
-
-    ${f.work?.length ? list('Work reported against tasks', f.work.map(w => `${task(w.taskId)?.name || 'Unknown task'}: ${w.qty > 0 ? `${num(w.qty)} ${task(w.taskId)?.unit || ''}` : w.pct != null ? `${w.pct}%` : ''}${w.location ? `, ${w.location}` : ''}${w.note ? `. ${w.note}` : ''}`)) : ''}
-    ${f.milestones?.some(m => m.reached) ? list('Milestones reported as reached', f.milestones.filter(m => m.reached).map(m => `${task(m.taskId)?.name || 'Unknown milestone'}${m.note ? `. ${m.note}` : ''}`)) : ''}
-    ${f.attendance?.length ? list(`Attendance, ${f.attendance.filter(a => a.state === 'present').length} of ${f.attendance.length} present`,
-      f.attendance.map(a => `${a.name}: ${a.state || 'present'}${a.ot > 0 ? `, ${num(a.ot)} h overtime` : ''}`)) : ''}
-    ${f.delayItems?.length ? list('Delays, for the claim record', f.delayItems.map(d => `${d.cause || 'Delay'}${d.party ? `, responsible: ${d.party}` : ''}: ${num(d.hours)} h${d.taskId ? ` on ${task(d.taskId)?.name || 'a task'}` : ''}${d.idlePeople ? `, ${d.idlePeople} people idle` : ''}${d.note ? `. ${d.note}` : ''}`)) : ''}
-    ${f.received?.length ? list('Materials received', f.received.map(x => `${x.name}: ${num(x.qty)} ${x.unit || ''}${x.note ? `. ${x.note}` : ''}`)) : ''}
-    ${list('Instructions from the client', f.instructions)}
-    ${f.progress?.length ? list('Progress summary', f.progress) : empty('Progress summary')}
-    ${(f.extra || []).map(x => list(x.activity, x.items))}
-    ${list('Safety notes', f.safetyNotes)}
-    ${list('Notes', f.notes)}
-    ${f.plan?.length ? list('Next day schedule', f.plan) : empty('Next day schedule')}
-    ${list('Requests', requests)}
+    ${att.length ? sec(`Attendance, ${present} of ${att.length} present`, table(['Name', 'State', 'Overtime'],
+      att.map(a => [a.name, a.state || 'present', a.ot > 0 ? `${num(a.ot)} h` : '']), [2]), '', 'attendance') : ''}
+    ${f.delayItems?.length ? sec('Delays, for the claim record', table(['Cause', 'Responsible', 'Hours', 'Task', 'People idle'],
+      f.delayItems.map(d => [`${d.cause || 'Delay'}${d.note ? `. ${d.note}` : ''}`, d.party || '', num(d.hours), d.taskId ? task(d.taskId)?.name || 'a task' : '', d.idlePeople || '']), [2, 4]), '', 'delays')
+      : f.delays?.length ? sec(`Work delay, ${num(sum(f.delays, d => +d.h || 0))} h`, ul(f.delays.map(d => `${d.k}${d.h != null ? `: ${d.h} h` : ''}`)), '', 'delays') : ''}
+    ${requests.length ? sec('Requests', table(['Priority', 'Request'], requests.map(x => [x.priority || 'Normal', x.text || ''])), '', 'requests') : ''}
+    ${f.received?.length ? sec('Materials received', table(['Material', 'Qty', 'Note'], f.received.map(x => [x.name, `${num(x.qty)} ${x.unit || ''}`, x.note || '']), [1]), '', 'materials') : ''}
+    ${f.instructions?.length ? sec('Instructions from the client', ul(f.instructions)) : ''}
+    ${sec('Safety', html`<p>${f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : 'Not stated'}${f.toolbox == null ? '' : f.toolbox ? '. Toolbox talk held.' : '. No toolbox talk.'}</p>${f.safetyNotes?.length ? ul(f.safetyNotes) : ''}`, '', 'safety')}
+    ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
+    ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
+    ${f.photos ? html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>` : ''}
     ${f.pdfId ? html`<span class="actions left"><a href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>${locate(f)}</span>` : ''}
-    ${r.source === 'field' ? replyBox(r, c) : ''}
+    ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
+  </div>`;
+}
+
+/** The office comments pinned to a section, shown beside its heading. */
+const pinned = (r, id) => {
+  const n = (r.pins || []).filter(p => p.section === id).length;
+  return n ? html` <span class="chip warn">${n} comment${n === 1 ? '' : 's'}</span>` : '';
+};
+
+/** The checks above a report under review: each is a link to the section it is about. */
+function checkStrip(r, c) {
+  const checks = checksOf(r, { ws: c.ws, rows: c.sched.rows, hoursPerDay: billingOf(c.project).hoursPerDay });
+  return html`<div class="checks" role="list" aria-label="Checks before approving">${checks.map(k => html`
+    <button type="button" role="listitem" class="check-tile ${k.level}" data-act="toSection" data-s="${k.section}" title="Go to ${sectionLabel(k.section)}">
+      <b>${k.level === 'ok' ? '✓' : k.level === 'bad' ? '✕' : '!'} ${k.label}</b><span>${k.text}</span></button>`)}</div>`;
+}
+
+/** Comments pinned to sections of the report under review; they go to the site with Send back, Comment or Approve. */
+function pinBox(r) {
+  return html`<div class="pins">
+    ${(r.pins || []).length ? html`<ul class="plain">${r.pins.map((p, i) => html`<li><b>${sectionLabel(p.section)}:</b> ${p.text} <button type="button" class="link" data-act="unpin" data-id="${r.id}" data-i="${i}">Remove</button></li>`)}</ul>` : ''}
+    <div class="pin-add">
+      <select aria-label="Section the comment is about">${options(SECTIONS.map(([k, label]) => [k, label]), 'work')}</select>
+      <input placeholder="Comment on that section, e.g. add the cladding amount for Zone D" aria-label="Comment on the section">
+      <button type="button" class="btn small" data-act="pin" data-id="${r.id}">Add comment</button>
+    </div>
   </div>`;
 }
 
@@ -136,6 +171,27 @@ function sheet(r, c) {
 const locate = f => (f.folderId
   ? html`<a class="btn small" href="https://drive.google.com/drive/folders/${encodeURIComponent(f.folderId)}" target="_blank" rel="noopener" title="Opens the Drive folder of ${f.pdf || 'this report'}">Locate the file in Drive</a>`
   : f.pdf || f.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || f.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}">Locate the file in Drive</a>` : '');
+
+/**
+ * The approver's decision on a report under review (v0.20.0). Approve applies the figures above to the schedule,
+ * counts the day's attendance, pay and labour cost, and tells the site; Send back and Comment only write to the site.
+ */
+function decideBar(r, c, tasks = 0) {
+  const field = r.source === 'field';
+  const n = (r.pins || []).length;
+  const send = (decision, text) => html`<button class="btn" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${replying ? 'disabled' : ''}>${text}</button>`;
+  return html`<div class="decide reply">
+    ${field ? pinBox(r) : ''}
+    <p class="approve-sum">${approveSummary(r, tasks, billingOf(c.project).hoursPerDay)}</p>
+    ${field ? html`<textarea name="msg" rows="2" placeholder="Message to ${r.by}: what to correct, or a comment (also sent with Approve)" aria-label="Message to the person who prepared the report"></textarea>` : ''}
+    <div class="actions left">
+      ${store.canApprove ? html`<button class="btn primary" ${replying ? 'disabled' : ''}>Approve</button>` : html`<span class="chip warn">Only the Admin and approvers can approve</span>`}
+      ${field ? html`${send('changes', n ? `Send back with ${n} comment${n === 1 ? '' : 's'}` : 'Send back for changes')}${send('comment', 'Comment only')}` : ''}
+      <button class="btn ghost" type="button" data-fresh data-act="cancelReview" title="Leave this report waiting">Later</button>
+      <span class="muted">${replyNotice || notice}</span>
+    </div>
+  </div>`;
+}
 
 /** Status of a field report in the Field Report app, the conversation so far, and the reply to its preparer. */
 function replyBox(r, c) {
@@ -178,21 +234,23 @@ export function render(c) {
   const back = sentBack && ws.reports.find(r => r.id === sentBack.id);
   const viewed = !cur && viewing ? ws.reports.find(r => r.id === viewing) : null;
   const open = cur || viewed;
+  const doc = docOf ? ws.reports.find(r => r.id === docOf) : null;
+  if (doc) return docView(doc, c);
 
   const formCard = html`
     <section class="card">
-      <h2>${back ? `Field report, ${fmtDate(back.date)}` : cur ? `Confirm field report, ${fmtDate(cur.date)}` : 'Daily report'}</h2>
+      <h2>${back ? `Field report, ${fmtDate(back.date)}` : cur ? `Field report to approve, ${fmtDate(cur.date)}` : 'Daily report'}${cur?.field?.no ? html` <span class="muted">No. ${cur.field.no}</span>` : ''}</h2>
       ${back ? html`
         <div class="sent-back">
           <p><b>${sentBack.decision === 'changes' ? `Sent back to ${back.by} for changes.` : `Approved. ${back.by} has been notified.`}</b></p>
           ${sentBack.text ? html`<p class="muted">Your message: ${sentBack.text}</p>` : ''}
-          <p class="muted">${sentBack.decision === 'changes'
-            ? 'It stays in the list as "Sent back to site". When the corrected report is filed, it comes back here by itself within a minute.'
-            : 'It is locked in Field Report. Its progress still needs confirming here: open it again with Review.'}</p>
+          <p class="muted">It stays in the list as "Sent back to site". When the corrected report is filed, it comes back here by itself within a few minutes.</p>
           <button class="btn primary" type="button" data-act="goBack" data-fresh>Go back</button>
         </div>` : ''}
       <form data-form="report" class="form" ${back ? 'hidden' : ''}>
-        ${cur ? sheet(cur, c) : ''}
+        ${cur ? checkStrip(cur, c) : ''}
+        ${cur ? sheet(cur, c, { reviewing: true }) : ''}
+        ${cur ? html`<h3 class="rep-edit">Check the figures before approving</h3><p class="muted">Approving puts these quantities in the schedule and counts the day's attendance, pay and labour cost. Correct any figure here first.</p>` : ''}
         <div class="grid4">
           <label>Date <input type="date" name="date" value="${cur?.date || c.today}" max="${c.today}" required ${cur ? 'readonly' : ''}></label>
           <label>Prepared by <input name="by" list="team-names" value="${cur?.by || lead?.name || ''}" required>
@@ -266,11 +324,11 @@ export function render(c) {
             <label>Priority <select name="priority"><option>Normal</option><option>Urgent</option></select></label>
           </div>`}
 
-        <div class="actions left">
-          <button class="btn primary">${cur ? 'Confirm report' : 'Submit report'}</button>
-          <button class="btn ghost" type="button" data-fresh data-act="${cur ? 'cancelReview' : 'clearForm'}" title="${cur ? 'Leave this report unconfirmed' : 'Clear everything typed in this form'}">Cancel</button>
+        ${cur ? decideBar(cur, c, Object.keys(suggested).length) : html`<div class="actions left">
+          <button class="btn primary">Submit report</button>
+          <button class="btn ghost" type="button" data-fresh data-act="clearForm" title="Clear everything typed in this form">Cancel</button>
           <span class="muted">${notice}</span>
-        </div>
+        </div>`}
       </form>
     </section>`;
 
@@ -285,7 +343,7 @@ export function render(c) {
       ${pending.length ? html`<ul class="list">${pending.map(r => html`
         <li class="row">
           <span class="row-main">
-            <span><b>${fmtDate(r.date)}</b> ${r.field?.status === 'changes' ? chip('Sent back to site', 'high') : chip('To confirm', 'warn')}</span>
+            <span><b>${fmtDate(r.date)}</b> ${r.field?.status === 'changes' ? chip('Sent back to site', 'high') : chip('To approve', 'warn')}</span>
             <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}` : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site, report No. ${r.field?.no || ''}`}</span>
           </span>
           <button class="btn small ${r.id === reviewing ? '' : 'primary'}" data-act="review" data-fresh data-id="${r.id}">Review</button>
@@ -307,13 +365,13 @@ export function render(c) {
         <li class="stack">
           <div class="row top">
             <span class="row-main">
-              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${r.review === 'pending' ? chip('To confirm', 'warn') : ''}</span>
+              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${r.review === 'pending' ? chip('To approve', 'warn') : ''}</span>
               <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}`
                 : `${r.by}${r.weather ? `, ${r.weather}` : ''}, ${sum(r.manpower || [], m => m.count)} on site, ${r.entries?.length || 0} task${r.entries?.length === 1 ? '' : 's'} updated`}</span>
             </span>
             <button class="btn small" data-act="openReport" data-fresh data-id="${r.id}" title="Read it with its PDF on top and the history beside it">Open</button>
+            <button class="btn small" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>
             <button class="btn ghost small" data-act="toggle" data-id="${r.id}">${expanded.has(r.id) ? 'Hide' : 'Show all'}</button>
-            <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Delete report and re-sync the schedule">Delete</button>
           </div>
           ${expanded.has(r.id) ? sheet(r, c) : ''}
         </li>`)}</ul>` : html`<p class="empty">${reports.length ? 'No reports in this period.' : 'No reports yet.'}</p>`}
@@ -325,11 +383,13 @@ export function render(c) {
     return html`
       <div class="rv">
         <div class="rv-main">
-          ${pdfCard(open)}
           ${cur ? formCard : readCard(open, c)}
           ${store.isAdmin ? html`<section class="card">${binBody(c)}</section>` : ''}
         </div>
-        <aside class="card rv-side" aria-label="History of reports">${historyList(reports, open.id)}</aside>
+        <aside class="rv-side">
+          ${pdfCard(open)}
+          <section class="card" aria-label="History of reports">${historyList(reports, open.id)}</section>
+        </aside>
       </div>`;
   }
   const now = tab || (c.role === 'site' ? 'enter' : 'list');
@@ -339,6 +399,22 @@ export function render(c) {
     <div class="emp-tabs set-tabs" role="tablist">${tabs.map(([k, label, n]) => html`
       <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="repTab" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>
     ${now === 'enter' || back ? formCard : listCard}</div>`;
+}
+
+/** The report as the Daily Site Report, with Print, Email as PDF and WhatsApp. The attendance page is the office's only. */
+function docView(r, c) {
+  const office = store.isAdmin || c.role === 'office';
+  return html`
+    <div class="toolbar no-print">
+      <button class="btn small" data-act="closeDoc" data-fresh>‹ Back</button>
+      <div class="seg" role="group" aria-label="Which document"><button class="${brief ? '' : 'on'}" data-act="docKind" data-kind="office">Daily site report</button><button class="${brief ? 'on' : ''}" data-act="docKind" data-kind="brief" title="One page for the client: progress, site plan, S-curve, manpower and safety. No money, no names of workers.">Client brief</button></div><span class="muted">${fmtDate(r.date)}${r.field?.no ? `, No. ${r.field.no}` : ''}. ${notice}</span><span class="grow"></span>
+      ${office && !brief ? html`<label class="check"><input type="checkbox" data-chg="withAtt" ${withAtt ? 'checked' : ''}> With the attendance page (office copy)</label>` : ''}
+      <button class="btn" data-act="emailDoc" data-id="${r.id}">Email as PDF</button>
+      <button class="btn" data-share title="Send this report as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
+      <button class="btn primary" data-act="printDoc">Print</button>
+    </div>
+    ${r.review === 'pending' ? html`<p class="callout warn no-print"><b>!</b> <span>Not approved yet: the report says "Awaiting approval" until it is.</span></p>` : ''}
+    <section class="card sheet dsr-sheet">${brief ? clientBrief(r, c) : dailyDoc(r, c, { office: office && withAtt })}</section>`;
 }
 
 /** The report's own PDF, shown from Google Drive. */
@@ -360,7 +436,10 @@ function pdfCard(r) {
 function readCard(r, c) {
   return html`<section class="card">
     <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
+      <button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin for ${RETENTION_DAYS} days">Delete</button></div>
+    ${r.approvedBy ? html`<p class="muted">Approved by ${r.approvedBy}${r.approvedAt ? ` on ${fmtDate(r.approvedAt.slice(0, 10))}` : ''}.</p>` : ''}
+    ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
     ${sheet(r, c)}
   </section>`;
 }
@@ -372,7 +451,7 @@ function historyList(reports, activeId) {
     <ul class="timeline">${reports.map(r => {
       const [label, cls] = FIELD_STATUS[r.field?.status] || [];
       return html`<li class="${r.id === activeId ? 'on' : ''}"><button type="button" class="link tl" data-act="openReport" data-fresh data-id="${r.id}">
-        <span><b>${fmtDate(r.date)}</b> ${r.review === 'pending' ? chip('To confirm', 'warn') : ''}${r.field?.nowork ? chip('No work') : label && r.source === 'field' ? chip(label, cls) : ''}</span>
+        <span><b>${fmtDate(r.date)}</b> ${r.review === 'pending' ? chip('To approve', 'warn') : ''}${r.field?.nowork ? chip('No work') : label && r.source === 'field' ? chip(label, cls) : ''}</span>
         <span class="muted">${r.field?.nowork ? r.field.reason || '' : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site`}</span></button></li>`;
     })}</ul>`;
 }
@@ -428,14 +507,29 @@ export const submits = {
       .filter(m => m.count > 0 || m.ot > 0);
 
     if (cur) {
-      // the site's own entries stay as written; the Office adds the progress and may correct the crew
+      if (!store.canApprove) { notice = 'Only the Admin and approvers can approve.'; return false; }
+      // the site's own entries stay as written; the approver adds the progress and may correct the crew
       const hrs = new Map((cur.manpower || []).map(m => [m.trade, m.hrs]));
+      const who = store.profile.name || store.user?.name || store.user?.email || '';
       store.update(ws => Object.assign(underReview(ws), {
-        by, weather: fd.get('weather'), entries, review: 'done',
+        by, weather: fd.get('weather'), entries, review: 'done', approvedBy: who, approvedAt: new Date().toISOString(),
         manpower: manpower.map(m => (hrs.get(m.trade) != null && m.ot === cur.manpower.find(x => x.trade === m.trade)?.ot ? { ...m, hrs: hrs.get(m.trade) } : m)),
       }));
       reviewing = null;
-      notice = `Field report for ${fmtDate(date)} confirmed. The schedule is updated.`;
+      viewing = cur.id;
+      const done = `Field report for ${fmtDate(date)} approved. The schedule, attendance, pay and labour cost are updated.`;
+      if (cur.source !== 'field' || !cur.field?.pdf) { notice = done; replyNotice = ''; return; }
+      // the site is told after the figures are in: if it cannot be reached, the approval here stands and can be sent again
+      replyNotice = `${done} Telling the site…`;
+      const id = cur.id, projectId = c.project.id;
+      replying = true;
+      reviewFieldReport({ name: cur.field.pdf, decision: 'approve', text: pinsMessage(cur.pins, (fd.get('msg') || '').trim()) })
+        .then(view => {
+          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' }; });
+          replyNotice = `${done} The site is notified and the report is locked in Field Report.`;
+        })
+        .catch(err => { replyNotice = `${done} The site was not told: ${err.message} Press Approve under the report to send it again.`; })
+        .finally(() => { replying = false; store.notify(); });
       return;
     }
 
@@ -482,6 +576,7 @@ export const submits = {
 };
 
 export const changes = {
+  withAtt(el) { withAtt = el.checked; },
   /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
   period(el) {
     period[el.dataset.f] = +el.value || 0;
@@ -526,20 +621,51 @@ export const actions = {
     binNotice = 'Deleted permanently.';
   },
   cancelReview() { reviewing = null; notice = ''; },
+  /** Pin a comment to a section of the report under review. */
+  pin(el) {
+    const box = el.closest('.pin-add');
+    const text = box.querySelector('input').value.trim();
+    if (!text) { replyNotice = 'Write the comment first.'; return; }
+    const section = box.querySelector('select').value;
+    store.update(ws => { const r = ws.reports.find(x => x.id === el.dataset.id); if (r) r.pins = [...(r.pins || []), { section, text }]; });
+    replyNotice = '';
+  },
+  unpin(el) { store.update(ws => { const r = ws.reports.find(x => x.id === el.dataset.id); if (r) r.pins = (r.pins || []).filter((_, i) => i !== +el.dataset.i); }); },
+  /** From a check: scroll to the section it is about. */
+  toSection(el) { document.getElementById(`sec-${el.dataset.s}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   goBack() { if (sentBack?.decision === 'changes') reviewing = null; sentBack = null; replyNotice = ''; },
   /** Discard what was typed: the form is redrawn with its starting values. */
   clearForm() { notice = 'Form cleared. Nothing was saved.'; },
   repTab(el) { tab = el.dataset.t; },
+  openDoc(el) { docOf = el.dataset.id; withAtt = false; brief = false; notice = ''; },
+  docKind(el) { brief = el.dataset.kind === 'brief'; },
+  closeDoc() { docOf = null; notice = ''; },
+  printDoc() { print(); },
+  emailDoc(el, c) {
+    const r = c.ws.reports.find(x => x.id === el.dataset.id);
+    if (!r) return;
+    const name = `${brief ? 'Daily progress brief' : 'Daily Site Report'}${r.field?.no ? ` No. ${r.field.no}` : ''}, ${c.project.name}, ${fmtDate(r.date)}`.replace(/[\\/:*?"<>|]/g, '-');
+    openMail({
+      to: '',
+      subject: name,
+      message: `Dear Sir or Madam,\n\nPlease find attached the ${brief ? 'daily progress brief' : 'daily site report'} of ${c.project.name} for ${fmtDate(r.date)}.\n\nKind regards,\n${store.signature}\n${c.global.company?.name || 'Amistad Prefab'}`,
+      filename: name,
+      getHtml: () => paperHtml(document.querySelector('.paper'), name),
+      sheet: () => document.querySelector('.paper'),
+      onSent({ to }) { notice = `Sent to ${to}.`; store.notify(); },
+    });
+  },
 
   /** Send approve / changes / comment / reopen to the preparer through the Field Report receiver. */
   async reply(el, c) {
     if (replying) return;
     const decision = el.dataset.d;
-    const text = el.closest('.reply').querySelector('textarea').value.trim();
-    if ((decision === 'changes' || decision === 'comment') && !text) { replyNotice = 'Write the message first.'; return; }
-    const projectId = c.project.id;
     const id = el.dataset.id;
     const report = c.ws.reports.find(r => r.id === id);
+    const typed = (el.closest('.reply')?.querySelector('textarea')?.value || '').trim();
+    const text = reviewing === id ? pinsMessage(report.pins, typed) : typed;
+    if ((decision === 'changes' || decision === 'comment') && !text) { replyNotice = 'Write the message first.'; return; }
+    const projectId = c.project.id;
     replying = true;
     replyNotice = 'Sending…';
     try {
@@ -548,6 +674,7 @@ export const actions = {
       store.update(ws => {
         const rec = ws.reports.find(r => r.id === id);
         rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' };
+        if (decision !== 'reopen') delete rec.pins;   // sent: the pinned comments are now in the conversation
       });
       replyNotice = REPLY_DONE[decision];
       // a verdict given from the review closes the review: the form gives way to a short confirmation

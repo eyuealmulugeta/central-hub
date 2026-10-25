@@ -39,12 +39,14 @@ import { openWizard } from './ui/wizard.js';
 import { needsSync, syncTeam } from './engine/people.js';
 import { alertCount as contractAlerts } from './engine/contracts.js';
 import { alertCount as hrAlerts } from './engine/hr.js';
-import { unseenAlerts, unseenCount, alertKeys, summaryOf, headline, moneyOf, markKeysSeen } from './ui/seen.js';
+import { unseenAlerts, unseenCount, alertKeys, summaryOf, headline, moneyOf, markKeysSeen, reportsOf } from './ui/seen.js';
 import * as badges from './core/badges.js';
 import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
 import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
-import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel } from './core/nav.js';
+import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS } from './core/nav.js';
+import { healthOf } from './engine/today.js';
+import { footCss } from './ui/print.js';
 import { openPalette } from './ui/palette.js';
 import { showFind, refind } from './ui/finder.js';
 import { buildIndex, indexPages } from './ui/searchindex.js';
@@ -55,22 +57,14 @@ import { describePaper, makePdf, canShareFile, shareFile, whatsappUrl, TELEGRAM_
 import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
 const APP = 'Amistad Prefab Central Hub';
-// the trading side has two pages, both drawn by the trade module
-/** The grid of one section's pages: the same tiles as Home, with their red numbers. */
-const section = {
-  render: () => home.render({
-    counts: lastShown,
-    apps: sectionTabs(openSection).map(t => ({ page: t, title: TITLES[t], icon: APP_ICON[t] || openSection.icon, tone: HUB_TONE[openSection.id] || 'gray', pages: [t] })),
-  }),
-};
-const VIEWS = { section, home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
-const COMPANY_VIEWS = { home: 'Amistad Prefab at a glance', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
+const COMPANY_VIEWS = { home: 'What needs you, across all projects', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Home', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { home: 'Today', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -80,11 +74,9 @@ const myDivisions = () => divisionsOf({ role: store.role, divisions: store.divis
 /** The company's records of the open division only: a page cannot mix the two businesses. */
 const scoped = () => scopedCompany(store.company, division);
 const hubs = () => hubsOf(division);
-let openSection = null;   // the section whose grid of pages is open (#s-<id>)
-const hubOf = name => (name === 'section' ? openSection : hubs().find(h => h.tabs.includes(name)));
-/** A section opens on a grid of its pages when it has more than one for this person. Settings keeps its own list. */
-const sectionTabs = h => h.tabs.filter(allowed);
-const gridded = h => h.id !== 'settings' && sectionTabs(h).length > 1;
+const hubOf = name => hubs().find(h => h.tabs.includes(name));
+/** The page a section opens on: the one last opened in it, else its first page this person may open (v0.22.0: no grid of tiles). */
+const entryOf = h => { const tabs = h.tabs.filter(allowed); return lastTab[h.id] && tabs.includes(lastTab[h.id]) ? lastTab[h.id] : tabs[0]; };
 function setDivision(d) {
   division = d;
   setCurrentDivision(d);
@@ -178,9 +170,7 @@ const route = () => {
   const raw = location.hash.slice(1);
   if (raw.startsWith('s-')) {
     const h = hubs().find(x => x.id === raw.slice(2));
-    if (h && gridded(h)) { openSection = h; TITLES.section = h.label; return 'section'; }
-    const first = h && sectionTabs(h)[0];
-    return first || 'home';
+    return (h && entryOf(h)) || 'home';
   }
   const name = resolve(raw);
   if (!allowed(name)) return 'home';
@@ -198,41 +188,6 @@ const PERCENT_MEANS = {
 let lastCounts = { raw: {}, key: {} };   // what the red numbers counted at the last draw, for Mark as read
 let lastShown = {};                      // the red numbers as the menu shows them (after Mark as read), for the apps on Home
 
-// The apps on Home: every page this person may open in this division, one tile each, coloured by its section.
-const APP_ICON = {
-  dashboard: 'dashboard', schedule: 'schedule', setup: 'apps', reports: 'reports', status: 'reports', hr: 'hr', employment: 'hr', crewletters: 'contracts',
-  attendance: 'reports', evaluation: 'hr', directory: 'access', setup: 'apps', status: 'reports', payroll: 'finance', ledger: 'ledger', invoices: 'docs', quotations: 'docs', cashflow: 'finance', payments: 'finance', income: 'ledger',
-  expenses: 'ledger', summary: 'finance', contracts: 'contracts', documentsign: 'contracts', letters: 'contracts', requests: 'docs', contacts: 'access',
-  owners: 'company', trade: 'trade', stock: 'stock', tradesummary: 'finance', discuss: 'discuss', meetings: 'meetings',
-};
-const HUB_TONE = { projects: 'teal', report: 'teal', trading: 'teal', crew: 'violet', finance: 'amber', admin: 'coral' };
-// [page, name, pages whose red numbers it shows]. "@finance" is the first Finance page this person may open; "@settings" likewise.
-const LAUNCHER = [
-  ['dashboard', 'Dashboard', ['dashboard', 'setup']], ['schedule', 'Schedule'], ['reports', 'Daily reports', ['reports', 'status']],
-  ['trade', 'Trading'], ['stock', 'Stock'],
-  ['hr', null], ['attendance', 'Attendance sheet'], ['payroll', 'Payroll'],
-  ['@finance', 'Finance'], ['invoices', 'Invoices', ['invoices', 'quotations']], ['tradesummary', 'Finance'], ['requests', 'Requests'],
-  ['contracts', 'Contracts'], ['documentsign', 'Sign'], ['letters', 'Letters'], ['contacts', 'Contacts'],
-  ['discuss', 'Discuss'], ['meetings', 'Meetings'], ['@settings', 'Settings'],
-];
-function launcherApps() {
-  const mine = pagesIn(division);
-  const firstOf = id => (hubs().find(h => h.id === id)?.tabs || []).filter(t => allowed(t) && !(id === 'finance' && t === 'invoices'));
-  const out = [];
-  for (const [key, name, pages] of LAUNCHER) {
-    if (key === '@finance' && division !== 'installation') continue;
-    const hubId = key.startsWith('@') ? key.slice(1) : null;
-    const tabs = hubId ? firstOf(hubId) : [];
-    const page = hubId ? (lastTab[hubId] && tabs.includes(lastTab[hubId]) ? lastTab[hubId] : tabs[0]) : key;
-    if (!page || !mine.includes(page) || !allowed(page)) continue;
-    const hub = hubOf(page);
-    out.push({
-      page, title: name || (division === 'trading' ? 'Staff' : 'Crew'), icon: APP_ICON[page] || hub?.icon || 'apps',
-      tone: hubId === 'settings' ? 'gray' : HUB_TONE[hub?.id] || 'gray', pages: hubId ? tabs : (pages || [page]),
-    });
-  }
-  return out;
-}
 let lastSummaries = [];
 
 /** Mark things as read: the pages of the open section, or everything (every section and every project's alerts). */
@@ -292,16 +247,30 @@ function renderSidebar(name, summaries) {
   const badge = n => (n ? html`<em>${n}</em>` : '');
   const here = hubOf(name);
 
-  // the menu: one link per section that has at least one page this person may open
-  $('#nav-hubs').innerHTML = String(html`${!p ? '' : hubs().map(h => {
+  // the menu: one link per section that has at least one page this person may open; the Team pages at the foot
+  const link = h => {
     const tabs = h.tabs.filter(allowed);
     if (!tabs.length) return '';
-    const to = gridded(h) ? `s-${h.id}` : tabs[0];
     return html`
-      <a href="#${to}" class="side-link ${h === here ? 'on' : ''}" title="${h.label}" ${h === here ? html`aria-current="page"` : ''}>
+      <a href="#${entryOf(h)}" class="side-link ${h === here ? 'on' : ''}" title="${h.label}" ${h === here ? html`aria-current="page"` : ''}>
         ${icon(h.icon)}<span>${h.label}</span>${badge(tabs.reduce((n, t) => n + (count[t] || 0), 0))}
       </a>`;
-  })}`);
+  };
+  const teamLinks = !p ? [] : hubs().filter(h => h.team).map(link).filter(String);
+  $('#nav-hubs').innerHTML = String(html`${!p ? '' : hubs().filter(h => !h.team).map(link)}
+    ${teamLinks.length ? html`<div class="side-label">Team</div>${teamLinks}` : ''}`);
+  // the open project's health under the chooser: progress and days behind, with a coloured dot
+  const own = summaries.find(s => s.project === p);
+  const health = own ? healthOf(own) : null;
+  $('#side-health').hidden = !health || $('#side-project').hidden;
+  $('#side-health').innerHTML = health ? String(html`<i class="dot ${health.tone}"></i><span>${Math.round(own.progress || 0)} % · ${health.label}</span>`) : '';
+  // the phone's five tabs: Today, Project, Reports, Money, and More (the whole menu as a sheet)
+  $('#phone-tabs').innerHTML = String(html`${!p ? '' : PHONE_TABS.map(([id, label]) => {
+    const h = hubs().find(x => x.id === id);
+    const to = h && entryOf(h);
+    if (!to) return '';
+    return html`<a href="#${to}" class="ptab ${h === here ? 'on' : ''}">${icon(h.icon)}<span>${label}</span>${badge(h.tabs.filter(allowed).reduce((n, t) => n + (count[t] || 0), 0))}</a>`;
+  })}<button type="button" class="ptab ${document.body.classList.contains('more-open') ? 'on' : ''}" id="phone-more" aria-expanded="${document.body.classList.contains('more-open')}">${icon('apps')}<span>More</span></button>`);
   // the tabs of the open section, across the top of the page
   const tabs = here && p ? here.tabs.filter(allowed) : [];
   $('#tabs').innerHTML = String(html`${tabs.map(t => html`
@@ -310,7 +279,7 @@ function renderSidebar(name, summaries) {
     ${tabs.some(t => count[t]) ? html`<button type="button" class="tab mark-read" data-markread="hub" title="Hide the red numbers of this section until something new needs attention">✓ Mark as read</button>` : ''}`);
   // a section with a single page needs no row of tabs
   // Settings lists its pages down the left of the page instead
-  $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings' || name === 'section';
+  $('#tabs').hidden = !here || !p || tabs.length < 2 || here.id === 'settings';
 
   $('#nav-foot').innerHTML = String(html`
     ${store.cloud ? html`<div class="side-user"><span title="${store.user.email}">${store.user.email}</span><button type="button" class="btn ghost small" id="btn-signout">Sign out</button></div>` : ''}`);
@@ -368,15 +337,14 @@ function render() {
   // The red number on a project is its alerts this person has not opened yet. A Site user cannot
   // open every alert, so for them it is shown for the open project only.
   const summaries = store.projects.map(x => {
-    if (x === p) return { project: x, keys: alertKeys(ctx.flags), ...headline(ctx), slip: ctx.sched.slip, unseen: unseenAlerts(p.id, ctx.flags).size, money: store.seesMoney ? moneyOf(ctx) : null };
-    if (store.cloud) return { project: x, keys: x.summary?.alerts || [], progress: x.summary?.progress || 0, basis: x.summary?.basis, slip: x.summary?.slip || 0, unseen: isSite() ? 0 : unseenCount(x.id, x.summary?.alerts), money: store.seesMoney ? x.summary?.money || null : null };
+    if (x === p) return { project: x, keys: alertKeys(ctx.flags), ...headline(ctx), slip: ctx.sched.slip, unseen: unseenAlerts(p.id, ctx.flags).size, money: store.seesMoney ? moneyOf(ctx) : null, budget: ctx.led.budget, ...reportsOf(ctx.ws) };
+    if (store.cloud) return { project: x, keys: x.summary?.alerts || [], progress: x.summary?.progress || 0, basis: x.summary?.basis, slip: x.summary?.slip || 0, unseen: isSite() ? 0 : unseenCount(x.id, x.summary?.alerts), money: store.seesMoney ? x.summary?.money || null : null, budget: x.budget || 0, waiting: x.summary?.waiting || 0, lastReport: x.summary?.lastReport || '' };
     const d = derive(x, store.peek(x.id), store.global, today);
-    return { project: x, keys: alertKeys(d.flags), ...headline(d), slip: d.sched.slip, unseen: unseenCount(x.id, alertKeys(d.flags)), money: moneyOf(d) };
+    return { project: x, keys: alertKeys(d.flags), ...headline(d), slip: d.sched.slip, unseen: unseenCount(x.id, alertKeys(d.flags)), money: moneyOf(d), budget: d.led.budget, ...reportsOf(d.ws) };
   });
   ctx.summaries = summaries;
   ctx.can = allowed;
   renderSidebar(name, summaries);
-  ctx.apps = launcherApps();
   ctx.counts = lastShown;
   if (appOn(store.global, 'discuss')) discuss.announce(scoped(), name === 'discuss');   // a ring and a note for a new message
   if (appOn(store.global, 'meetings') && store.can('meetings')) meetings.announce(scoped());   // a note for a new invitation
@@ -384,7 +352,7 @@ function render() {
 
   $('#page-title').textContent = TITLES[name];
   $('#project-meta').textContent = (name === 'trade' && division === 'installation' ? 'Shipments bought for the projects' : COMPANY_VIEWS[name]) || [p.location, MONEY_PAGES.includes(permKey(name)) ? p.currency : ''].filter(Boolean).join(' · ');   // the project is in the chooser; the currency only where money is shown
-  if (hubOf(name) && name !== 'section') lastTab[hubOf(name).id] = name;
+  if (hubOf(name)) lastTab[hubOf(name).id] = name;
   document.title = COMPANY_VIEWS[name] ? `${TITLES[name]} · ${APP}` : `${TITLES[name]} · ${p.name} · ${APP}`;
 
   // keep focus and scroll position across the re-render
@@ -396,12 +364,14 @@ function render() {
   if (key !== lastKey) view.preset?.(ALIASES[name]?.preset || {});
   try {
     root.innerHTML = String(view.render(ctx));
+    groupShare(root);
+    printFoot(root);
   } catch (err) {
     // one broken page must not take the rest of the app down
     diagnostics.record(err, `render ${name}`);
     root.innerHTML = String(html`<section class="card"><h2>This page could not be shown</h2>
       <p class="muted">The problem was saved quietly and the Admin will see it. The rest of Central Hub still works.</p>
-      <div class="actions left"><a class="btn primary" href="#home">Go to Home</a><button class="btn" type="button" onclick="location.reload()">Reload</button></div></section>`);
+      <div class="actions left"><a class="btn primary" href="#home">Go to Today</a><button class="btn" type="button" onclick="location.reload()">Reload</button></div></section>`);
   }
   if (kept && restoreFields(kept)) typing = wasTyping;
   if (key === lastKey) {
@@ -411,6 +381,7 @@ function render() {
     view.onEnter?.(root, ctx);
     if (!lastKey.endsWith(`|${p.id}`)) checkSoon();
   }
+  $('#btn-print').hidden = name === 'home' || !!root.querySelector('.share-menu, [data-act="print"], [data-act="printDoc"]');
   lastKey = key;
   fieldAutoSync();   // keeps Field Report's projects in step with this one when that is switched on
   if (findNext) { showFind(root, findNext); findNext = ''; } else refind(root);   // the words that were searched for stay marked
@@ -424,6 +395,41 @@ function render() {
     else root.querySelector(q.focus)?.focus();
   }
 }
+
+// v0.22.1: the document on screen gives the footer printed on every page (company, document, reference, date)
+function printFoot(box) {
+  let style = document.getElementById('print-foot');
+  if (!style) { style = document.createElement('style'); style.id = 'print-foot'; document.head.append(style); }
+  const papers = [...box.querySelectorAll('.paper[data-foot]')];
+  style.textContent = footCss(papers.length ? papers[0].dataset.foot : '');
+}
+
+// v0.22.0: one "Print and share" menu on every page instead of a row of Print, Email, WhatsApp and CSV buttons.
+// The buttons themselves move into the menu, so each still does what its page says.
+const SHARE_ORDER = ['print', 'printDoc', 'email', 'emailDoc', 'emailSlip', 'share', 'csv'];
+const shareKey = b => (b.hasAttribute('data-share') ? 'share' : b.dataset.act);
+function groupShare(box) {
+  for (const bar of box.querySelectorAll('.toolbar')) {
+    const items = [...bar.children].filter(b => b.matches('button, a') && SHARE_ORDER.includes(shareKey(b)));
+    if (items.length < 2) continue;
+    const menu = document.createElement('details');
+    menu.className = 'share-menu no-print';
+    menu.innerHTML = '<summary class="btn">Print and share</summary><div class="menu" role="menu"></div>';
+    items[0].before(menu);
+    const list = menu.querySelector('.menu');
+    for (const b of items.sort((x, y) => SHARE_ORDER.indexOf(shareKey(x)) - SHARE_ORDER.indexOf(shareKey(y)))) {
+      b.classList.remove('btn', 'primary', 'ghost', 'small');
+      b.classList.add('menu-item');
+      b.setAttribute('role', 'menuitem');
+      if (shareKey(b) === 'print' || shareKey(b) === 'printDoc') b.textContent = 'Print or save as PDF';
+      list.append(b);
+    }
+  }
+}
+// a menu closes when something in it is chosen, or something else is clicked
+document.addEventListener('click', e => {
+  for (const m of document.querySelectorAll('.share-menu[open]')) if (!m.contains(e.target) || e.target.closest('.menu-item')) m.open = false;
+});
 
 /** Go to a page; `before` runs first (for example to select the record to show there). */
 function goTo(page, before) {
@@ -599,7 +605,18 @@ $('#btn-print').addEventListener('click', () => print());
 $('#btn-search').addEventListener('click', palette);
 addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && store.project) { e.preventDefault(); palette(); }
+  if (e.key === 'Escape' && root.querySelector('.drawer')) { root.querySelector('.drawer-hd [data-act]')?.click(); return; }
+  // single keys only when no field has the cursor (v0.22.0): / search, n new
+  if (e.ctrlKey || e.metaKey || e.altKey || !store.project || e.target.closest?.('input, textarea, select, [contenteditable], dialog')) return;
+  if (e.key === '/') { e.preventDefault(); palette(); }
+  else if (e.key === 'n' && !$('#quick').hidden) { e.preventDefault(); $('#quick').open = true; }
 });
+// the phone's More: the whole menu as a sheet over the page; choosing a page closes it
+document.addEventListener('click', e => {
+  if (e.target.closest('#phone-more')) { document.body.classList.toggle('more-open'); refresh(); }
+  else if (e.target.closest('.sidebar a, .sidebar-x')) document.body.classList.remove('more-open');
+});
+addEventListener('hashchange', () => document.body.classList.remove('more-open'));
 $('#quick-menu').addEventListener('click', e => {
   const b = e.target.closest('[data-q]');
   if (!b) return;

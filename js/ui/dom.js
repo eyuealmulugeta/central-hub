@@ -36,3 +36,14 @@ export const chip = (text, cls = '') => html`<span class="chip ${cls}">${text}</
 /** An app icon by name, in the brand tones (see icons.js). `size` is in pixels. */
 export const icon = (name, size = 22) =>
   new Safe(`<svg class="ico" viewBox="0 0 24 24" width="${+size}" height="${+size}" aria-hidden="true">${MARKS[name] || ''}</svg>`);
+
+/**
+ * The detail panel (v0.22.0, Hub 2): a list stays on screen and the record opened from it shows on the right, with
+ * its actions. Deleting lives here, never on a list row. `closeAct` is the screen's action that closes it.
+ */
+export const drawer = (title, sub, body, closeAct = 'closeDrawer') => html`
+  <aside class="drawer no-print" role="dialog" aria-label="${title}">
+    <header class="drawer-hd"><div><h2>${title}</h2>${sub ? html`<span class="muted">${sub}</span>` : ''}</div>
+      <button type="button" class="btn ghost small" data-act="${closeAct}" aria-label="Close">✕</button></header>
+    <div class="drawer-bd">${body}</div>
+  </aside>`;

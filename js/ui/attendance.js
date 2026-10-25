@@ -4,12 +4,14 @@
 // Prints, emails as PDF and shares like any sheet.
 
 import { store } from '../core/store.js';
-import { register, MARK_LABEL, STATES, periodFor, shiftPeriod, correction, liveFixes } from '../engine/attendance.js';
+import { register, groupRows, MARK_LABEL, STATES, periodFor, shiftPeriod, correction, liveFixes, waitingNote } from '../engine/attendance.js';
+import { wageOf, monthlyRolesOf } from '../engine/crewpay.js';
+import { docRef } from '../engine/docref.js';
 import { onSite } from '../sync/fieldreport.js';
 import { toDay, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html } from './dom.js';
-import { letterhead } from './docs.js';
+import { docHead, docFoot, footText, signoff } from './print.js';
 import { openMail } from './maildialog.js';
 import { tell } from '../core/image.js';
 
@@ -25,6 +27,9 @@ const mayEdit = () => (store.role === 'owner' || store.role === 'office') && !st
 const crewOf = c => [...c.ws.team.filter(m => m.active !== false && onSite(m, c.company.staff || [])), ...extra];
 const periodOf = c => periodFor(c.project, at || c.today);
 const nameOf = (r, key) => r.rows.find(x => x.key === key)?.name || '';
+/** Monthly or daily, for the grouping only: the sheet itself never shows money. */
+const perOf = c => row => wageOf(row, { ws: c.ws, project: c.project, staff: c.company.staff || [], monthlyRoles: monthlyRolesOf(store.global) }).per;
+const holder = (c, re) => c.ws.team.find(m => m.active !== false && re.test(m.role || ''))?.name || '';
 
 function editor(c, r) {
   if (!editing) return '';
@@ -63,6 +68,9 @@ export function render(c) {
   const r = register(c.project, c.ws, p, crewOf(c));
   const edit = mayEdit();
   const working = r.days.filter(d => !r.off.has(d)).length;
+  const groups = groupRows(r.rows, perOf(c));
+  const ref = docRef({ company: c.global.company, project: c.project, type: 'ATT', key: p.from.slice(0, 7) + (p.kind === 'monthly' ? '' : `-${p.from.slice(8)}`) });
+  const span = r.days.length;
   const cellFor = (row, d) => {
     const cell = row.cells[d];
     const on = editing && editing.date === d && editing.key === row.key;
@@ -81,21 +89,28 @@ export function render(c) {
       <button class="btn" data-share title="Send this sheet as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="print">Print</button>
     </div>
+    ${waitingNote(c.ws.reports, p) ? html`<p class="callout warn no-print"><b>!</b> <span>${waitingNote(c.ws.reports, p)}</span></p>` : ''}
     ${edit ? html`<p class="muted no-print att-help">Tap a day to correct it. The pay period (weekly, every two weeks or monthly) is set under Settings, This project, Calendar and rates.</p>` : ''}
     ${editor(c, r)}
-    <section class="card sheet att-sheet"><div class="paper att">
-      ${letterhead(c, 'Attendance sheet', [['Project', c.project.name], ['Period', p.label], ['Days reported', `${r.reportedDays} of ${working} working days`]])}
+    <section class="card sheet att-sheet"><div class="paper att dsr land" data-foot="${footText(c, 'Attendance sheet', ref)}">
+      ${docHead(c, { title: 'Attendance sheet', sub: p.label, ref, facts: [['Project', c.project.name], ['Period', p.label], ['Days reported', `${r.reportedDays} of ${working} working days`], ['People', String(r.rows.length)]] })}
       ${r.rows.length ? html`<div class="att-scroll"><table class="att-grid">
         <thead>
           <tr><th class="att-name">Name</th>${r.days.map(d => html`<th class="${r.off.has(d) ? 'att-off' : ''}"><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}<th class="att-t">P</th><th class="att-t">A</th><th class="att-t">S</th><th class="att-t">L</th><th class="att-t">OT h</th></tr>
         </thead>
-        <tbody>${r.rows.map(row => html`<tr>
+        ${groups.map(g => html`<tbody>
+          <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · attendance is a record; it does not change the monthly pay' : ''}</span></td></tr>
+          ${g.rows.map(row => html`<tr>
           <td class="att-name"><b>${row.name}</b>${row.role ? html`<br><span class="muted">${row.role}</span>` : ''}</td>
           ${r.days.map(d => cellFor(row, d))}
-          <td class="att-t"><b>${row.present}</b></td><td class="att-t">${row.absent || ''}</td><td class="att-t">${row.sick || ''}</td><td class="att-t">${row.leave || ''}</td><td class="att-t">${row.ot || ''}</td></tr>`)}</tbody>
-        <tfoot><tr><td class="att-name">Present</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t" colspan="4"></td></tr></tfoot>
+          <td class="att-t"><b>${row.present}</b></td><td class="att-t">${row.absent || ''}</td><td class="att-t">${row.sick || ''}</td><td class="att-t">${row.leave || ''}</td><td class="att-t">${row.ot || ''}</td></tr>`)}
+          ${groups.length > 1 ? html`<tr class="att-sub"><td class="att-name">Subtotal</td><td colspan="${span}"></td><td class="att-t"><b>${g.totals.present}</b></td><td class="att-t">${g.totals.absent || ''}</td><td class="att-t">${g.totals.sick || ''}</td><td class="att-t">${g.totals.leave || ''}</td><td class="att-t">${g.totals.ot || ''}</td></tr>` : ''}
+        </tbody>`)}
+        <tfoot><tr><td class="att-name">Present per day</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t">${r.rows.reduce((s, x) => s + x.absent, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.sick, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.leave, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.ot, 0) || ''}</td></tr></tfoot>
       </table></div>
-      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days. Attendance comes from the daily reports filed from site.</p>`
+      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site.</p>
+      ${signoff([{ label: 'Prepared by · Site engineer', name: holder(c, /site engineer/i) }, { label: 'Approved by · Project engineer', name: holder(c, /project engineer/i) }])}
+      ${docFoot(footText(c, 'Attendance sheet', ref))}`
       : html`<p class="empty">Nobody is on this project's site team yet, and no attendance was reported for ${p.label}.</p>`}
     </div></section>
     ${edit ? html`<form data-form="addPerson" class="entry no-print att-add">

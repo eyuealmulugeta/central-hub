@@ -46,9 +46,14 @@ export const moneyOf = d => ({
   invoiced: Math.round(d.bill.invoiced), received: Math.round(d.led.income), spent: Math.round(d.led.spent),
   owed: Math.round(d.bill.outstanding), currency: d.project.currency,
 });
+/** Daily reports waiting for approval, and the date of the newest one: the line under a project on Today (v0.22.0). */
+export const reportsOf = ws => ({
+  waiting: (ws?.reports || []).filter(r => r.review === 'pending').length,
+  lastReport: (ws?.reports || []).map(r => r.date).sort().at(-1) || '',
+});
 export const summaryOf = d => {
   const h = headline(d);
-  return { progress: Math.round(h.progress), basis: h.basis, slip: d.sched.slip, alerts: alertKeys(d.flags), money: moneyOf(d) };
+  return { progress: Math.round(h.progress), basis: h.basis, slip: d.sched.slip, alerts: alertKeys(d.flags), money: moneyOf(d), ...reportsOf(d.ws) };
 };
 
 /** Mark a set of alerts (by key) as opened, for any project: "Mark as read". */

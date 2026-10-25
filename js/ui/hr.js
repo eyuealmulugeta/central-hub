@@ -20,7 +20,8 @@ import { positionGroups, departmentChoices, nationalityChoices, normDepartment }
 import { chooseOptions, chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { ownerFromStaff } from '../engine/owners.js';
 import { paperHtml } from '../sync/mail.js';
-import { letterhead } from './docs.js';
+import { docHead, docSec, footText } from './print.js';
+import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
 import { personSummary, methodLabel } from '../engine/crewpay.js';
@@ -51,8 +52,6 @@ export const focusOn = (id, onTab = 'work') => { selected = id; tab = onTab; mod
 const find = company => company.staff.find(p => p.id === selected);
 const isLink = v => /^https?:\/\//i.test(v || '');
 /** Opens the person's file in Drive: the folder link kept on their record, else a Drive search for their name. */
-const locate = p => html`<a class="btn small emp-locate" target="_blank" rel="noopener" href="${isLink(p.folder) ? p.folder : `https://drive.google.com/drive/search?q=${encodeURIComponent(p.name || '')}`}"
-  title="${isLink(p.folder) ? 'Opens the folder of ' + (p.name || 'this person') : 'Searches Google Drive for ' + (p.name || 'this person') + '. Paste their folder link under Work information to open it directly'}">Locate the file in Drive</a>`;
 const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0] || '').join('').toUpperCase() || '?';
 const tone = id => TONES[[...String(id)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % TONES.length];
 const avatar = (p, cls = '') => (p.photo
@@ -114,8 +113,7 @@ function wall(sum, c, cur) {
             ${p.phone ? html`<span class="muted">${p.phone}</span>` : ''}
             <span class="emp-tags">${p.status === 'left' ? chip('Left') : ''}${alerts.length ? chip(alerts.length === 1 ? alerts[0].text : `${alerts.length} things need attention`, alerts.some(a => a.sev === 'high') ? 'high' : 'warn') : ''}</span>
           </span>
-        </button>
-        ${locate(p)}</div>`)
+        </button></div>`)
       : html`<p class="empty">${c.company.staff.length ? 'Nobody matches.' : 'No employees yet. Add the first one with "New employee".'}</p>`}
     </section>
     <p class="muted">Only you, the Admin, can open this page. Office and Site users cannot, and the database does not send them these records.</p>`;
@@ -163,9 +161,9 @@ function profileSheet({ p }, c) {
       <div class="week">${SHEET_OPTIONS.map(([k, label]) => html`<label class="check"><input type="checkbox" data-chg="sheetOpt" data-k="${k}" ${o[k] ? 'checked' : ''}> ${label}</label>`)}</div>
       <p class="muted">Pay, private address and phone, ID number, emergency contact, bank account and notes are never on the sheet. ${o.rating ? 'The rating summary shares what the evaluators wrote with the client: untick it if that is not what you want. ' : ''}${o.passport ? 'The passport number is personal data: include it only when the client needs it.' : ''}</p>
     </section>
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, 'Crew profile', [['Name', p.name || ''], ['Prepared', fmtFull(c.today)]])}
-      <table style="margin-top:14px"><tr>
+    <section class="card sheet"><div class="paper dsr doc-paper profile-paper" data-foot="${footText(c, 'Crew profile', `${companyCode(c.global.company)}-CV-${(p.id || '').slice(-6).toUpperCase()}`, { project: false })}">
+      ${docHead(c, { title: 'Crew profile', sub: p.name || '', ref: `${companyCode(c.global.company)}-CV-${(p.id || '').slice(-6).toUpperCase()}`, facts: [['Position', p.title || ''], ['Department', p.department || ''], ['Prepared', fmtFull(c.today)]] })}
+      <table class="profile-top"><tr>
         ${o.photo && p.photo ? html`<td style="width:150px;border:0"><img src="${p.photo}" alt="" style="width:130px;height:130px"></td>` : ''}
         <td style="border:0"><h2 style="text-transform:none;font-size:20px">${p.name || ''}</h2>
           <p><b>${p.title || ''}</b>${p.department ? html` · ${p.department}` : ''}</p>
@@ -178,18 +176,18 @@ function profileSheet({ p }, c) {
             ${o.passport ? html`${fact('Passport No.', passNo)}${fact('Passport expires', passport?.expiry && fmtFull(passport.expiry))}` : ''}
             ${o.certificate ? fact('Highest certificate', p.certificate) : ''}
           </dl></td></tr></table>
-      ${o.passportImage && p.passportImage ? html`<h3>Passport</h3><img src="${p.passportImage}" alt="" style="max-width:100%;max-height:430px">` : ''}
-      ${o.papers && other.length ? html`<h3>Papers</h3><table><thead><tr><th>Paper</th><th>Valid until</th></tr></thead>
-        <tbody>${other.map(d => html`<tr><td>${d.kind}</td><td>${d.expiry ? fmtFull(d.expiry) : ''}</td></tr>`)}</tbody></table>` : ''}
-      ${o.history && history.length ? html`<h3>Projects worked on</h3><table>
+      ${o.passportImage && p.passportImage ? docSec('', 'Passport', html`<img src="${p.passportImage}" alt="" style="max-width:100%;max-height:430px">`) : ''}
+      ${o.papers && other.length ? docSec('', 'Papers', html`<table class="dsr-t"><thead><tr><th>Paper</th><th>Valid until</th></tr></thead>
+        <tbody>${other.map(d => html`<tr><td>${d.kind}</td><td>${d.expiry ? fmtFull(d.expiry) : ''}</td></tr>`)}</tbody></table>`) : ''}
+      ${o.history && history.length ? docSec('', 'Projects worked on', html`<table class="dsr-t">
         <thead><tr><th>Project</th><th>Role</th><th>From</th><th>To</th></tr></thead>
-        <tbody>${history.map(h => html`<tr><td>${h.project}${h.note ? html`<br><span class="muted">${h.note}</span>` : ''}</td><td>${h.role || ''}</td><td class="nowrap">${h.from ? fmtFull(h.from) : ''}</td><td class="nowrap">${h.to ? fmtFull(h.to) : 'Present'}</td></tr>`)}</tbody></table>` : ''}
-      ${o.rating ? html`<h3>Performance rating</h3>${r.evals.length || r.notes.length ? html`
+        <tbody>${history.map(h => html`<tr><td>${h.project}${h.note ? html`<br><span class="muted">${h.note}</span>` : ''}</td><td>${h.role || ''}</td><td class="nowrap">${h.from ? fmtFull(h.from) : ''}</td><td class="nowrap">${h.to ? fmtFull(h.to) : 'Present'}</td></tr>`)}</tbody></table>`) : ''}
+      ${o.rating ? docSec('', 'Performance rating', html`${r.evals.length || r.notes.length ? html`
         <p><b>${score(r.overall)} of 5</b> ${r.overall != null ? html`<span class="muted">(${scaleLabel(r.overall)}, average of ${r.evals.length} evaluation${r.evals.length === 1 ? '' : 's'})</span>` : ''}
           ${r.stars != null ? html`<br>Feedback on the day: ${stars(r.stars)} <span class="muted">from ${r.notes.length} note${r.notes.length === 1 ? '' : 's'}</span>` : ''}</p>
         ${r.latest ? html`<table><thead><tr><th>Latest evaluation</th><th class="r">Score</th></tr></thead>
           <tbody>${r.latest.pillars.map(x => html`<tr><td>${x.name}</td><td class="r">${score(x.value)}</td></tr>`)}</tbody></table>` : ''}`
-        : html`<p class="muted">No evaluation recorded yet.</p>`}` : ''}
+        : html`<p class="muted">No evaluation recorded yet.</p>`}`) : ''}
       <p class="muted p-notes">Prepared by ${c.global.company?.name || 'Amistad Prefab'} on ${fmtFull(c.today)}.</p>
     </div></section>`;
 }

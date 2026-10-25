@@ -4,6 +4,7 @@ import { wouldCycle } from '../engine/gantt.js';
 import { copyTasks } from '../engine/taskcopy.js';
 import { uid, toDay, fromDay, fmtDay, isWork, dow, num } from '../core/util.js';
 import { html, field, options } from './dom.js';
+import { ganttPaper } from './ganttprint.js';
 
 const ROW = 34; // must match .g-row height in app.css
 const DAY_W = { day: 24, week: 9 };
@@ -12,6 +13,7 @@ let selected = null;
 let zoom = 'day';
 let notice = '';
 let todayX = 0;
+let paperView = false;   // the A3 programme to print, in place of the chart
 // Import from another project: the panel is open while `imp` is set
 let imp = null;          // { from: project id, start: date, replace: bool, tasks: null | [] (loaded), loading: bool }
 
@@ -40,6 +42,14 @@ function importPanel(c) {
 }
 
 export function render(c) {
+  if (paperView) {
+    return html`<div class="toolbar no-print">
+        <button class="btn ghost" data-act="paperOff">← Schedule</button><span class="muted">A3 landscape, the whole programme on one sheet</span><span class="grow"></span>
+        <button class="btn" data-share title="Send this programme as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
+        <button class="btn primary" data-act="printPaper">Print</button>
+      </div>
+      <section class="card sheet gantt-sheet">${ganttPaper(c)}</section>`;
+  }
   const { sched: s, project, ws } = c;
   const wd = calendarOf(project, ws.reports);
   const T = toDay(c.today);
@@ -86,6 +96,7 @@ export function render(c) {
         <button class="${zoom === 'day' ? 'on' : ''}" data-act="zoom" data-z="day">Days</button>
         <button class="${zoom === 'week' ? 'on' : ''}" data-act="zoom" data-z="week">Weeks</button>
       </div>
+      <button class="btn" data-act="paperOn" title="The whole programme on one A3 page, to print or send" ${s.rows.length ? '' : 'disabled'}>Print programme</button>
       ${canEdit ? html`<button class="btn" data-act="openImport" title="Copy the task list of another project into this one">Import</button><button class="btn primary" data-act="add">Add task</button>` : ''}
     </div>
 
@@ -178,6 +189,9 @@ export function onEnter(root) {
 const task = ws => ws.tasks.find(t => t.id === selected);
 
 export const actions = {
+  paperOn() { paperView = true; },
+  paperOff() { paperView = false; },
+  printPaper() { print(); },
   select(el) { selected = el.dataset.id; notice = ''; imp = null; },
   close() { selected = null; },
   zoom(el) { zoom = el.dataset.z; },

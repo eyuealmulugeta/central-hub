@@ -10,7 +10,6 @@ import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
-import { letterhead } from './docs.js';
 import { docHead, docFoot, footText, signoff } from './print.js';
 import { companyCode } from '../engine/docref.js';
 import { withFixes } from '../engine/attendance.js';
@@ -123,17 +122,17 @@ function detail(run, c) {
         <select name="staffId" aria-label="Add a person">${options(addable.map(p => [p.id, p.title ? `${p.name}, ${p.title}` : p.name]), null)}</select>
         <button class="btn">Add to this run</button></form>` : ''}
     </section>
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, 'Payroll', [['Month', monthLabel(run.month)], ['Status', statusLabel(run.status)], ['People', String(run.lines.length)]])}
-      <table style="margin-top:12px"><thead><tr><th>Employee</th><th class="r">Basic</th><th class="r">Overtime</th><th class="r">Allow.</th><th class="r">Gross</th><th class="r">Pension</th><th class="r">Tax</th><th class="r">Other</th><th class="r">Net pay</th></tr></thead>
+    <section class="card sheet"><div class="paper dsr land doc-paper" data-foot="${footText(c, 'Payroll', `${companyCode(c.global.company)}-PR-${run.month}`, { project: false, note: 'confidential' })}">
+      ${docHead(c, { title: 'Payroll', sub: `${monthLabel(run.month)} · confidential`, ref: `${companyCode(c.global.company)}-PR-${run.month}`, status: statusLabel(run.status), tone: run.status === 'draft' ? 'warn' : 'ok', facts: [['Month', monthLabel(run.month)], ['People', String(run.lines.length)]] })}
+      <table class="dsr-t"><thead><tr><th>Employee</th><th class="r">Basic</th><th class="r">Overtime</th><th class="r">Allow.</th><th class="r">Gross</th><th class="r">Pension</th><th class="r">Tax</th><th class="r">Other</th><th class="r">Net pay</th></tr></thead>
         <tbody>${run.lines.map(l => { const r = compute(l, s); return html`<tr><td>${l.name}<br><span class="muted">${l.title || ''} · ${l.currency}</span></td>
           <td class="r">${m(r.basic)}</td><td class="r">${m(r.overtime)}</td><td class="r">${m(r.allowances)}</td><td class="r">${m(r.gross)}</td>
           <td class="r">${m(r.pensionEmployee)}</td><td class="r">${m(r.tax)}</td><td class="r">${m(r.other)}</td><td class="r"><b>${m(r.net)}</b></td></tr>`; })}</tbody></table>
-      <h3>Totals, by currency</h3>
-      <table><thead><tr><th>Currency</th><th class="r">People</th><th class="r">Gross</th><th class="r">Deductions</th><th class="r">Net pay</th><th class="r">Employer pension</th><th class="r">Cost to company</th></tr></thead>
+      <h3 class="pay-k">Totals, by currency</h3>
+      <table class="dsr-t"><thead><tr><th>Currency</th><th class="r">People</th><th class="r">Gross</th><th class="r">Deductions</th><th class="r">Net pay</th><th class="r">Employer pension</th><th class="r">Cost to company</th></tr></thead>
         <tbody>${tot.map(t => html`<tr><td>${t.currency || '—'}</td><td class="r">${t.people}</td><td class="r">${m(t.gross)}</td><td class="r">${m(t.gross - t.net)}</td><td class="r"><b>${m(t.net)}</b></td><td class="r">${m(t.pensionEmployer)}</td><td class="r">${m(t.cost)}</td></tr>`)}</tbody></table>
       <p class="muted p-notes">Overtime is paid at ${s.otMultiplier} x the hourly rate, with a working day of ${s.hoursPerDay} hours${s.pensionEmployee || s.pensionEmployer ? `. Pension: ${s.pensionEmployee}% employee, ${s.pensionEmployer}% employer, on basic pay` : ''}.</p>
-      <div class="p-sign"><div>Prepared by</div><div>Approved by${run.approvedBy ? `: ${run.approvedBy}` : ''}</div></div>
+      ${signoff([{ label: 'Prepared by' }, { label: 'Approved by', name: run.approvedBy || '' }])}
     </div></section>`;
 }
 

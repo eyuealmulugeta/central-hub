@@ -10,7 +10,8 @@ import {
 import { uid, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
-import { letterhead } from './docs.js';
+import { docHead, docSec, footText, signoff } from './print.js';
+import { docRef } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 
 let selected = null;
@@ -116,16 +117,21 @@ function detail(r, c) {
       <button class="btn">Add line</button>
     </form></section>` : ''}
     ${(r.log || []).length ? html`<section class="card no-print"><h3>History</h3><ul class="plain">${r.log.map(x => html`<li>${fmtFull(x.at.slice(0, 10))}: <b>${statusLabel(x.status)}</b> by ${x.byName || x.by}${x.note ? html`. ${x.note}` : ''}</li>`)}</ul></section>` : ''}
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, `${kindLabel(r.kind)} request`, [['Number', r.number], ['Date', fmtFull(r.date)], ['Project', c.project.name], ['Needed by', r.neededBy ? fmtFull(r.neededBy) : '—'], ['Priority', r.priority === 'urgent' ? 'URGENT' : 'Normal'], ['Status', statusLabel(r.status)]])}
-      ${taskName ? html`<p><span class="muted">For the task:</span> ${taskName}</p>` : ''}
-      <table style="margin-top:12px"><thead><tr><th>#</th><th>Description</th><th class="r">Quantity</th><th>Unit</th>${showDays ? html`<th class="r">Days</th>` : ''}<th>Note</th></tr></thead>
-        <tbody>${lines.map((l, i) => html`<tr><td>${i + 1}</td><td>${l.description || ''}</td><td class="r">${l.qty ?? ''}</td><td>${l.unit || ''}</td>${showDays ? html`<td class="r">${l.days ?? ''}</td>` : ''}<td>${l.note || ''}</td></tr>`)}</tbody></table>
-      ${r.purpose ? html`<h3>Why it is needed</h3><p class="pre">${r.purpose}</p>` : ''}
-      <div class="p-sign"><div>Requested by ${r.byName || r.by}${r.byTitle ? `, ${r.byTitle}` : ''}<br>${fmtFull(r.date)}</div>
-        <div>${decided ? `Approved by ${decided.byName || decided.by}, ${fmtFull(decided.at.slice(0, 10))}` : r.status === 'rejected' ? 'Refused' : 'Approval: name, signature and date'}</div></div>
+    <section class="card sheet"><div class="paper dsr doc-paper" data-foot="${footText(c, `${kindLabel(r.kind)} request`, reqRef(c, r))}">
+      ${docHead(c, { title: `${kindLabel(r.kind)} request`, sub: c.project.name, ref: reqRef(c, r), status: statusLabel(r.status), tone: r.status === 'rejected' ? 'bad' : decided ? 'ok' : 'warn',
+        facts: [['Date', fmtFull(r.date)], ['Needed by', r.neededBy ? fmtFull(r.neededBy) : '—'], ['Priority', r.priority === 'urgent' ? 'URGENT' : 'Normal'], ['For the task', taskName]] })}
+      ${docSec(1, 'Items', html`<table class="dsr-t"><thead><tr><th>#</th><th>Description</th><th class="r">Quantity</th><th>Unit</th>${showDays ? html`<th class="r">Days</th>` : ''}<th>Note</th></tr></thead>
+        <tbody>${lines.map((l, i) => html`<tr><td>${i + 1}</td><td>${l.description || ''}</td><td class="r">${l.qty ?? ''}</td><td>${l.unit || ''}</td>${showDays ? html`<td class="r">${l.days ?? ''}</td>` : ''}<td>${l.note || ''}</td></tr>`)}</tbody></table>`, `${lines.length} line${lines.length === 1 ? '' : 's'}`)}
+      ${r.purpose ? docSec(2, 'Why it is needed', html`<p class="pre">${r.purpose}</p>`) : ''}
+      ${docSec(r.purpose ? 3 : 2, 'Approval', html`${(r.log || []).length ? html`<table class="dsr-t"><thead><tr><th>Date</th><th>Step</th><th>By</th><th>Note</th></tr></thead>
+        <tbody>${r.log.map(x => html`<tr><td class="nowrap">${fmtFull(x.at.slice(0, 10))}</td><td>${statusLabel(x.status)}</td><td>${x.byName || x.by}</td><td>${x.note || ''}</td></tr>`)}</tbody></table>` : ''}
+        ${signoff([{ label: 'Requested by', name: [r.byName || r.by, r.byTitle].filter(Boolean).join(', '), note: fmtFull(r.date) },
+          { label: r.status === 'rejected' ? 'Refused by' : 'Approved by', name: decided ? decided.byName || decided.by : '', note: decided ? fmtFull(decided.at.slice(0, 10)) : 'Date' }])}`)}
     </div></section>`;
 }
+
+/** AP-CHB-MR-2026-004: the company, the project and the request's own number. */
+const reqRef = (c, r) => docRef({ company: c.global.company, project: c.project, key: r.number });
 
 export const actions = {
   open(el) { selected = el.dataset.id; notice = ''; problems = []; },

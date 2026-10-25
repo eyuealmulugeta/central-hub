@@ -6,6 +6,7 @@ import { store } from '../core/store.js';
 import { money, fmtDate, fmtFull } from '../core/util.js';
 import { html, icon } from './dom.js';
 import { healthOf, projectLine, needsYou, thisWeek, waitingOn } from '../engine/today.js';
+import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 
 let only = '';   // the project the lists are filtered to; '' = all projects
 
@@ -45,7 +46,55 @@ function needRow(n, c) {
   </li>`;
 }
 
+/**
+ * Today in Trading (v0.22.3): shipments, stock and sales only. The Installation projects belong to the other
+ * division and are never shown here (owner, 26 Oct 2026).
+ */
+function tradingToday(c) {
+  const cur = c.global.fx.base;
+  const ships = c.company.shipments || [];
+  const sum = tradeSummary(ships, c.global.fx, c.today, cur);
+  const st = c.money ? stockAndSales(c.company, c.global.fx, cur) : null;
+  const open = ships.map(s => ({ s, st: shipmentState(s, c.today) })).filter(x => !x.st.done);
+  const late = open.filter(x => x.st.late).sort((a, b) => b.st.daysLate - a.st.daysLate);
+  const soon = open.filter(x => x.st.daysToArrival != null && x.st.daysToArrival <= 7).sort((a, b) => a.st.daysToArrival - b.st.daysToArrival);
+  const owed = st ? st.sales.filter(x => !x.paid) : [];
+  const meetings = (c.company.meetings || []).filter(m => (!me() || m.by === me() || (m.invitees || []).some(i => i.email === me())) && String(m.start || '').slice(0, 10) >= c.today).slice(0, 5);
+  const needs = late.length + owed.length;
+  const card = (label, value, sub, tone = '') => html`<div class="pcard"><span class="pcard-hd"><b>${label}</b></span><span class="pcard-m"><span><b class="${tone}">${value}</b>${sub}</span></span></div>`;
+  return html`
+    <section class="today-head"><div><h2>${fmtFull(c.today)}</h2><span class="muted">Trading. ${needs ? `${needs} thing${needs > 1 ? 's' : ''} need${needs > 1 ? '' : 's'} you.` : 'Nothing needs you right now.'}</span></div></section>
+    <section class="pcards">
+      ${card('Shipments open', sum.open, sum.late ? `${sum.late} late` : 'none late')}
+      ${c.money ? card('On the way', money(sum.onTheWay, cur), 'landed cost') : ''}
+      ${st ? card('In stock', money(st.stockValue, cur), 'at landed cost') : ''}
+      ${st ? card('Owed to you', money(st.unpaid, cur), `${owed.length} sale${owed.length === 1 ? '' : 's'} not paid`) : ''}
+    </section>
+    <section class="today-grid">
+      <div class="card">
+        <h3 class="card-h">Needs you <em class="count-q">${needs}</em></h3>
+        ${needs ? html`<ul class="tlist">
+          ${late.map(x => html`<li class="trow"><span class="tic high">${icon('trade', 18)}</span><span class="tt"><b>${x.s.ref || 'Shipment'}${x.s.supplier ? `, ${x.s.supplier}` : ''}</b><span class="muted">Late by ${x.st.daysLate} day${x.st.daysLate === 1 ? '' : 's'}. ${stageLabel(x.s.stage)}</span></span><span class="tag high">Late</span><a class="btn small" href="#trade">Open</a></li>`)}
+          ${owed.slice(0, 8).map(x => html`<li class="trow"><span class="tic warn">${icon('finance', 18)}</span><span class="tt"><b>${x.item}${x.customer ? `, ${x.customer}` : ''}</b><span class="muted">Sold ${fmtDate(x.date)}${c.money ? `, ${money(x.revenue, cur)}` : ''} not paid yet</span></span><span class="tag warn">Owed</span><a class="btn small" href="#stock">Open</a></li>`)}
+        </ul>` : html`<p class="empty">All clear. Late shipments and unpaid sales show here.</p>`}
+      </div>
+      <div class="today-side">
+        <div class="card">
+          <h3 class="card-h">Arriving this week</h3>
+          ${soon.length ? html`<ul class="tlist">${soon.map(x => html`<li class="trow"><span class="tday"><b>${fmtDate(x.s.eta).split(' ')[0]}</b><small>${new Date(x.s.eta + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' })}</small></span><span class="tt"><b>${x.s.ref || 'Shipment'}</b><span class="muted">${[x.s.supplier, stageLabel(x.s.stage)].filter(Boolean).join(', ')}</span></span><a class="btn small ghost" href="#trade">Open</a></li>`)}</ul>`
+            : html`<p class="empty">No shipment due in the next 7 days.</p>`}
+        </div>
+        <div class="card">
+          <h3 class="card-h">Meetings</h3>
+          ${meetings.length ? html`<ul class="tlist">${meetings.map(m => html`<li class="trow"><span class="tt"><b>${m.title}</b><span class="muted">${fmtDate(String(m.start).slice(0, 10))} ${String(m.start).slice(11, 16)}</span></span></li>`)}</ul>`
+            : html`<p class="empty">No meeting coming up.</p>`}
+        </div>
+      </div>
+    </section>`;
+}
+
 export function render(c) {
+  if (c.division === 'trading') return tradingToday(c);
   const summaries = c.summaries || [];
   const meetings = [...(c.company.meetings || []).filter(m => !me() || m.by === me() || (m.invitees || []).some(i => i.email === me())), ...(c.company.bookings || [])];
   const others = summaries.filter(s => s.project.id !== c.project.id);

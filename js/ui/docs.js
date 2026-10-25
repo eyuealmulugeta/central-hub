@@ -13,6 +13,9 @@ import { html, options, field, chip, meter } from './dom.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail, emailIn } from './maildialog.js';
 import { statusPaper } from './status.js';
+import { docHead, docSec, docFoot, footText, signoff } from './print.js';
+import { amountWords } from '../engine/words.js';
+import { docRef } from '../engine/docref.js';
 
 let tab = 'docs';
 let mode = null;     // invoices | quotations | status: what the menu opened this screen as (null = everything)
@@ -42,30 +45,15 @@ const emailed = doc => (doc.emails?.length
   ? html`<p class="muted no-print">Emailed to ${doc.emails.at(-1).to} on ${fmtFull(doc.emails.at(-1).at)}${doc.emails.length > 1 ? `, ${doc.emails.length} times in all` : ''}.</p>` : '');
 
 /** Date range of the live previews: the chosen period ending on the chosen day. */
+/** A reference for a document made from the project's records: AP-<project>-<type>-<date>. */
+const refOf = (c, type, key) => docRef({ company: c.global.company, project: c.project, type, key });
+
 const liveRange = c => {
   const to = endDate || c.today;
   return [fromDay(toDay(to) - PERIODS[period][1] + 1), to];
 };
 
 // ---- printable pieces ----
-
-export function letterhead(c, title, facts) {
-  const co = c.global.company || {};
-  return html`
-    <header class="p-head">
-      <div class="p-block">
-        <img src="${co.logo || 'assets/logo.png'}" alt="">
-        <b class="p-company">${co.name || 'Your company name'}</b>
-        <span class="pre">${co.address || ''}</span>
-        <span>${[co.phone, co.email].filter(Boolean).join(' · ')}</span>
-        ${co.taxId ? html`<span>Tax ID ${co.taxId}</span>` : ''}
-      </div>
-      <div class="p-title">
-        <h2>${title}</h2>
-        <dl class="facts">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-      </div>
-    </header>`;
-}
 
 function party(label, p = {}) {
   return html`<div class="p-block">
@@ -124,22 +112,33 @@ function taskTable(rows) {
     </table>`;
 }
 
+const STATUS_WORD = { draft: 'Draft', sent: 'Sent', paid: 'Paid', accepted: 'Accepted', delivered: 'Delivered', issued: 'Issued' };
+const STATUS_TONE = { draft: 'warn', paid: 'ok', accepted: 'ok', delivered: 'ok', issued: 'ok' };
+
+/** Invoice, quotation or purchase order in the house style (v0.22.2): numbered lines, ruled totals, the amount in words, bank details, terms, signature and stamp. */
 function docPaper(d, c) {
   const cur = c.project.currency;
   const co = c.global.company || {};
+  const foot = footText(c, TITLE[d.type], d.number);
+  const due = d.retention ? d.amountDue : d.total;
   let group = null;
   return html`
-    <article class="paper">
-      ${letterhead(c, TITLE[d.type], [['Number', d.number], ['Date', fmtFull(d.date)], [DUE[d.type], fmtFull(d.due)]])}
-      <section class="p-to">
+    <article class="paper dsr bill-paper" data-foot="${foot}">
+      ${docHead(c, {
+        title: TITLE[d.type], sub: fmtFull(d.date), ref: d.number,
+        status: d.status === 'draft' ? 'Draft' : STATUS_WORD[d.status] || '', tone: STATUS_TONE[d.status] || '',
+        facts: [['Date', fmtFull(d.date)], [DUE[d.type], fmtFull(d.due)], ...(co.taxId ? [['Our tax ID', co.taxId]] : [])],
+      })}
+      <section class="p-to bill-to">
         ${party(PARTY[d.type], d.party)}
         <div class="p-block">
           <span class="muted">Project</span><b>${c.project.name}</b>
+          ${c.project.location ? html`<span>${c.project.location}</span>` : ''}
           ${d.period ? html`<span>Period ${fmtFull(d.period.from)} to ${fmtFull(d.period.to)}</span>` : ''}
         </div>
       </section>
-      <table class="table compact">
-        <thead><tr><th>#</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Rate</th><th class="r">Amount (${cur})</th></tr></thead>
+      <table class="dsr-t bill-lines">
+        <thead><tr><th>No.</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Rate</th><th class="r">Amount (${cur})</th></tr></thead>
         <tbody>${d.lines.filter(l => String(l.description || '').trim() || l.amount).map((l, i) => {
           const head = l.group && l.group !== group ? html`<tr class="group"><td colspan="6">${l.group}</td></tr>` : '';
           group = l.group || group;
@@ -150,17 +149,21 @@ function docPaper(d, c) {
           </tr>`;
         })}</tbody>
       </table>
-      <dl class="totals">
-        <dt>Subtotal</dt><dd>${money(d.subtotal, cur, 2)}</dd>
-        ${d.vatPct ? html`<dt>VAT ${d.vatPct}%</dt><dd>${money(d.vat, cur, 2)}</dd>` : ''}
-        <dt class="grand">Total</dt><dd class="grand">${money(d.total, cur, 2)}</dd>
-        ${d.retention ? html`
-          <dt>Less retention ${d.retentionPct}%</dt><dd>−${money(d.retention, cur, 2)}</dd>
-          <dt class="grand">Amount due</dt><dd class="grand">${money(d.amountDue, cur, 2)}</dd>` : ''}
-      </dl>
-      ${d.notes ? html`<p class="pre p-notes">${d.notes}</p>` : ''}
-      ${d.type === 'invoice' && co.bank ? html`<div class="p-block p-notes"><span class="muted">Payment details</span><span class="pre">${co.bank}</span></div>` : ''}
-      <footer class="p-sign"><div>Prepared by</div><div>${d.type === 'invoice' ? 'Received by' : 'Approved by'}</div></footer>
+      <div class="bill-sum">
+        <p class="bill-words"><span>Amount in words</span><b>${amountWords(due, cur)}</b></p>
+        <dl class="totals">
+          <dt>Subtotal</dt><dd>${money(d.subtotal, cur, 2)}</dd>
+          ${d.vatPct ? html`<dt>VAT ${d.vatPct}%</dt><dd>${money(d.vat, cur, 2)}</dd>` : ''}
+          <dt class="grand">Total</dt><dd class="grand">${money(d.total, cur, 2)}</dd>
+          ${d.retention ? html`
+            <dt>Less retention ${d.retentionPct}%</dt><dd>−${money(d.retention, cur, 2)}</dd>
+            <dt class="grand">Amount due</dt><dd class="grand">${money(d.amountDue, cur, 2)}</dd>` : ''}
+        </dl>
+      </div>
+      ${d.type === 'invoice' && co.bank ? docSec('', 'Payment details', html`<p class="pre bill-bank">${co.bank}</p>`) : ''}
+      ${d.notes ? docSec('', d.type === 'po' ? 'Conditions' : 'Terms', html`<p class="pre p-notes">${d.notes}</p>`) : ''}
+      ${signoff([{ label: 'Prepared by' }, { label: 'Approved by' }, d.type === 'po' ? { label: 'Supplier acceptance' } : { label: d.type === 'invoice' ? 'Received by (client)' : 'Accepted by (client)' }, { stamp: true }])}
+      ${docFoot(foot)}
     </article>`;
 }
 
@@ -178,10 +181,13 @@ function reportPaper(c, kind, d, doc) {
   const facts = doc
     ? [['Number', doc.number], ['Period', range], ['Issued', doc.status === 'issued' ? fmtFull(doc.approvedAt) : 'Draft, not issued']]
     : [['Period', range], ['As of', fmtFull(d.asOf)]];
+  const title = `${PERIODS[kind][0]} progress report`;
+  const ref = doc ? doc.number : refOf(c, 'PR', d.to);
+  const foot = footText(c, title, ref);
 
   return html`
-    <article class="paper">
-      ${letterhead(c, `${PERIODS[kind][0]} progress report`, facts)}
+    <article class="paper dsr doc-paper" data-foot="${foot}">
+      ${docHead(c, { title, ref, facts, status: doc ? (doc.status === 'issued' ? 'Issued' : 'Draft') : 'Preview', tone: doc?.status === 'issued' ? 'ok' : 'warn' })}
       <section class="p-to">
         ${party('Client', doc?.party || c.project.client || {})}
         <div class="p-block"><span class="muted">Project</span><b>${c.project.name}</b></div>
@@ -226,7 +232,8 @@ function reportPaper(c, kind, d, doc) {
 
       <h3>Schedule</h3>
       ${miniGantt(d, d.asOf)}
-      ${doc?.status === 'issued' ? html`<p class="muted p-notes">Approved by ${doc.approvedBy} on ${fmtFull(doc.approvedAt)}.</p>` : ''}
+      ${signoff([{ label: 'Prepared by · Project engineer' }, { label: 'Approved by', name: doc?.status === 'issued' ? doc.approvedBy : '', note: doc?.status === 'issued' ? fmtFull(doc.approvedAt) : 'Date' }])}
+      ${docFoot(foot)}
     </article>`;
 }
 
@@ -237,8 +244,8 @@ function payPaper(c) {
   const s = paySheet(c, from, to);
   const cur = c.project.currency;
   return html`
-    <article class="paper">
-      ${letterhead(c, 'Site pay sheet', [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Project', c.project.name]])}
+    <article class="paper dsr doc-paper" data-foot="${footText(c, 'Site pay sheet', refOf(c, 'PAY', from), { note: 'confidential' })}">
+      ${docHead(c, { title: 'Site pay sheet', ref: refOf(c, 'PAY', from), facts: [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Project', c.project.name]] })}
       <p class="p-internal">Internal. Check against the site register before paying.</p>
       ${s.rows.length ? html`
         <table class="table compact">
@@ -252,8 +259,9 @@ function payPaper(c) {
         </table>
         <p class="muted">Attendance was reported on ${s.days} day${s.days === 1 ? '' : 's'} in this period. Pay is days present at the day rate, plus overtime at day rate ÷ ${s.hoursPerDay} h × ${s.otMultiplier}. Sick and absent days are shown but not paid here.</p>
         ${s.unrated.length ? html`<p class="bad no-print">No day rate is set for ${s.unrated.join(', ')}. Set it under Settings, This project, Team.</p>` : ''}
-        <footer class="p-sign"><div>Prepared by</div><div>Approved by</div></footer>`
+        ${signoff([{ label: 'Prepared by' }, { label: 'Approved by' }])}`
       : html`<p class="muted">No attendance by name was reported in this period. It comes from the Attendance section of Field Report, version 1.13 or later.</p>`}
+      ${docFoot(footText(c, 'Site pay sheet', refOf(c, 'PAY', from), { note: 'confidential' }))}
     </article>`;
 }
 
@@ -263,8 +271,8 @@ function claimPaper(c) {
   const d = delayRecord(c, from, to);
   const days = v => `${num(v, 1)} day${Math.abs(v - 1) < 0.05 ? '' : 's'}`;
   return html`
-    <article class="paper">
-      ${letterhead(c, 'Record of delays', [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Prepared', fmtFull(c.today)]])}
+    <article class="paper dsr doc-paper" data-foot="${footText(c, 'Record of delays', refOf(c, 'DLY', to))}">
+      ${docHead(c, { title: 'Record of delays', ref: refOf(c, 'DLY', to), facts: [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Prepared', fmtFull(c.today)]] })}
       <section class="p-to">
         ${party('Client', c.project.client || {})}
         <div class="p-block"><span class="muted">Project</span><b>${c.project.name}</b></div>
@@ -292,6 +300,8 @@ function claimPaper(c) {
         </table>
         <p class="muted p-notes">A working day is ${d.hoursPerDay} hours. This is a record of what the site reported; it is not itself a notice under the contract.</p>`
       : html`<p class="muted">No itemised delays were reported in this period. They come from the Delays section of Field Report, version 1.13 or later.</p>`}
+      ${signoff([{ label: 'Prepared by · Site engineer' }, { label: 'Checked by · Project engineer' }])}
+      ${docFoot(footText(c, 'Record of delays', refOf(c, 'DLY', to)))}
     </article>`;
 }
 
@@ -302,8 +312,8 @@ function performancePaper(c) {
   const pts = v => `${v >= 0 ? '+' : ''}${num(v, 1)} pts`;
 
   return html`
-    <article class="paper">
-      ${letterhead(c, `${PERIODS[period][0]} performance report`, [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Project', c.project.name]])}
+    <article class="paper dsr doc-paper" data-foot="${footText(c, `${PERIODS[period][0]} performance report`, refOf(c, 'PERF', to), { note: 'internal' })}">
+      ${docHead(c, { title: `${PERIODS[period][0]} performance report`, ref: refOf(c, 'PERF', to), facts: [['Period', `${fmtFull(from)} to ${fmtFull(to)}`], ['Project', c.project.name]] })}
       <p class="p-internal">Internal. Not for the client.</p>
 
       <div class="p-kpis">
@@ -352,20 +362,23 @@ function performancePaper(c) {
 
       <h3>Follow-ups</h3>
       <p>${r.itemsOpened} opened and ${r.itemsClosed} closed in the period. ${r.itemsOverdue} open and past due at the end of it.</p>
+      ${signoff([{ label: 'Prepared by · Project engineer' }, { label: 'Reviewed by · Project manager' }])}
+      ${docFoot(footText(c, `${PERIODS[period][0]} performance report`, refOf(c, 'PERF', to), { note: 'internal' }))}
     </article>`;
 }
 
 function schedulePaper(c) {
   const s = c.sched;
   return html`
-    <article class="paper">
-      ${letterhead(c, 'Project schedule', [['Issued', fmtFull(c.today)], ['Completion', s.rows.length ? fmtFull(fromDay(s.end)) : '—']])}
+    <article class="paper dsr doc-paper" data-foot="${footText(c, 'Project schedule', refOf(c, 'SCH', c.today))}">
+      ${docHead(c, { title: 'Project schedule', ref: refOf(c, 'SCH', c.today), facts: [['Issued', fmtFull(c.today)], ['Completion', s.rows.length ? fmtFull(fromDay(s.end)) : '—']] })}
       <section class="p-to">
         ${party('Client', c.project.client || {})}
         <div class="p-block"><span class="muted">Project</span><b>${c.project.name}</b><span>${Math.round(s.progress)}% complete</span></div>
       </section>
       ${taskTable(s.rows)}
       ${miniGantt(s, c.today)}
+      ${docFoot(footText(c, 'Project schedule', refOf(c, 'SCH', c.today)))}
     </article>`;
 }
 

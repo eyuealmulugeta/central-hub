@@ -9,7 +9,8 @@ import { uid, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
-import { letterhead } from './docs.js';
+import { docHead, footText, signoff } from './print.js';
+import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 
 let selected = null;
@@ -52,6 +53,9 @@ function list(c) {
     <p class="muted">Only you, the Admin, can open this page.</p>`;
 }
 
+/** AP-LTR-2026-001: the company's code and the letter's own number. */
+export const letterRef = (c, l) => `${companyCode(c.global.company)}-${l.number}`;
+
 function detail(l, c) {
   const co = c.global.company || {};
   const staff = staffOf(c.company, l);
@@ -78,13 +82,15 @@ function detail(l, c) {
       <label>Title of the signer <input data-chg="set" data-f="signTitle" data-fk="lt-stitle" value="${l.signTitle || ''}"></label>
     </div>
     <label>Letter <textarea data-chg="set" data-f="body" data-fk="lt-body" rows="14">${l.body || ''}</textarea></label></section>` : ''}
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, 'Letter', [['Ref', l.number], ['Date', fmtFull(l.date)]])}
-      ${l.to ? html`<p><b>${l.to}</b></p>` : ''}
-      ${l.subject ? html`<p><b>Subject: ${l.subject}</b></p>` : ''}
-      <p class="pre">${l.body || ''}</p>
-      <p>Yours faithfully,</p>
-      <div class="p-sign"><div>${sender.join(', ') || 'Authorised signatory'}<br>${co.name || ''}</div><div>Signature and stamp</div></div>
+    <section class="card sheet"><div class="paper dsr doc-paper letter-paper" data-foot="${footText(c, 'Letter', letterRef(c, l), { project: false })}">
+      ${docHead(c, { title: 'Letter', ref: letterRef(c, l), status: draft ? 'Draft' : '', tone: 'warn', facts: [['Date', fmtFull(l.date)], ['Signed by', sender.join(', ')]] })}
+      <div class="letter-body">
+        ${l.to ? html`<p class="letter-to"><span>To</span><b class="pre">${l.to}</b></p>` : ''}
+        ${l.subject ? html`<p class="letter-subj">Subject: ${l.subject}</p>` : ''}
+        <p class="pre">${l.body || ''}</p>
+        <p>Yours faithfully,</p>
+      </div>
+      ${signoff([{ label: `For ${co.name || 'the company'}`, name: sender.join(', ') || 'Authorised signatory' }, { stamp: true }])}
       ${staff ? html`<p class="muted no-print">About ${staff.name}, from the HR record.</p>` : ''}
     </div></section>`;
 }

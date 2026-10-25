@@ -9,7 +9,8 @@ import { costsOf } from '../engine/ledger.js';
 import { money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options } from './dom.js';
-import { letterhead } from './docs.js';
+import { docRef } from '../engine/docref.js';
+import { docHead, docSec, docFoot, footText, signoff } from './print.js';
 import { openMail } from './maildialog.js';
 
 let horizon = 3;
@@ -49,6 +50,8 @@ function chart(f) {
 
 export function render(c) {
   const flows = flowsOf(c);
+  const ref = docRef({ company: c.global.company, project: c.project, type: 'CF', key: c.today });
+  const foot = footText(c, 'Cash flow', ref, { note: 'internal' });
   const staffHere = store.isAdmin ? c.company.staff.filter(p => p.projectId === c.project.id && p.status !== 'left').length : 0;
   return html`
     <div class="toolbar no-print">
@@ -60,29 +63,29 @@ export function render(c) {
       <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="print">Print</button>
     </div>
-    ${flows.length ? flows.map(f => html`
-      <section class="kpis no-print">
-        <div class="kpi"><span class="kpi-label">Cash in hand, ${f.currency}</span><strong class="${f.balanceNow < 0 ? 'bad' : ''}">${m(f.balanceNow, f.currency)}</strong><span class="muted">Received less paid, so far</span></div>
-        <div class="kpi"><span class="kpi-label">Expected in, next ${horizon} months</span><strong>${m(f.expectedIn, f.currency)}</strong><span class="muted">${f.overdue ? `${m(f.overdue, f.currency)} of it is overdue` : 'Invoices sent and not yet paid'}</span></div>
-        <div class="kpi"><span class="kpi-label">Expected out, next ${horizon} months</span><strong>${m(f.expectedOut, f.currency)}</strong><span class="muted">Payroll and usual spending</span></div>
-        <div class="kpi"><span class="kpi-label">Cash runs short</span><strong class="${f.firstShortMonth ? 'bad' : ''}">${f.firstShortMonth ? label(f.firstShortMonth) : 'Not in this period'}</strong><span class="muted">${f.firstShortMonth ? 'First month the balance goes below zero' : ''}</span></div>
-      </section>`) : ''}
-    <section class="card sheet"><div class="paper">
-      ${letterhead(c, 'Cash flow', [['Project', c.project.name], ['As of', fmtFull(c.today)], ['Months ahead', String(horizon)]])}
-      ${flows.length ? flows.map(f => html`
-        <h3>${f.currency}</h3>
-        <div class="no-pdf">${chart(f)}<p class="muted cf-key"><span class="cf-k cf-in"></span> money in <span class="cf-k cf-out"></span> money out <span class="cf-k cf-ln"></span> balance. Paler = forecast.</p></div>
-        <table>
+    <section class="card sheet"><div class="paper dsr doc-paper cf-paper" data-foot="${foot}">
+      ${docHead(c, { title: 'Cash flow', sub: fmtFull(c.today), ref, facts: [['Project', c.project.name], ['As of', fmtFull(c.today)], ['Months ahead', String(horizon)], ['Usual spending', usual ? 'Included' : 'Left out']] })}
+      ${flows.length ? flows.map((f, i) => html`
+        <div class="dsr-kpis" style="grid-template-columns:repeat(4,1fr)">
+          <div class="${f.balanceNow < 0 ? 'warn' : ''}"><b>${m(f.balanceNow, f.currency)}</b><span>Cash in hand now</span></div>
+          <div><b>${m(f.expectedIn, f.currency)}</b><span>Expected in, next ${horizon} months</span></div>
+          <div><b>${m(f.expectedOut, f.currency)}</b><span>Expected out, next ${horizon} months</span></div>
+          <div class="${f.firstShortMonth ? 'warn' : ''}"><b>${f.firstShortMonth ? label(f.firstShortMonth) : 'None'}</b><span>First month short of cash</span></div>
+        </div>
+        ${docSec(i * 2 + 1, `Money in and out, ${f.currency}`, html`<div class="no-pdf">${chart(f)}<p class="muted cf-key"><span class="cf-k cf-in"></span> money in <span class="cf-k cf-out"></span> money out <span class="cf-k cf-ln"></span> balance. Paler = forecast.</p></div>`)}
+        ${docSec(i * 2 + 2, `By month, ${f.currency}`, html`<table class="dsr-t cf-t">
           <thead><tr><th>Month</th><th></th><th class="r">Money in</th><th class="r">Money out</th><th class="r">Net</th><th class="r">Balance</th></tr></thead>
           <tbody>${f.months.map(x => html`<tr class="${x.month === monthOf(c.today) ? 'group' : ''}">
             <td class="nowrap">${label(x.month)}</td><td class="muted">${x.forecast ? 'forecast' : x.month === monthOf(c.today) ? 'so far' : ''}</td>
             <td class="r">${m(x.in, f.currency)}${x.forecast && x.parts.invoiceCount ? html`<br><span class="muted">${x.parts.invoiceCount} invoice${x.parts.invoiceCount === 1 ? '' : 's'}</span>` : ''}</td>
             <td class="r">${m(x.out, f.currency)}${x.forecast && (x.parts.payroll || x.parts.usual) ? html`<br><span class="muted">${x.parts.payroll ? `payroll ${m(x.parts.payroll, f.currency)}` : ''}${x.parts.payroll && x.parts.usual ? ', ' : ''}${x.parts.usual ? `usual ${m(x.parts.usual, f.currency)}` : ''}</span>` : ''}</td>
             <td class="r ${x.net < 0 ? 'bad' : ''}">${m(x.net, f.currency)}</td><td class="r ${x.balance < 0 ? 'bad' : ''}"><b>${m(x.balance, f.currency)}</b></td></tr>`)}</tbody>
-        </table>
+        </table>`)}
         ${f.draft ? html`<p class="muted">Draft invoices of ${m(f.draft, f.currency)} are not counted until they are sent.</p>` : ''}`)
       : html`<p class="empty">Nothing recorded yet. Payments and receipts entered under Costs appear here.</p>`}
       <p class="muted p-notes">Only payments recorded under Costs are counted as paid. The labour worked out from daily reports is an estimate of cost, not cash. Forecast: invoices sent and not yet paid are expected by their due date (overdue ones in the first month ahead); ${store.isAdmin ? (staffHere ? `payroll is the monthly pay of the ${staffHere} ${staffHere === 1 ? 'person' : 'people'} HR lists on this project` : 'no payroll is counted, because HR lists nobody on this project') : 'payroll is not shown to you'}; ${usual ? 'the usual spending is the average of the last three full months' : 'the usual spending is left out'}. Retention held back is not counted.</p>
+      ${signoff([{ label: 'Prepared by' }, { label: 'Checked by' }])}
+      ${docFoot(foot)}
     </div></section>`;
 }
 

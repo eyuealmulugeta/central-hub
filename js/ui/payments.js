@@ -10,7 +10,8 @@ import { onSite } from '../sync/fieldreport.js';
 import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options, chip, drawer } from './dom.js';
-import { letterhead } from './docs.js';
+import { docHead, footText, signoff } from './print.js';
+import { payRef } from './paysheets.js';
 import { openMail } from './maildialog.js';
 import { tell } from '../core/image.js';
 import { crewSheet, staffSheet, byCurrency } from './paysheets.js';
@@ -95,8 +96,8 @@ export function render(c) {
       <button class="btn primary">Save ${owing.length} payments</button>
       <button type="button" class="btn ghost" data-act="closePay">Cancel</button>
     </form>` : ''}
-    ${view ? html`<section class="card sheet pay-sheet pay-doc">${view === 'crew' ? crewSheet(c, p, lines, status) : staffSheet(c, p, lines, status, paidToDate(c))}</section>` : html`<section class="card sheet pay-sheet"><div class="paper">
-      ${letterhead(c, 'Crew payments', [['Project', c.project.name], ['Period', p.label], ['Status', STATUS_LABEL[status]]])}
+    ${view ? html`<section class="card sheet pay-sheet pay-doc">${view === 'crew' ? crewSheet(c, p, lines, status) : staffSheet(c, p, lines, status, paidToDate(c))}</section>` : html`<section class="card sheet pay-sheet"><div class="paper dsr land doc-paper" data-foot="${footText(c, 'Crew payments', payRef(c, p, 'ALL'), { note: 'confidential' })}">
+      ${docHead(c, { title: 'Crew payments', sub: p.label, ref: payRef(c, p, 'ALL'), status: STATUS_LABEL[status], tone: status === 'draft' ? 'warn' : 'ok', facts: [['Project', c.project.name], ['Period', p.label], ['People', String(lines.length)], ['Due', byCurrency(lines, 'due')]] })}
       ${lines.length ? html`<div class="att-scroll"><table class="pay-grid">
         <thead><tr>
           <th>Name</th><th>Trade / position</th><th>Paid</th><th class="r">Wage</th><th class="r">Days</th><th class="r">OT h</th>

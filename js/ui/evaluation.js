@@ -10,11 +10,14 @@ import {
 } from '../engine/evaluation.js';
 import { uid, fmtFull } from '../core/util.js';
 import { html, options, chip } from './dom.js';
+import { docHead, docSec, footText, signoff } from './print.js';
+import { docRef } from '../engine/docref.js';
 
 let selected = null;      // team member id
 let mode = 'rate';        // rate | note | view (history only)
 let notice = '';
 let problems = [];
+let paper = null;         // the evaluation open as a page to print
 const filters = { search: '', project: '', by: '', kind: '' };   // the table of every evaluation
 
 const stars = n => '★'.repeat(Math.round(n || 0)) + '☆'.repeat(5 - Math.round(n || 0));
@@ -45,9 +48,14 @@ export function render(c) {
     return html`<section class="card"><h2>Evaluation</h2>
       <p class="empty">Your title does not rate anybody yet. The Admin sets it under Settings, People and access.</p></section>`;
   }
+  const all = c.company.evaluations;
+  const open = paper && all.find(r => r.id === paper);
+  if (open) return html`<div class="toolbar no-print"><button class="btn ghost" data-act="paperOff">← Evaluation</button>
+      <span class="muted">Confidential: the person rated sees it only when you hand it over</span><span class="grow"></span>
+      <button class="btn" data-share title="Send this evaluation as a PDF file">WhatsApp / Telegram</button><button class="btn primary" data-act="printPaper">Print</button></div>
+    <section class="card sheet">${evalPaper(open, c)}</section>`;
   const list = people(c);
   const person = list.find(m => m.id === selected) || null;
-  const all = c.company.evaluations;
   const tiers = ratableLevels(ranks).map(tierName).join(', ');
   return html`
     <section class="card">
@@ -129,11 +137,12 @@ function history(m, records) {
   return html`<section class="card">
     <h2>History of ${m.name}</h2>
     ${rows.length ? html`<table class="table">
-      <thead><tr><th>Date</th><th>What</th><th>Result</th><th>Project</th><th>Evaluator</th><th>Comments</th></tr></thead>
+      <thead><tr><th>Date</th><th>What</th><th>Result</th><th>Project</th><th>Evaluator</th><th>Comments</th><th></th></tr></thead>
       <tbody>${rows.map(r => html`<tr>
         <td class="nowrap">${fmtFull(r.when)}</td><td>${r.kind}</td><td class="nowrap">${resultCell(r)}</td><td>${r.project}</td>
         <td>${r.by}<span class="muted note">${rankLabel(r.rank)}</span></td>
-        <td>${r.detail ? html`<span class="muted">${r.detail}</span><br>` : ''}${r.text || ''}</td></tr>`)}</tbody>
+        <td>${r.detail ? html`<span class="muted">${r.detail}</span><br>` : ''}${r.text || ''}</td>
+        <td class="r">${r.kind === 'Evaluation' ? html`<button class="btn ghost small" data-act="paperOn" data-id="${r.id}" title="The evaluation as a page with both signatures">Print</button>` : ''}</td></tr>`)}</tbody>
     </table>` : html`<p class="empty">Nothing written about ${m.name} yet.</p>`}
   </section>`;
 }
@@ -156,15 +165,35 @@ function everything(records) {
       <select data-chg="filter" data-f="kind" data-fk="ev-kind">${options([['', 'Evaluations and feedback'], ['Evaluation', 'Evaluations'], ['note', 'Feedback notes']], filters.kind)}</select>
     </div>
     <table class="table">
-      <thead><tr><th>Date</th><th>Person</th><th>Project</th><th>What</th><th>Result</th><th>Evaluator</th><th>Comments</th></tr></thead>
+      <thead><tr><th>Date</th><th>Person</th><th>Project</th><th>What</th><th>Result</th><th>Evaluator</th><th>Comments</th><th></th></tr></thead>
       <tbody>${shown.map(r => html`<tr>
         <td class="nowrap">${fmtFull(r.when)}</td><td><b>${r.who}</b></td><td>${r.project}</td><td>${r.kind}</td><td class="nowrap">${resultCell(r)}</td>
-        <td>${r.by}<span class="muted note">${rankLabel(r.rank)}</span></td><td>${r.text || ''}</td></tr>`)}</tbody>
+        <td>${r.by}<span class="muted note">${rankLabel(r.rank)}</span></td><td>${r.text || ''}</td>
+        <td class="r">${r.kind === 'Evaluation' ? html`<button class="btn ghost small" data-act="paperOn" data-id="${r.id}" title="The evaluation as a page with both signatures">Print</button>` : ''}</td></tr>`)}</tbody>
     </table>
   </section>`;
 }
 
+/** One evaluation as a page (v0.22.4): the score of every criterion by pillar, the comment, and both signatures. */
+function evalPaper(r, c) {
+  const a = averages(r.scores);
+  const ref = docRef({ company: c.global.company, project: { name: r.projectName }, type: 'EV', key: `${r.date}-${String(r.id).slice(-4).toUpperCase()}` });
+  return html`<div class="paper dsr doc-paper" data-foot="${footText(c, 'Evaluation', ref, { project: false, note: 'confidential' })}">
+    ${docHead(c, { title: 'Performance evaluation', sub: `${r.subjectName} · confidential`, ref, status: `${score(a.overall)} · ${scaleLabel(a.overall)}`, tone: a.overall >= 3 ? 'ok' : 'warn',
+      facts: [['Employee', r.subjectName], ['Tier', tierName(r.level)], ['Project', r.projectName || ''], ['Date', fmtFull(r.date)], ['Evaluator', `${r.byName || r.by}${r.byRank ? `, ${rankLabel(r.byRank)}` : ''}`]] })}
+    ${PILLARS.map((p, i) => docSec(i + 1, p.name, html`<table class="dsr-t"><thead><tr><th>Criterion</th><th>Rating</th><th class="r">Score</th></tr></thead>
+      <tbody>${p.criteria.map(([k, label]) => html`<tr><td>${label}</td><td>${r.scores[k] ? html`${stars(r.scores[k])} <span class="muted">${scaleLabel(r.scores[k])}</span>` : html`<span class="muted">Not rated</span>`}</td><td class="r">${r.scores[k] ?? '—'}</td></tr>`)}</tbody>
+      <tfoot><tr><td colspan="2">${p.name}, average</td><td class="r">${score(a.pillars[i].value)}</td></tr></tfoot></table>`))}
+    ${docSec(PILLARS.length + 1, 'Overall and comments', html`<p><b>${score(a.overall)} of 5</b> · ${scaleLabel(a.overall)}</p>${r.comment ? html`<p class="pre">${r.comment}</p>` : html`<p class="muted">No comment.</p>`}
+      <p class="muted small">Scale: ${SCALE.map(([n, name]) => `${n} ${name}`).join(' · ')}</p>`)}
+    ${signoff([{ label: 'Evaluator', name: r.byName || r.by }, { label: 'Employee: seen and discussed', name: r.subjectName }, { label: 'Approved by' }])}
+  </div>`;
+}
+
 export const actions = {
+  paperOn(el) { paper = el.dataset.id; },
+  paperOff() { paper = null; },
+  printPaper() { print(); },
   rate(el) { selected = el.dataset.id; mode = 'rate'; notice = ''; problems = []; },
   note(el) { selected = el.dataset.id; mode = 'note'; notice = ''; problems = []; },
   view(el) { selected = el.dataset.id; mode = 'view'; notice = ''; problems = []; },

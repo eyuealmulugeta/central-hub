@@ -4,13 +4,15 @@
 // bottom. Internal meetings are company records of one division (section `meetings`). See engine/booking.js.
 
 import { store } from '../core/store.js';
-import { uid } from '../core/util.js';
+import { uid, fmtFull } from '../core/util.js';
 import { html, chip, field, options } from './dom.js';
 import { tell } from '../core/image.js';
 import { linked } from './discuss.js';
 import { openMail } from './maildialog.js';
 import { currentDivision, TRADING, stamp } from '../core/division.js';
 import { withDefaults, whenLabel, stepsOf, slotId, calendarLink } from '../engine/booking.js';
+import { docHead, docSec, footText, signoff } from './print.js';
+import { docRef } from '../engine/docref.js';
 
 const SEEN_KEY = 'sf:meet:seen';
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -18,6 +20,7 @@ let notice = '';
 let showPast = false;
 let tab = 'list';           // 'schedule' (the form) or 'list' (Schedules)
 let heard = null;           // ids of invitations already announced; null until the first look
+let minutesOf = null;       // the meeting whose minutes are open (v0.22.4)
 const LENGTHS = [15, 30, 45, 60, 90, 120, 180, 240];
 
 const readSeen = () => { try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); } catch { return new Set(); } };
@@ -66,6 +69,8 @@ export function announce(company) {
 const details = b => [`With: ${b.name}${b.company ? `, ${b.company}` : ''}`, b.email && `Email: ${b.email}`, b.phone && `Phone: ${b.phone}`, b.note && `Note: ${b.note}`].filter(Boolean).join('\n');
 
 export function render(c) {
+  const open = minutesOf && (c.company.meetings || []).find(m => m.id === minutesOf);
+  if (open) return minutesView(open, c);
   const s = withDefaults(store.booking);
   const all = [...(c.company.bookings || [])].sort((a, b) => a.start.localeCompare(b.start));
   const now = Date.now();
@@ -96,6 +101,8 @@ export function render(c) {
           ${m.by === me() ? html`<button class="btn small" data-act="invite" data-id="${m.id}">Email the invitation</button>` : ''}
           ${m.by === me() || admin ? html`<button class="btn small" data-act="cancelMeeting" data-id="${m.id}">Cancel meeting</button>` : ''}
         </div>` : ''}
+      ${live(m) && Date.parse(m.start) <= now && (m.by === me() || admin || m.record) ? html`<div class="actions left">
+        <button class="btn small ${m.record ? '' : 'primary'}" data-act="openMinutes" data-id="${m.id}">${m.record ? `Minutes${m.record.actions?.length ? ` · ${m.record.actions.length} actions` : ''}` : 'Write the minutes'}</button></div>` : ''}
     </li>`;
 
   const row = b => html`
@@ -200,7 +207,72 @@ export function render(c) {
 
 const NUMBERS = { noticeHours: [0, 720], horizonDays: [1, 120] };
 
+/** Who may write the minutes: the organiser and the Admin. Everyone invited reads and prints them. */
+const mayWrite = (m, c) => m.by === me() || c.admin;
+const blankRecord = m => ({ attendees: [m.byName || m.by, ...(m.invitees || []).map(i => i.name || i.email)], others: '', agenda: m.note || '', decisions: '', actions: [], next: '' });
+const lines = t => String(t || '').split('\n').map(x => x.replace(/^\s*[-•*]\s*/, '').trim()).filter(Boolean);
+const minutesRef = (m, c) => docRef({ company: c.global.company, project: c.project, type: 'MIN', key: m.start.slice(0, 10) });
+
+/** The minutes: the form for the organiser beside the printed page (attendees, agenda, decisions, actions with owner and date). */
+function minutesView(m, c) {
+  const r = { ...blankRecord(m), ...(m.record || {}) };
+  const can = mayWrite(m, c);
+  const everyone = [m.byName || m.by, ...(m.invitees || []).map(i => i.name || i.email)];
+  return html`<div class="toolbar no-print"><button class="btn ghost" data-act="closeMinutes">← Meetings</button><span class="muted">${notice}</span><span class="grow"></span>
+      <button class="btn" data-share title="Send the minutes as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
+      <button class="btn primary" data-act="printMinutes">Print</button></div>
+    ${can ? html`<section class="card no-print min-form">
+      <h3>Who attended</h3>
+      <div class="week">${everyone.map(n => html`<label class="check"><input type="checkbox" data-chg="minAtt" data-v="${n}" ${r.attendees.includes(n) ? 'checked' : ''}> ${n}</label>`)}</div>
+      <label>Also present (names, one per line) <textarea data-chg="minSet" data-f="others" data-fk="min-others" rows="2">${r.others}</textarea></label>
+      <label>Agenda (one point per line) <textarea data-chg="minSet" data-f="agenda" data-fk="min-agenda" rows="3">${r.agenda}</textarea></label>
+      <label>Decisions (one per line) <textarea data-chg="minSet" data-f="decisions" data-fk="min-dec" rows="4">${r.decisions}</textarea></label>
+      <h3>Actions</h3>
+      ${r.actions.length ? html`<table class="table compact"><thead><tr><th>Action</th><th>Who</th><th>By when</th><th>Done</th><th></th></tr></thead>
+        <tbody>${r.actions.map(a => html`<tr><td>${a.text}</td><td>${a.owner || ''}</td><td class="nowrap">${a.due ? fmtFull(a.due) : ''}</td>
+          <td><input type="checkbox" data-chg="minDone" data-id="${a.id}" ${a.done ? 'checked' : ''} aria-label="Done"></td>
+          <td class="r"><button class="btn ghost small" data-act="cutAction" data-id="${a.id}">Take out</button></td></tr>`)}</tbody></table>` : ''}
+      <form data-form="minAction" class="entry">
+        <input name="text" class="wide" required placeholder="What is to be done" aria-label="Action">
+        <input name="owner" list="min-people" placeholder="Who" aria-label="Who"><datalist id="min-people">${everyone.map(n => html`<option value="${n}">`)}</datalist>
+        <input name="due" type="date" aria-label="By when">
+        <button class="btn">Add action</button>
+      </form>
+      <label>Next meeting <input data-chg="minSet" data-f="next" data-fk="min-next" value="${r.next}" placeholder="Date, time and place"></label>
+    </section>` : ''}
+    <section class="card sheet">${minutesPaper(m, r, c)}</section>`;
+}
+
+function minutesPaper(m, r, c) {
+  const ref = minutesRef(m, c);
+  const present = [...r.attendees, ...lines(r.others)];
+  const absent = [m.byName || m.by, ...(m.invitees || []).map(i => i.name || i.email)].filter(n => !r.attendees.includes(n));
+  let n = 0;
+  return html`<div class="paper dsr doc-paper" data-foot="${footText(c, 'Minutes of meeting', ref)}">
+    ${docHead(c, { title: 'Minutes of meeting', sub: m.title, ref, facts: [['Date', `${fmtFull(m.start.slice(0, 10))}, ${new Date(m.start).toTimeString().slice(0, 5)}`], ['Length', `${m.minutes} min`], ['Place', m.where || ''], ['Chaired by', m.byName || m.by]] })}
+    ${docSec(++n, 'Attendance', html`<p><b>Present:</b> ${present.join(', ') || '—'}</p>${absent.length ? html`<p class="muted"><b>Absent:</b> ${absent.join(', ')}</p>` : ''}`, `${present.length} present`)}
+    ${lines(r.agenda).length ? docSec(++n, 'Agenda', html`<ol class="min-list">${lines(r.agenda).map(x => html`<li>${x}</li>`)}</ol>`) : ''}
+    ${docSec(++n, 'Decisions', lines(r.decisions).length ? html`<ol class="min-list">${lines(r.decisions).map(x => html`<li>${x}</li>`)}</ol>` : html`<p class="muted">No decision recorded.</p>`)}
+    ${docSec(++n, 'Actions', r.actions.length ? html`<table class="dsr-t"><thead><tr><th>#</th><th>Action</th><th>Who</th><th>By when</th><th>Status</th></tr></thead>
+      <tbody>${r.actions.map((a, i) => html`<tr><td>${i + 1}</td><td>${a.text}</td><td>${a.owner || ''}</td><td class="nowrap">${a.due ? fmtFull(a.due) : ''}</td><td>${a.done ? 'Done' : 'Open'}</td></tr>`)}</tbody></table>` : html`<p class="muted">No action agreed.</p>`, `${r.actions.length}`)}
+    ${r.next ? docSec(++n, 'Next meeting', html`<p>${r.next}</p>`) : ''}
+    ${signoff([{ label: 'Minutes taken by', name: m.byName || m.by }, { label: 'Approved by' }])}
+  </div>`;
+}
+
+const saveRecord = (c, fn) => store.updateCompany(co => {
+  const x = (co.meetings || []).find(k => k.id === minutesOf);
+  if (!x) return;
+  x.record = { ...blankRecord(x), ...(x.record || {}) };
+  fn(x.record);
+  x.record.updated = new Date().toISOString();
+});
+
 export const actions = {
+  openMinutes(el) { minutesOf = el.dataset.id; notice = ''; },
+  closeMinutes() { minutesOf = null; notice = ''; },
+  printMinutes() { print(); },
+  cutAction(el, c) { saveRecord(c, r => { r.actions = r.actions.filter(a => a.id !== el.dataset.id); }); },
   tab(el) { tab = el.dataset.t; notice = ''; },
   past() { showPast = !showPast; },
   /** The invitation by email to everyone invited, with the calendar link. */
@@ -252,6 +324,9 @@ export const actions = {
 };
 
 export const changes = {
+  minSet(el, c) { saveRecord(c, r => { r[el.dataset.f] = el.value; }); },
+  minAtt(el, c) { saveRecord(c, r => { r.attendees = el.checked ? [...new Set([...r.attendees, el.dataset.v])] : r.attendees.filter(n => n !== el.dataset.v); }); },
+  minDone(el, c) { saveRecord(c, r => { const a = r.actions.find(x => x.id === el.dataset.id); if (a) a.done = el.checked; }); },
   set(el) {
     const f = el.dataset.f;
     let value = field(el);
@@ -275,6 +350,11 @@ export const changes = {
 };
 
 export const submits = {
+  minAction(fd, c) {
+    const text = String(fd.get('text') || '').trim();
+    if (!text) return false;
+    saveRecord(c, r => { r.actions.push({ id: uid('act'), text: text.slice(0, 300), owner: String(fd.get('owner') || '').trim().slice(0, 80), due: fd.get('due') || '', done: false }); });
+  },
   /** A meeting with colleagues: saved for this division, seen by the people invited. */
   meeting(fd, c) {
     const start = new Date(`${fd.get('date')}T${fd.get('time')}`);

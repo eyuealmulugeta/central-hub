@@ -321,6 +321,8 @@ export const store = {
 
   get cloud() { return !!api; },
   /** The server's Field Report import status (system/fieldImport), or null locally or when it cannot be read. */
+  /** A server function, with this person's sign-in (cloud only). */
+  callServer(name, data) { if (!api?.call) throw new Error('Not signed in to the cloud.'); return api.call(name, data); },
   async fieldServer() { if (!api) return null; try { return await api.get('system/fieldImport'); } catch { return null; } },
   get user() { return me; },
   get role() { return role; },

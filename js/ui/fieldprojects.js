@@ -4,7 +4,7 @@
 // and "keep in step" does it by itself a few seconds after something changes.
 
 import { store } from '../core/store.js';
-import { fieldConfig, syncProjects, removeProject, linkCheck, explainLink } from '../sync/fieldreport.js';
+import { fieldReady, syncProjects, removeProject, linkCheck, explainLink } from '../sync/fieldreport.js';
 import { fieldProjectOf, fingerprint, countryOf } from '../engine/fieldproject.js';
 import { tell } from '../core/image.js';
 import { todayISO } from '../core/util.js';
@@ -24,7 +24,7 @@ let failedAt = 0;
 let who = { email: '', rows: null, error: '' };   // the email being checked on this tab, and Field Report's answer
 
 const say = (ok, text) => { said = { ok, text }; tell(`${ok ? '✓' : '✗'} ${text}`); store.notify(); };
-const configured = () => { const c = fieldConfig.get(); return !!(c.url && c.key); };
+const configured = () => fieldReady();
 
 const WORDS = { create: ['Will be created', 'info'], update: ['Will be changed', 'warn'], same: ['In step', 'ok'], created: ['Created', 'ok'], updated: ['Changed', 'ok'], skipped: ['Needs attention', 'warn'], nocode: ['Not sent', ''], failed: ['Failed', 'high'] };
 

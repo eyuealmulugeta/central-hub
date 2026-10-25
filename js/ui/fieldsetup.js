@@ -3,7 +3,7 @@
 // Every button answers on the page, in green (it worked) or red (it did not), and with a short message at the top.
 
 import { store } from '../core/store.js';
-import { fieldConfig, buildSetup, sendSetup, fetchSetup, countsOf, probeConnection, judgeConnection, linkCheck } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, buildSetup, sendSetup, fetchSetup, countsOf, probeConnection, judgeConnection, linkCheck } from '../sync/fieldreport.js';
 import { todayISO } from '../core/util.js';
 import { tell } from '../core/image.js';
 import { html } from './dom.js';
@@ -21,11 +21,12 @@ const said = { connect: null, send: null, script: null, assign: null };
 const say = (where, project, ok, text, lines = null, quiet = false) => { said[where] = { projectId: project.id, ok, text, lines }; if (!quiet) tell(`${ok ? '✓' : '✗'} ${text}`); store.notify(); };
 const mine = (where, project) => (said[where]?.projectId === project.id ? said[where] : null);
 
+// signed in to the cloud, the server holds the web app URL and key (1C): nothing is typed in a browser
+const viaServer = () => !!fieldServer.call;
+const hasLink = () => { if (viaServer()) return true; const cfg = fieldConfig.get(); return !!(cfg.url && cfg.key); };
+
 /** True once reports can be fetched for this project. */
-export const connected = project => {
-  const cfg = fieldConfig.get();
-  return !!(cfg.url && cfg.key && project?.fieldCode && project.fieldLabel);
-};
+export const connected = project => !!(hasLink() && project?.fieldCode && project.fieldLabel);
 
 export const summary = project => connected(project) ? `Connected to "${project.fieldLabel}"` : 'Not connected yet';
 
@@ -54,17 +55,17 @@ export function body(c) {
   const changed = dirty(project);
   const plan = countsOf(buildSetup({ ...c, people: store.users }, c.today));
   const conn = mine('connect', project), sent = mine('send', project), script = mine('script', project), assigned = mine('assign', project);
-  const ready = !!((cfg.url || draft.url) && (cfg.key || draft.key) && shownCode(project));
+  const ready = !!((viaServer() || ((cfg.url || draft.url) && (cfg.key || draft.key))) && shownCode(project));
   return html`
     <div class="set-cols">
       <section class="card set-box" id="panel-field">
         <h3>1. Connect <span class="muted">${summary(project)}</span></h3>
         <label>Code of ${project.name} in Field Report${project.fieldLabel ? html` <span class="muted">linked to "${project.fieldLabel}"</span>` : ''}
           <input data-chg="fieldDraft" data-f="code" data-fk="fr-code" value="${shownCode(project)}" placeholder="e.g. MJO"></label>
-        <label>Field Report web app URL
+        ${viaServer() ? '' : html`<label>Field Report web app URL
           <input data-chg="fieldDraft" data-f="url" data-fk="fr-url" value="${draft.url ?? cfg.url ?? ''}" placeholder="Paste the link ending in /exec"></label>
         <label>Your manager key
-          <input type="password" data-chg="fieldDraft" data-f="key" data-fk="fr-key" value="${draft.key || ''}" placeholder="${cfg.key ? 'Saved in this browser. Type only to change it' : 'Paste your key'}" autocomplete="off"></label>
+          <input type="password" data-chg="fieldDraft" data-f="key" data-fk="fr-key" value="${draft.key || ''}" placeholder="${cfg.key ? 'Saved in this browser. Type only to change it' : 'Paste your key'}" autocomplete="off"></label>`}
         ${held ? html`<p class="callout bad"><b>✗</b> <span>Code ${held.code} is still set on "${held.otherName}", so it was not saved. A Field Report project can feed only one Central Hub project.</span></p>
           <button class="btn" type="button" data-act="takeCode">Use ${held.code} for this project instead</button>` : ''}
         <div class="actions left">
@@ -73,8 +74,8 @@ export function body(c) {
         </div>
         ${connecting ? html`<p class="muted">Asking Field Report…</p>` : ''}
         ${conn ? html`${callout(conn)}${conn.lines ? checklist(conn.lines) : ''}` : ''}
-        ${ready || conn ? '' : html`<p class="muted">Fill in the three boxes, then press the button. It saves them and checks the whole link.</p>`}
-        <p class="muted">The code belongs to this project. The URL and key are the same for every project and stay in this browser, not in the shared database.</p>
+        ${ready || conn ? '' : html`<p class="muted">${viaServer() ? 'Enter the code' : 'Fill in the three boxes'}, then press the button. It saves ${viaServer() ? 'it' : 'them'} and checks the whole link.</p>`}
+        <p class="muted">${viaServer() ? 'The code belongs to this project. The Field Report web app link and manager key are kept on the Central Hub server (Google Secret Manager), never in a browser: nothing else to fill in here.' : 'The code belongs to this project. The URL and key are the same for every project and stay in this browser, not in the shared database.'}</p>
       </section>
 
       <div class="set-stack">
@@ -131,8 +132,8 @@ const EXPORT_LINE = [
 async function runCheck(project, c, quiet = false) {
   const cfg = fieldConfig.get();
   const code = String(project.fieldCode || '').toUpperCase();
-  if (!cfg.url || !cfg.key || !code) {
-    say('connect', project, false, `Not checked. Still missing: ${[!code && 'the project code', !cfg.url && 'the web app URL', !cfg.key && 'the manager key'].filter(Boolean).join(', ')}.`);
+  if (!hasLink() || !code) {
+    say('connect', project, false, `Not checked. Still missing: ${[!code && 'the project code', !viaServer() && !cfg.url && 'the web app URL', !viaServer() && !cfg.key && 'the manager key'].filter(Boolean).join(', ')}.`);
     return;
   }
   connecting = true;
@@ -199,7 +200,7 @@ async function runWhy(project, auto = false) {
 
 const needSettings = project => {
   const cfg = fieldConfig.get();
-  const missing = [!project.fieldCode && 'the project code', !cfg.url && 'the web app URL', !cfg.key && 'the manager key'].filter(Boolean);
+  const missing = [!project.fieldCode && 'the project code', !viaServer() && !cfg.url && 'the web app URL', !viaServer() && !cfg.key && 'the manager key'].filter(Boolean);
   return missing.length ? `Fill in step 1 first. Still missing: ${missing.join(', ')}.` : '';
 };
 
@@ -238,7 +239,7 @@ export const actions = {
       return;
     }
     clash = null;
-    fieldConfig.set({ ...cfg, url, key });
+    if (!viaServer()) fieldConfig.set({ ...cfg, url, key });
     if (code !== (project.fieldCode || '')) store.updateProject(p => { p.fieldCode = code; p.fieldLabel = ''; });
     draft = {};
     await runCheck({ ...project, fieldCode: code }, c);

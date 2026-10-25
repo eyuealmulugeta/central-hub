@@ -24,8 +24,29 @@ export const fieldConfig = {
   set(cfg) { localStorage.setItem(KEY, JSON.stringify(cfg)); },
 };
 
+/**
+ * Step 1C: signed in to the cloud, every request goes through the server function fieldAction, which holds the key
+ * and checks who asks (set by main.js). Locally, and in the Admin's browser while the server cannot be reached and
+ * the old key is still saved there (until 1D), the browser asks the script itself.
+ */
+export const fieldServer = { call: null };
+/** Can this browser make Field Report requests at all? */
+export const fieldReady = () => { if (fieldServer.call) return true; const c = fieldConfig.get(); return !!(c.url && c.key); };
+const SERVER_DOWN = /not-found|unavailable|internal|deadline-exceeded|unauthenticated/;
+
 /** One request to the receiver script. Network and non-JSON answers become messages a person can act on. */
 async function post(body) {
+  if (fieldServer.call) {
+    try { return await fieldServer.call(body); }
+    catch (err) {
+      const code = String(err?.code || '');
+      const msg = String(err?.message || err).replace(/^Firebase(Error)?:s*/, '');
+      const old = fieldConfig.get();
+      // refused (who may do what) is final; only a server that is missing or down falls back to a key still saved here
+      if (!SERVER_DOWN.test(code) || !(old.url && old.key)) throw new Error(code.includes('permission-denied') ? msg : `The Central Hub server could not ask Field Report: ${msg}`);
+      console.warn('Field Report through the server failed, asking with the key saved in this browser:', msg);
+    }
+  }
   const { url, key } = fieldConfig.get();
   if (!url || !key) throw new Error('Enter the Field Report web app URL and your manager key first.');
   let text;
@@ -49,8 +70,7 @@ async function post(body) {
 }
 
 export async function fetchFieldReports({ proj, since }) {
-  const { url, key } = fieldConfig.get();
-  if (url && key && !proj) throw new Error('Enter this project\'s Field Report code first (for example MJO).');
+  if (fieldReady() && !proj) throw new Error('Enter this project\'s Field Report code first (for example MJO).');
   const out = await post({ action: 'export', proj: String(proj || '').toUpperCase(), since: since || '' });
   if (!out.ok) {
     // a receiver without the export action treats the request as a PDF upload

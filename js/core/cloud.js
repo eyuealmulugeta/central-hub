@@ -74,6 +74,12 @@ export async function connectCloud(config) {
       }
     },
 
+    /** Call a server function (functions/index.js, europe-west1) with this person's sign-in. Loaded on first use. */
+    async call(name, data) {
+      const Fn = await sdk('functions');
+      return (await Fn.httpsCallable(Fn.getFunctions(app, 'europe-west1'), name)(data)).data;
+    },
+
     watchDoc: (path, fn, onError) => F.onSnapshot(ref(path), snap => fn(snap.exists() ? snap.data() : null), onError),
     /** `where` = [field, op, value] limits the collection; the rules need it for records only some people may read. */
     watchCol: (path, fn, onError, where) => F.onSnapshot(where ? F.query(F.collection(db, path), F.where(...where)) : F.collection(db, path), snap => fn(snap.docs.map(d => d.data())), onError),

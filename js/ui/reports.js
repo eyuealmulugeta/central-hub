@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -567,7 +567,7 @@ export const actions = {
   toFieldSetup() { openPanel('field'); },
 };
 
-const autoReady = (project, cfg) => !!(cfg.url && cfg.key && project?.fieldCode && project.fieldLabel);
+const autoReady = (project, cfg) => !!((fieldServer.call || (cfg.url && cfg.key)) && project?.fieldCode && project.fieldLabel);
 // the server's import status, read at most once a minute (Step 1: the server imports every 5 minutes)
 let server = null, serverReadAt = 0;
 const hhmm = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

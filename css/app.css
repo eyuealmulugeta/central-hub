@@ -764,15 +764,22 @@ a.brand:hover .logo { box-shadow: 0 0 0 2px var(--brand-2); }
 @media (max-width: 760px) { .team-row { grid-template-columns: 1fr 1fr; } }
 
 /* ---- HR: a wall of employee cards, and a form with tabs per employee ---- */
-.view-hr { grid-template: auto auto minmax(0, 1fr) auto / minmax(0, 1fr); }
-.view-hr:has(.emp-form) { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); }
+/* the wall stacks its parts top to bottom (figures, notes, search, filters, cards: five or six of them, so a fixed
+   grid of rows let them overlap) and only the cards scroll */
+.view-hr { display: flex; flex-direction: column; }
+.view-hr > * { flex: none; }
+.view-hr > .emp-wall { flex: 1 1 auto; }
+.view-hr:has(.emp-form) { display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); }
 .view-hr > .toolbar { margin: 0; padding: 0 4px; }
 .view-hr .search { flex: 0 1 300px; min-width: 160px; }
-.emp-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; align-content: start; overflow: auto; min-height: 0; padding: 2px; }
+.emp-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; align-content: start; overflow: auto; min-height: 0; padding: 2px; }
 .emp-card { display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 1px solid transparent; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .12s, transform .08s; }
 .emp-card:hover { border-color: var(--primary); }
 .emp-card:active { transform: scale(.99); }
 .emp-card.left { opacity: .6; }
+/* the photo on the wall: big enough to know the face */
+.emp-card > .avatar { width: 112px; height: 112px; font-size: 36px; border-radius: 16px; }
+@media (max-width: 640px) { .emp-card > .avatar { width: 88px; height: 88px; font-size: 28px; } }
 .avatar { flex: none; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 12px; color: #fff; font-size: 22px; font-weight: 700; letter-spacing: .02em; object-fit: cover; }
 .avatar.big { width: 96px; height: 96px; font-size: 32px; border-radius: 16px; }
 .avatar.xxl { width: 200px; height: 200px; font-size: 64px; border-radius: 16px; box-shadow: var(--shadow); }

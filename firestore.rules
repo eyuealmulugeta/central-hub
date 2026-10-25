@@ -156,6 +156,12 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // Written only by the server (functions/, Admin SDK): the Field Report import status. Office and the Admin read it.
+    match /system/{doc} {
+      allow read: if seesAll() || isOffice();
+      allow write: if false;
+    }
+
     // Prices, exchange rates, countries, letterhead: settings, so only the Admin changes them.
     match /global/{doc} {
       allow read: if seesAll() || hasUser();

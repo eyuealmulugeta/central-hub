@@ -5,9 +5,11 @@
 import { dailyModel } from '../engine/dailyreport.js';
 import { docRef } from '../engine/docref.js';
 import { billingOf } from '../engine/billing.js';
+import { fileOf } from '../sync/fieldreport.js';
 import { fmtDate, fmtFull, num } from '../core/util.js';
 import { html } from './dom.js';
 import { docFoot, footText } from './print.js';
+import { photoGrid } from './photos.js';
 
 const STATE = { present: 'Present', absent: 'Absent', sick: 'Sick', leave: 'Leave' };
 const pct = v => (v == null ? '' : `${num(v, 0)} %`);
@@ -118,7 +120,7 @@ export function dailyDoc(r, c, { office = false } = {}) {
         <tbody>${m.attendance.map(a => html`<tr><td>${a.name}</td><td>${STATE[a.state] || a.state}</td><td class="r">${a.ot ? `${num(a.ot)} h` : ''}</td></tr>`)}</tbody></table></section>` : ''}
 
     ${m.photos ? html`<section class="dsr-sec dsr-photos"><h3><span>${office && m.attendance.length ? 'B' : 'A'}</span>Site photos</h3>
-      <p>${m.photos} photo${m.photos === 1 ? '' : 's'} were taken. They are in the Field Report PDF${f.pdfId ? html`: <a href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">open the PDF</a>` : ''}. From Field Report 1.63.0 they are shown here, 6 to a page.</p></section>` : ''}
+      ${photoGrid(r, c, { perPage: 6, cls: 'ph-page' }) || html`<p>${m.photos} photo${m.photos === 1 ? '' : 's'} were taken. They are in the Field Report PDF${fileOf(c.ws, r).pdfId ? html`: <a href="https://drive.google.com/file/d/${fileOf(c.ws, r).pdfId}/view" target="_blank" rel="noopener">open the PDF</a>` : ''}. Photos are shown here from Field Report 2.1.0.</p>`}</section>` : ''}
 
     ${docFoot(footText(c, 'Daily Site Report', ref))}
   </div>`;

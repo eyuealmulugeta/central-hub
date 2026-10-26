@@ -12,6 +12,7 @@ import { calendarOf } from '../engine/calendar.js';
 import { fmtFull, fmtDay, num } from '../core/util.js';
 import { html } from './dom.js';
 import { docHead, docSec, docFoot, footText, signoff, sCurveSvg, zonePlan } from './print.js';
+import { photoGrid } from './photos.js';
 
 const pct = v => `${Math.round(v || 0)} %`;
 
@@ -68,7 +69,8 @@ export function clientBrief(r, c) {
     ${docSec(8, 'Next day', m.plan.length ? html`<div class="brief-next">${m.plan.map(z => html`<div><b>${z.zone}</b> ${z.lines.join('; ')}</div>`)}</div>` : none('Nothing planned'))}
 
     ${signoff([{ label: 'Prepared by · Site engineer', name: r.by || '', note: fmtFull(r.date) }, { label: 'Approved by', name: approved ? r.approvedBy : '', note: approved && r.approvedAt ? fmtFull(r.approvedAt.slice(0, 10)) : 'Date' }])}
-    <p class="muted brief-note">${m.photos ? `${m.photos} site photo${m.photos === 1 ? ' was' : 's were'} taken today; they follow on page 2 once photos are kept in Drive. ` : ''}Figures from the approved daily report and the project schedule.</p>
+    <p class="muted brief-note">${m.photos && !photoGrid(r, c) ? `${m.photos} site photo${m.photos === 1 ? ' was' : 's were'} taken today. ` : ''}Figures from the approved daily report and the project schedule.</p>
     ${docFoot(foot)}
+    ${photoGrid(r, c) ? html`<div class="brief-photos"><h3>Site photos</h3>${photoGrid(r, c, { perPage: 6, cls: 'ph-page' })}</div>` : ''}
   </div>`;
 }

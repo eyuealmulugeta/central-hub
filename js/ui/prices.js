@@ -4,6 +4,7 @@ import { uid } from '../core/util.js';
 import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
+import * as fieldusers from './fieldusers.js';
 import { PROJECT_TYPES } from '../core/seed.js';
 import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
@@ -399,8 +400,8 @@ const projectBar = (c, what) => html`
 function linksPage(c) {
   return html`<div class="side settings">
     ${projectBar(c, 'Field Report and import for')}
-    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
-    ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : fieldsetup.body(c)}
+    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
+    ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : linkTab === 'users' ? fieldusers.body() : fieldsetup.body(c)}
   </div>`;
 }
 
@@ -619,6 +620,7 @@ export const actions = {
   /** Edit in the directory: the person's record in Crew, Employee data, on its Projects tab. */
   openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   ...fieldprojects.actions,
+  ...fieldusers.actions,
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
@@ -735,6 +737,7 @@ export const actions = {
 export const changes = {
   ...fieldsetup.changes,
   ...fieldprojects.changes,
+  ...fieldusers.changes,
   /** Read the chosen file and show what is in it. Nothing is saved here. */
   async pack(el) {
     const file = el.files[0];
@@ -899,6 +902,7 @@ export const changes = {
 
 export const submits = {
   ...fieldprojects.submits,
+  ...fieldusers.submits,
   currency(fd) {
     const code = fd.get('code').trim().toUpperCase();
     const rate = +fd.get('rate');

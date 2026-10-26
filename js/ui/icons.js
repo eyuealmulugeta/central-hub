@@ -80,6 +80,10 @@ export const MARKS = {
     <path class="ib" d="M9.400 10.600A2.400 2.400 0 0111.800 8.200h6.800A2.400 2.400 0 0121 10.600v4.800a2.400 2.400 0 01-.900 1.900v2.500a.5.500 0 01-.800.400l-3.300-2.400h-4.200a2.400 2.400 0 01-2.400-2.400z"/>
     <rect class="iw" x="12" y="11.400" width="6.400" height="1.600" rx=".8"/>
     <rect class="iw" x="12" y="14.200" width="4" height="1.600" rx=".8"/>`,
+  notifications: `
+    <path class="ia" d="M12 3a6 6 0 00-6 6v4.200L4.300 16a.8.8 0 00.700 1.200h14a.8.8 0 00.700-1.200L18 13.200V9a6 6 0 00-6-6z"/>
+    <path class="ib" d="M9.500 18.500a2.500 2.500 0 005 0z"/>
+    <circle class="ic" cx="18" cy="5.500" r="2.600"/>`,
   apps: `
     <rect class="ia" x="3" y="3" width="8" height="8" rx="2"/>
     <rect class="ib" x="13" y="3" width="8" height="8" rx="2"/>

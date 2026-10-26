@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, movePdfIds } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -18,6 +18,7 @@ import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
 import { checksOf, approveSummary, pinsMessage, SECTIONS, sectionLabel } from '../engine/review.js';
 import { dailyDoc } from './dailyreport.js';
 import { clientBrief } from './brief.js';
+import { photoGrid } from './photos.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 
@@ -134,8 +135,8 @@ function sheet(r, c, { reviewing: inReview = false } = {}) {
     ${sec('Safety', html`<p>${f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : 'Not stated'}${f.toolbox == null ? '' : f.toolbox ? '. Toolbox talk held.' : '. No toolbox talk.'}</p>${f.safetyNotes?.length ? ul(f.safetyNotes) : ''}`, '', 'safety')}
     ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
     ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
-    ${f.photos ? html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>` : ''}
-    ${f.pdfId ? html`<span class="actions left"><a href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>${locate(f)}</span>` : ''}
+    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, photoGrid(r, c), '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
+    ${pdfLink(r, c)}
     ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
   </div>`;
 }
@@ -168,9 +169,15 @@ function pinBox(r) {
 
 /** Opens the Drive folder that holds the report's PDF. A report that came before Field Report's script 7.26.0 does not know
  * its folder until the next check: Drive is then searched for the file's name instead. */
-const locate = f => (f.folderId
-  ? html`<a class="btn small" href="https://drive.google.com/drive/folders/${encodeURIComponent(f.folderId)}" target="_blank" rel="noopener" title="Opens the Drive folder of ${f.pdf || 'this report'}">Locate the file in Drive</a>`
-  : f.pdf || f.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || f.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}">Locate the file in Drive</a>` : '');
+const locate = (x, f) => (x.folderId
+  ? html`<a class="btn small" href="https://drive.google.com/drive/folders/${encodeURIComponent(x.folderId)}" target="_blank" rel="noopener" title="Opens the Drive folder of ${f.pdf || 'this report'}">Locate the file in Drive</a>`
+  : f.pdf || x.pdfId ? html`<a class="btn small" href="https://drive.google.com/drive/search?q=${encodeURIComponent(f.pdf || x.pdfId)}" target="_blank" rel="noopener" title="Searches Google Drive for ${f.pdf || 'the file'}">Locate the file in Drive</a>` : '');
+/** Site users never get the report PDF, its papers or its Drive folder (v0.22.6): the client PDF is the office's. */
+const isSiteUser = c => c.role === 'site';
+const pdfLink = (r, c) => {
+  const x = isSiteUser(c) ? {} : fileOf(c.ws, r);
+  return x.pdfId ? html`<span class="actions left"><a href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>${locate(x, r.field || {})}</span>` : '';
+};
 
 /**
  * The approver's decision on a report under review (v0.20.0). Approve applies the figures above to the schedule,
@@ -234,7 +241,7 @@ export function render(c) {
   const back = sentBack && ws.reports.find(r => r.id === sentBack.id);
   const viewed = !cur && viewing ? ws.reports.find(r => r.id === viewing) : null;
   const open = cur || viewed;
-  const doc = docOf ? ws.reports.find(r => r.id === docOf) : null;
+  const doc = docOf && !isSiteUser(c) ? ws.reports.find(r => r.id === docOf) : null;
   if (doc) return docView(doc, c);
 
   const formCard = html`
@@ -370,7 +377,7 @@ export function render(c) {
                 : `${r.by}${r.weather ? `, ${r.weather}` : ''}, ${sum(r.manpower || [], m => m.count)} on site, ${r.entries?.length || 0} task${r.entries?.length === 1 ? '' : 's'} updated`}</span>
             </span>
             <button class="btn small" data-act="openReport" data-fresh data-id="${r.id}" title="Read it with its PDF on top and the history beside it">Open</button>
-            <button class="btn small" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>
+            ${isSiteUser(c) ? '' : html`<button class="btn small" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
             <button class="btn ghost small" data-act="toggle" data-id="${r.id}">${expanded.has(r.id) ? 'Hide' : 'Show all'}</button>
           </div>
           ${expanded.has(r.id) ? sheet(r, c) : ''}
@@ -387,7 +394,7 @@ export function render(c) {
           ${store.isAdmin ? html`<section class="card">${binBody(c)}</section>` : ''}
         </div>
         <aside class="rv-side">
-          ${pdfCard(open)}
+          ${pdfCard(open, c)}
           <section class="card" aria-label="History of reports">${historyList(reports, open.id)}</section>
         </aside>
       </div>`;
@@ -418,16 +425,18 @@ function docView(r, c) {
 }
 
 /** The report's own PDF, shown from Google Drive. */
-function pdfCard(r) {
+function pdfCard(r, c) {
   const f = r.field || {};
   if (f.nowork) return html`<section class="card"><h3>No work this day</h3><p class="muted">${f.reason || ''}${f.note ? ` (${f.note})` : ''}</p></section>`;
-  if (!f.pdfId) {
+  if (isSiteUser(c)) return '';
+  const x = fileOf(c.ws, r);
+  if (!x.pdfId) {
     return html`<section class="card"><h3>Report PDF</h3><p class="muted">${r.source === 'field' ? 'No PDF came with this report.' : 'This report was typed in Central Hub, so there is no Field Report PDF.'}</p></section>`;
   }
   return html`<section class="card">
     <div class="toolbar"><h3>Field Report PDF, ${fmtDate(r.date)}</h3><span class="grow"></span>
-      <a class="btn small" href="https://drive.google.com/file/d/${f.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(f)}</div>
-    <iframe class="rv-pdf" src="https://drive.google.com/file/d/${f.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
+      <a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(x, f)}</div>
+    <iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
     <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
   </section>`;
 }
@@ -436,7 +445,7 @@ function pdfCard(r) {
 function readCard(r, c) {
   return html`<section class="card">
     <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
-      <button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>
+      ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin for ${RETENTION_DAYS} days">Delete</button></div>
     ${r.approvedBy ? html`<p class="muted">Approved by ${r.approvedBy}${r.approvedAt ? ` on ${fmtDate(r.approvedAt.slice(0, 10))}` : ''}.</p>` : ''}
     ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
@@ -477,6 +486,8 @@ function binBody(c) {
 /** The first time the page opens, clear what has been in the bin too long. Only the Admin can delete, so only the Admin does. */
 export function onEnter() {
   const ws = store.ws;
+  // older reports carry their PDF's Drive ids, which Site users can read: the office moves them out (v0.22.6)
+  if (store.role !== 'site' && !store.loading && ws.reports.some(r => r.field && ('pdfId' in r.field || 'folderId' in r.field))) store.update(w => { movePdfIds(w); });
   if (!store.isAdmin || !ws.trash?.some(t => isExpired(t) || ws.reports.some(r => r.id === t.record?.id))) return;
   store.update(w => { purge(w); });
 }
@@ -637,7 +648,7 @@ export const actions = {
   /** Discard what was typed: the form is redrawn with its starting values. */
   clearForm() { notice = 'Form cleared. Nothing was saved.'; },
   repTab(el) { tab = el.dataset.t; },
-  openDoc(el) { docOf = el.dataset.id; withAtt = false; brief = false; notice = ''; },
+  openDoc(el, c) { if (isSiteUser(c)) return; docOf = el.dataset.id; withAtt = false; brief = false; notice = ''; },
   docKind(el) { brief = el.dataset.kind === 'brief'; },
   closeDoc() { docOf = null; notice = ''; },
   printDoc() { print(); },

@@ -231,6 +231,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         equipment: meta.equipment || [],
         progress: meta.progress || [], extra: meta.progressExtra || [], notes: meta.notes || [], plan: meta.plan || [],
         requests: meta.requestItems || [], photos: meta.photos || 0,
+        photoFiles: meta.photoFiles || [],   // v0.23.1: the photos in Drive (Field Report 2.1.0)
         // structured entries, sent once Field Report works from this project's lists (see buildSetup)
         work: meta.work || [], milestones: meta.milestones || [], attendance: meta.attendance || [],
         delayItems: meta.delayItems || [], received: meta.received || [], instructions: meta.instructions || [],
@@ -421,6 +422,33 @@ export async function fetchProjects() {
     throw new Error(out.error || 'Field Report would not give its list of projects.');
   }
   return out.projects || [];
+}
+
+/**
+ * v0.23.0 (script 7.30.0): the Field Report users, their devices and what was sent to the Admin, in one answer:
+ * { people: [{ email, id, role, projects, st, full, pos, uName, uPos, ok, okBy, okAt }], catalog: [{ code, label, status }], devices, inbox }.
+ */
+export async function fieldUsers() {
+  const out = await post({ action: 'hubFeed' });
+  if (!out.ok) {
+    if (/file name|PDF|Unknown action|Invalid file name/i.test(out.error || '')) throw new Error('The Field Report script is older than 7.30.0. Deploy 7.30.0 first.');
+    throw new Error(out.error || 'Field Report would not give its users.');
+  }
+  return { people: out.people || [], catalog: out.catalog || [], devices: out.devices || [], inbox: out.inbox || [] };
+}
+/** v0.23.1: one site photo from Drive (script 7.31.0), as base64 JPEG. proj = Field Report code, report = the PDF name. */
+export async function fieldPhoto(proj, report, id) {
+  const out = await post({ action: 'photoGet', proj, report, id });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not give the photo.');
+  return out.data;
+}
+
+/** One change to a Field Report user: userSet { email, full, pos, ok, st }, accessSet { email, role, projects }, accessRemove { email } or devDecide { email, device, decision }. */
+export async function fieldUserDo(action, body) {
+  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide'].includes(action)) throw new Error('Unknown change.');
+  const out = await post({ action, ...body });
+  if (!out.ok) throw new Error(out.error || 'Field Report refused the change.');
+  return out;
 }
 
 /** Why an email can or cannot see each project (the script's linkCheck, admin key): [{ code, name, status, hasLinked, inLinked, visible, why }]. */

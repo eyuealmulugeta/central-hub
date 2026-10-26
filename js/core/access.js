@@ -12,7 +12,7 @@ export const COMPANY_PAGES = ['finance', 'contracts'];
 /** Admin only, always. */
 /** The five Settings pages, in menu order. */
 export const SETTINGS_PAGES = ['apps', 'prices', 'access', 'catalog', 'company', 'links'];
-export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', ...SETTINGS_PAGES];
+export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', ...SETTINGS_PAGES];   // notifications: v0.23.0
 
 /** What the Admin can grant to anyone but the Admin (Office and Site alike), in groups. 'trade' covers both trading pages. */
 export const GRANT_GROUPS = [

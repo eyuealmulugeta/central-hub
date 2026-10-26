@@ -155,8 +155,39 @@ export function newestPerDay(reports = []) {
   return { reports: [...best.values()], replaced };
 }
 
+/**
+ * Where a report's PDF is in Drive. Kept in `reportfiles`, a section Site users never read (v0.22.6), so a site
+ * engineer cannot reach the client PDF through Central Hub; older records still have the ids on the report.
+ */
+export const fileOf = (ws, r) => (ws.reportfiles || []).find(x => x.id === r.id)
+  || { id: r.id, pdfId: r.field?.pdfId || '', folderId: r.field?.folderId || '' };
+
+function putFile(ws, id, pdfId, folderId) {
+  ws.reportfiles ||= [];
+  const i = ws.reportfiles.findIndex(x => x.id === id);
+  const old = i < 0 ? null : ws.reportfiles[i];
+  const rec = { id, pdfId: pdfId || old?.pdfId || '', folderId: folderId || old?.folderId || '' };
+  if (!rec.pdfId && !rec.folderId) return;
+  if (!old) ws.reportfiles.push(rec);
+  else if (old.pdfId !== rec.pdfId || old.folderId !== rec.folderId) ws.reportfiles[i] = rec;
+}
+
+/** Moves the Drive ids of older reports off the report (which Site reads) into `reportfiles`. Returns how many moved. */
+export function movePdfIds(ws) {
+  let n = 0;
+  for (const r of ws.reports || []) {
+    if (!r.field || !('pdfId' in r.field || 'folderId' in r.field)) continue;
+    putFile(ws, r.id, r.field.pdfId, r.field.folderId);
+    const { pdfId, folderId, ...rest } = r.field;
+    r.field = rest;
+    n++;
+  }
+  return n;
+}
+
 export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = true } = {}) {
   let added = 0, updated = 0;
+  movePdfIds(ws);
   const put = rec => {
     const i = ws.reports.findIndex(r => r.id === rec.id);
     if (i < 0) { ws.reports.push(rec); added++; } else { ws.reports[i] = { ...ws.reports[i], ...rec }; updated++; }
@@ -176,9 +207,10 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
     if (sameVersion && old.field.v === FIELD_SCHEMA) {
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
-      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || (meta.folderId && old.field.folderId !== meta.folderId)) {
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', folderId: meta.folderId || old.field.folderId || '' } });
+      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length) {
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '' } });
       }
+      putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
     }
     const by = meta.preparedBy || meta.uploadedBy || 'Site';
@@ -190,8 +222,8 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       review: sameVersion ? old.review : 'pending',
       // every entry the Field Report app collects, kept as the site wrote it
       field: {
-        v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted', pdfId: meta.pdfId || '',
-        pdf: meta.pdf || '', folderId: meta.folderId || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '',
+        v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted',
+        pdf: meta.pdf || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '',
         position: meta.position || '', location: meta.location || '', activities: meta.activities || [],
         hours: meta.hours || null, tempC: meta.weather?.tempC ?? null, ground: meta.weather?.ground || '',
         delays: meta.delays || [],
@@ -206,6 +238,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         ...(droppedOn.has(meta.date) ? { replaced: droppedOn.get(meta.date) || '?' } : {}),
       },
     });
+    putFile(ws, id, meta.pdfId, meta.folderId);
     // unknown trades appear under Settings with a zero rate, so their cost is visibly missing rather than silently skipped
     if (addTrades) for (const m of crew) if (!(m.trade in ws.laborRates)) ws.laborRates[m.trade] = 0;
 

@@ -126,6 +126,7 @@ export const emptyWorkspace = () => ({
   attendance: [],   // the office's corrections of the attendance sheet (see engine/attendance.js)
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)
   payments: [],     // Payments: what was paid to whom, for which period (each is also a labour cost in ledger)
+  reportfiles: [],  // the Drive ids of each Field Report PDF ({ id: report id, pdfId, folderId }); never read by Site (v0.22.6)
 });
 
 /**

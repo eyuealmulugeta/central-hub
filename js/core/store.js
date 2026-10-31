@@ -347,6 +347,8 @@ export const store = {
   get cloud() { return !!api; },
   /** The server's Field Report import status (system/fieldImport), or null locally or when it cannot be read. */
   /** A server function, with this person's sign-in (cloud only). */
+  /** v0.33.0: one record written straight to the database (a crew form link made by someone who does not load the list). */
+  cloudPut(path, data) { if (!api?.set) throw new Error('Not signed in to the cloud.'); return api.set(path, data); },
   callServer(name, data) { if (!api?.call) throw new Error('Not signed in to the cloud.'); return api.call(name, data); },
   async fieldServer() { if (!api) return null; try { return await api.get('system/fieldImport'); } catch { return null; } },
   get user() { return me; },
@@ -366,7 +368,7 @@ export const store = {
   /** The Admin and the co-owners. */
   get owners() { return [ownerEmail, ...coOwners].filter(Boolean); },
   /** May this person open the page? */
-  can(page) { return mayOpen(role, pages, page); },
+  can(page) { return mayOpen(role, pages, page, ranks); },
   /** Costs, invoices and billing terms are loaded only for people with a page that shows them. */
   get seesMoney() { return seesMoney(role, pages); },
   /** Day rates, trade rates and crew pay: the Admin, and Office people with Costs or Payments ticked. */

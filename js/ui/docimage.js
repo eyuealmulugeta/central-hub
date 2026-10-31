@@ -8,6 +8,19 @@ let zoomed = false;
 export const toggleZoom = () => { zoomed = !zoomed; };
 export const resetZoom = () => { zoomed = false; };
 
+/** v0.33.0: the Fayda ID (Ethiopian national ID), front and back. Its number, FIN, birth, sex and address are read when added. */
+export function idBlock(front, back, name) {
+  const side = (img, label, chg, drop) => html`<div class="id-side"><span class="muted">${label}</span>${img
+    ? html`<button type="button" class="doc-img-btn ${zoomed ? 'zoom' : ''}" data-act="zoomPassport" title="${zoomed ? 'Click to shrink' : 'Click to enlarge'}"><img class="doc-img" src="${img}" alt="Fayda ID of ${name || 'this person'}, ${label.toLowerCase()}"></button>`
+    : html`<div class="doc-img-empty">No picture yet</div>`}
+    <div class="actions left"><label class="btn small">${img ? 'Change' : 'Add'}<input type="file" accept="image/*" data-chg="${chg}" hidden></label>${img ? html`<button class="btn ghost small" type="button" data-act="${drop}">Remove</button>` : ''}</div></div>`;
+  return html`<div class="doc-image">
+    <b>Fayda ID</b>
+    <div class="id-sides">${side(front, 'Front', 'idImage', 'dropIdImage')}${side(back, 'Back', 'idImageBack', 'dropIdImageBack')}</div>
+    <span class="muted">Pictures of the national ID card. They are made smaller automatically; the Fayda number (FAN), FIN, date of birth, sex, phone and address are read and filled in where empty. Shown on the attendance sheet. Only you, the Admin, can see them.</span>
+  </div>`;
+}
+
 export function passportBlock(image, name) {
   return html`<div class="doc-image">
     <b>Passport image</b>

@@ -64,7 +64,8 @@ export const permKey = page => PERM[page] || page;
 const key = permKey;
 
 /** May someone with `role` and granted `pages` open `page`? */
-export function mayOpen(role, pages, page) {
+export function mayOpen(role, pages, page, ranks = []) {
+  if (page === 'crewforms') return role === 'owner' || ranks.length > 0;   // v0.33.0: the Admin, a GM, Project Engineer or Site Engineer
   if (page === 'directory') return role !== 'owner' && pages.includes('directory');   // the staff directory is for those without the employee records
   if (role === 'owner' || page === 'home' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
@@ -90,7 +91,7 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
-  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', ...SIGN_SECTIONS, ...MEET_SECTIONS];
+  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
   if (role !== 'office' && role !== 'site') return ['messages'];
   return [
     'messages', ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
@@ -151,6 +152,7 @@ const ADMIN_ONLY = {
   // billing terms are settings of the contract
   docs: new Set(['client', 'billing', 'contract', 'vat', 'stage', 'measure', 'billRate', 'copyMeasure']),
   reports: new Set(['clearField']),
+  crewforms: new Set(['cfClose', 'cfAccept', 'cfReject']),   // v0.33.0: reviewing forms is HR, the Admin's
 };
 /** True when `name` (a data-act, data-chg or data-form value on `page`) is reserved for the Admin. */
 /** v0.26.0: is this handler a delete? Then what it takes away goes to the recycle bin. */

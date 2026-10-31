@@ -51,7 +51,7 @@ export const MENUS = {
     today,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight'] },
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'evaluation', 'directory', 'payroll'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'payroll'] },   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'cashflow', 'income', 'expenses', 'summary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
     ...team,
@@ -59,7 +59,7 @@ export const MENUS = {
   trading: [
     today,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['trade', 'stock'] },
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'payroll'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
     ...team,

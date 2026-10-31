@@ -1536,3 +1536,17 @@ body.side-narrow .side-health { display: none; }
 .spot-media iframe { width: 320px; max-width: 100%; height: 240px; border: 0; border-radius: 8px; background: #000; }
 /* v0.32.0: the Daily site report sheet has no watermark */
 .paper.dsr::before { content: none; }
+/* v0.33.0: crew forms, the Fayda ID on Employee data, photos on the attendance sheet */
+.cf-link { display: flex; flex-direction: column; gap: 6px; }
+.cf-url { font-size: 12px; overflow-wrap: anywhere; color: var(--muted); }
+.cf-form { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start; }
+@media (max-width: 700px) { .cf-form { grid-template-columns: 1fr; } }
+.cf-pics { display: flex; flex-wrap: wrap; gap: 6px; max-width: 330px; }
+.cf-img { width: 150px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.cf-img.face { width: 96px; height: 116px; }
+.cf-face { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+.id-sides { display: flex; gap: 12px; flex-wrap: wrap; }
+.id-side { display: flex; flex-direction: column; gap: 6px; width: 240px; }
+.att-pics { float: left; display: flex; gap: 3px; margin-right: 5px; }
+.att-face { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+.att-id { width: 40px; height: 26px; border-radius: 3px; object-fit: cover; border: 1px solid var(--line); }

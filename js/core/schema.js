@@ -150,10 +150,12 @@ export const emptyCompany = () => ({
   payroll: [],    // one run a month (see engine/payroll.js): Admin only, built from HR pay
   letters: [],    // letters of the office (see engine/letters.js): Admin only, built from HR records
   evaluations: [], // crew evaluations and feedback notes (see engine/evaluation.js): read only by their author and the Admin
+  crewlinks: [],  // v0.33.0: crew form links (see engine/crewform.js): made by the Admin, a GM, PE or SE; opened by anyone who has one
+  crewforms: [],  // v0.33.0: crew forms sent from a link, waiting for the Admin
 });
 /** Company sections only the Owner may read or write. Must match firestore.rules. */
 export const OWNER_SECTIONS = ['staff', 'letters', 'payroll', 'owners'];
 /** Sections whose records are also written by people who are not signed in (a signer, a visitor booking a meeting). The office never re-stamps them. */
-export const PUBLIC_SECTIONS = ['signed', 'slots', 'bookings'];
+export const PUBLIC_SECTIONS = ['signed', 'slots', 'bookings', 'crewlinks', 'crewforms'];
 
 export const DEFAULT_MARKUPS = { overhead: 8, contingency: 5, profit: 12, vat: 15 };

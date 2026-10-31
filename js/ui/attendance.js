@@ -78,6 +78,11 @@ export function render(c) {
     const tip = cell ? `${cell.mark ? MARK_LABEL[cell.mark] : 'Cleared'}${cell.ot ? `, ${cell.ot} h overtime` : ''}${cell.fixed ? ', corrected by the office' : ''}` : '';
     return html`<td class="${cls}" title="${tip}" ${edit && d <= c.today ? html`data-act="pick" data-d="${d}" data-k="${row.key}"` : ''}>${cell?.mark || ''}${cell?.ot ? html`<sup>${cell.ot}</sup>` : ''}</td>`;
   };
+  // v0.33.0: the photo and the Fayda ID (or passport) of each person, from Employee data, the main record
+  const staff = c.company.staff || [];
+  const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+  const personOf = row => { const m = (c.ws.team || []).find(x => x.id === row.id); return staff.find(p => m?.personId && p.id === m.personId) || staff.find(p => same(p.name, row.name)) || null; };
+  const pics = row => { const p = personOf(row), id = p && (p.idImage || p.passportImage); return p && (p.photo || id) ? html`<span class="att-pics">${p.photo ? html`<img class="att-face" src="${p.photo}" alt="">` : ''}${id ? html`<img class="att-id" src="${id}" alt="ID">` : ''}</span>` : ''; };
   return html`
     <div class="toolbar no-print">
       <h2>Attendance sheet</h2><span class="muted">${c.project.name}. ${notice}</span><span class="grow"></span>
@@ -101,7 +106,7 @@ export function render(c) {
         ${groups.map(g => html`<tbody>
           <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · attendance is a record; it does not change the monthly pay' : ''}</span></td></tr>
           ${g.rows.map(row => html`<tr>
-          <td class="att-name"><b>${row.name}</b>${row.role ? html`<br><span class="muted">${row.role}</span>` : ''}</td>
+          <td class="att-name">${pics(row)}<b>${row.name}</b>${row.role ? html`<br><span class="muted">${row.role}</span>` : ''}</td>
           ${r.days.map(d => cellFor(row, d))}
           <td class="att-t"><b>${row.present}</b></td><td class="att-t">${row.absent || ''}</td><td class="att-t">${row.sick || ''}</td><td class="att-t">${row.leave || ''}</td><td class="att-t">${row.ot || ''}</td></tr>`)}
           ${groups.length > 1 ? html`<tr class="att-sub"><td class="att-name">Subtotal</td><td colspan="${span}"></td><td class="att-t"><b>${g.totals.present}</b></td><td class="att-t">${g.totals.absent || ''}</td><td class="att-t">${g.totals.sick || ''}</td><td class="att-t">${g.totals.leave || ''}</td><td class="att-t">${g.totals.ot || ''}</td></tr>` : ''}

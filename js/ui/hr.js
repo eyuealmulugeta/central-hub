@@ -14,7 +14,9 @@ import { ratingsOf, rankLabel, scaleLabel, averages, LEVELS, levelOf } from '../
 import { assign, unassign, assignmentOf, activeProjects, accountOf, memberId, fromTeam as fromTeamPlan, unlinked, duplicates } from '../engine/people.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, PHOTO, PASSPORT } from '../core/image.js';
-import { passportBlock, toggleZoom, resetZoom } from './docimage.js';
+import { passportBlock, idBlock, toggleZoom, resetZoom } from './docimage.js';
+import { readText } from '../core/textread.js';
+import { readFayda } from '../engine/crewform.js';
 import { divOf, stamp, TRADING, INSTALLATION } from '../core/division.js';
 import { scanInto, scanButton } from './ocr.js';
 import { TITLES, GROUPS, titleOf, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
@@ -310,13 +312,15 @@ function form({ p, alerts, monthly }, c) {
       <h3>Citizenship</h3>
       <div class="grid2">
         <label>Nationality <select data-chg="pick" data-f="nationality" data-what="nationality" data-fk="hr-nat">${chooseOptions(nationalityChoices({ used: c.company.staff.map(x => x.nationality), current: p.nationality }), p.nationality)}</select></label>
-        ${text('Identification No.', 'idNumber', 'hr-idno')}
+        ${text('Fayda No. (FAN)', 'idNumber', 'hr-idno')}
+        ${text('FIN', 'fin', 'hr-fin')}
         ${text('Passport No.', 'passportNumber', 'hr-pass')}
         ${pick('Gender', 'gender', 'hr-gender', GENDERS)}
         <label>Date of birth <input type="date" data-chg="set" data-f="birthday" data-fk="hr-birth" value="${p.birthday || ''}"></label>
         ${text('Place of birth', 'birthPlace', 'hr-bplace')}
         ${pick('Marital status', 'marital', 'hr-marital', MARITAL)}
       </div>
+      ${idBlock(p.idImage, p.idImageBack, p.name)}
       ${passportBlock(p.passportImage, p.name)}
       <h3>Emergency</h3>
       <div class="grid2">
@@ -444,6 +448,8 @@ export const actions = {
   select(el) { selected = el.dataset.id; tab = 'work'; notice = ''; mode = 'form'; resetZoom(); },
   back() { selected = null; mode = 'form'; resetZoom(); },
   zoomPassport() { toggleZoom(); },
+  dropIdImage() { store.updateCompany(co => { const p = find(co); if (p) p.idImage = ''; }); },
+  dropIdImageBack() { store.updateCompany(co => { const p = find(co); if (p) p.idImageBack = ''; }); },
   dropPassportImage() { store.updateCompany(co => { const p = find(co); if (p) p.passportImage = ''; }); },
   sheet() { mode = 'sheet'; },
   /** Bring the open project's team into the directory: matched by name or email, otherwise new people, all linked. */
@@ -623,6 +629,9 @@ Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }  
     } catch (err) { tell(err.message); return; }
     await scanInto(file, co => co.staff.find(x => x.id === id), { birthday: true, kindHint: 'Passport' });
   },
+  /** v0.33.0: a side of the Fayda ID: kept (made smaller), then read; only empty fields are filled. */
+  idImage(el) { return faydaSide(el, 'idImage'); },
+  idImageBack(el) { return faydaSide(el, 'idImageBack'); },
   /** A picture of any paper: its kind, number and expiry are read and added to Papers, and the identity fields are filled when empty. */
   async paperScan(el) {
     const file = el.files[0];
@@ -681,3 +690,26 @@ Press OK to apply, Cancel to leave it as it is.`)) return false;   // v0.29.0
     store.updateCompany(co => find(co).documents.push({ id: uid('dc'), kind: fd.get('kind'), number: fd.get('number').trim(), expiry: fd.get('expiry') || '', link: '' }));
   },
 };
+
+/** v0.33.0: keep a side of the Fayda ID and fill in what it says where the record is empty. */
+async function faydaSide(el, key) {
+  const file = el.files[0];
+  const id = selected;
+  el.value = '';
+  if (!file) return;
+  try {
+    const r = await pictureFor(file, PASSPORT, 'photo');
+    store.updateCompany(co => { const p = co.staff.find(x => x.id === id); if (p) p[key] = r.dataUrl; });
+    tell('Reading the card. The first time can take a minute.');
+    const f = readFayda(await readText(file, { mrz: false }));
+    const got = [];
+    store.updateCompany(co => {
+      const p = co.staff.find(x => x.id === id);
+      if (!p) return;
+      for (const [k, v, label] of [['name', f.name, 'name'], ['idNumber', f.idNumber, 'Fayda No.'], ['fin', f.fin, 'FIN'], ['birthday', f.birth, 'date of birth'], ['gender', f.gender, 'gender'], ['nationality', f.nationality, 'nationality'], ['privatePhone', f.phone, 'phone'], ['privateAddress', f.address, 'address']]) {
+        if (v && !String(p[k] || '').trim()) { p[k] = v; got.push(label); }
+      }
+    });
+    tell(got.length ? `Read from the card: ${got.join(', ')}. Please check them.` : 'The picture is kept. Nothing new could be read from it.');
+  } catch (err) { tell(err.message); }
+}

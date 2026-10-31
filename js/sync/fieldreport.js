@@ -448,7 +448,7 @@ export async function fieldUsers() {
     if (/file name|PDF|Unknown action|Invalid file name/i.test(out.error || '')) throw new Error('The Field Report script is older than 7.30.0. Deploy 7.30.0 first.');
     throw new Error(out.error || 'Field Report would not give its users.');
   }
-  return { people: out.people || [], catalog: out.catalog || [], devices: out.devices || [], inbox: out.inbox || [], signups: out.signups || [] };
+  return { people: out.people || [], catalog: out.catalog || [], devices: out.devices || [], inbox: out.inbox || [], signups: out.signups || [], crewReqs: out.crewReqs || [] };
 }
 /** v0.23.1: one site photo from Drive (script 7.31.0), as base64 JPEG. proj = Field Report code, report = the PDF name. */
 export async function fieldPhoto(proj, report, id) {
@@ -462,7 +462,7 @@ export async function fieldPhoto(proj, report, id) {
  * devDecide { email, device, decision } or (script 7.35.0) signupDecide { email, decision, by }, which emails the person the result.
  */
 export async function fieldUserDo(action, body) {
-  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide'].includes(action)) throw new Error('Unknown change.');
+  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide', 'crewDecide'].includes(action)) throw new Error('Unknown change.');   // crewDecide: script 7.37.0
   const out = await post({ action, ...body });
   if (!out.ok) throw new Error(out.error || 'Field Report refused the change.');
   return out;

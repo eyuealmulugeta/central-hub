@@ -9,6 +9,8 @@ import { positionGroups } from '../engine/positions.js';
 import { groupOptions } from './choose.js';
 import { tell } from '../core/image.js';
 import { html, options, chip } from './dom.js';
+import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
+import { uid } from '../core/util.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
@@ -40,6 +42,10 @@ const demoFeed = () => ({
     { email: 'hana@example.com', name: 'Hana G', phone: '', at: '2026-10-30T09:12:00Z', ip: '', loc: '', st: 'wait' },
     { email: 'yonas@example.com', name: 'Yonas B', phone: '', at: '2026-10-28T15:10:00Z', ip: '', loc: '', st: 'rejected', by: 'Demo Admin', decidedAt: '2026-10-28T16:00:00Z', mailed: '2026-10-28T16:00:00Z' },
   ],
+  crewReqs: [
+    { proj: 'MJO', id: 'cr1', name: 'Girma Tadesse', trade: 'Mason', wage: 450, tradeWage: 450, by: 'Abebe K', at: '2026-10-31T06:40:00Z' },
+    { proj: 'MJO', id: 'cr2', name: 'Lemlem Hailu', trade: 'Mason', wage: 520, tradeWage: 450, by: 'Abebe K', at: '2026-10-31T06:41:00Z' },
+  ],
   inbox: [
     { t: '2026-10-26T06:05:30Z', h: 'New device waiting · abebe k', m: 'abebe@example.com\nIP 196.188.34.10 · Modjo, Oromia, Ethiopia (approximate)', f: 'Field Report' },
     { t: '2026-10-25T17:02:00Z', h: 'MISSING REPORT · Moshav (demo)', m: 'No report or no-work notice today.', f: 'Field Report' },
@@ -69,12 +75,14 @@ async function apply(action, body) {
     if (action === 'accessRemove') feed.people = feed.people.filter(x => x.email !== body.email);
     if (action === 'devDecide') Object.assign(feed.devices.find(d => d.dev === body.device) || {}, { st: body.decision === 'approve' ? 'ok' : 'deny', by: 'Demo Admin', at: new Date().toISOString() });
     if (action === 'signupDecide') Object.assign(feed.signups.find(r => r.email === body.email) || {}, { st: body.decision === 'approve' ? 'approved' : 'rejected', by: 'Demo Admin', decidedAt: new Date().toISOString(), mailed: '' });
+    if (action === 'crewDecide') feed.crewReqs = (feed.crewReqs || []).filter(r => !(r.proj === body.proj && body.ids.includes(r.id)));
     return { mailed: false, demo: true };
   }
   const out = await fieldUserDo(action, body);
   if (out.signups) feed = { ...feed, signups: out.signups };
   if (out.people) feed = { ...feed, people: out.people, catalog: out.catalog || feed.catalog };
   if (out.devices) feed = { ...feed, devices: out.devices };
+  if (out.crewReqs) feed = { ...feed, crewReqs: out.crewReqs };
   return out;
 }
 
@@ -100,6 +108,37 @@ function signupsCard(catalog) {
     ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>
       ${wait.length > 1 ? html`<div class="actions left"><button class="btn small ghost" type="button" data-act="fuRejectAll" ${busy ? 'disabled' : ''}>Reject all ${wait.length}</button></div>` : ''}` : html`<p class="muted">No request is waiting.</p>`}
     ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span></li>`)}</ul></details>` : ''}`;
+}
+
+/** v0.28.0 (script 7.37.0): the crew list the site sent, per project, for the Admin to approve as that project's crew. */
+export const crewWaiting = () => feed?.crewReqs || [];
+const projectOf = code => store.projects.find(p => !p.binned && String(p.fieldCode || '').toUpperCase() === code) || (isDemo() ? store.project : null);
+function crewCard() {
+  const all = crewWaiting();
+  if (!all.length) return '';
+  const by = new Map();
+  for (const r of all) by.set(r.proj, [...(by.get(r.proj) || []), r]);
+  return html`<h4>Crew from the site <span class="chip high">${all.length} waiting</span></h4>
+    <p class="muted small">Names, trades and daily wages the site sent from Field Report. Approve puts the person on the crew of that project only, with the daily wage. A wage that is not the trade's daily wage is kept but flagged "Wage to review" on Payments until you clear it.</p>
+    ${[...by].map(([code, list]) => { const pj = projectOf(code); return html`<h5>${code} · ${pj ? pj.name : 'no project in Central Hub has this Field Report code'}</h5>
+      <ul class="list fu-devs">${list.map(r => html`<li class="fu-dev"><div><b>${r.name}</b> <span class="muted">${r.trade || 'No trade'} · ${r.wage || r.tradeWage || 0} a day</span>
+        ${wageDiffers(r) ? chip(`Not the trade wage (${r.tradeWage})`, 'warn') : ''} <span class="muted note">sent by ${r.by || 'the site'} · ${when(r.at)}</span></div>
+        <div class="entry"><button class="btn small primary" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="approve" ${busy || !pj ? 'disabled' : ''}>Approve</button>
+          <button class="btn small ghost" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button></div></li>`)}</ul>
+      ${list.length > 1 && pj ? html`<div class="actions left"><button class="btn small" type="button" data-act="fuCrew" data-p="${code}" data-v="approve" ${busy ? 'disabled' : ''}>Approve all ${list.length}</button></div>` : ''}`; })}`;
+}
+async function crewDecide(code, yes, list) {
+  if (!list.length || busy) return;
+  const pj = projectOf(code), who = list.length === 1 ? list[0].name : `${list.length} people`;
+  if (yes && !pj) return say(false, `No project in Central Hub has the Field Report code ${code}.`);
+  if (!yes && !confirm(`Reject ${who} for ${code}? They are not added to the crew.`)) return;
+  busy = true; store.notify();
+  try {
+    if (yes) await store.updateOther(pj.id, ws => { approveCrew(ws, list, () => uid('m'), new Date().toISOString()); });
+    await apply('crewDecide', { proj: code, ids: list.map(r => r.id) });
+    say(true, yes ? `${who} added to the crew of ${pj.name}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}` : `Rejected: ${who}.`);
+  } catch (err) { say(false, err.message); }
+  finally { busy = false; store.notify(); }
 }
 
 /** Approve or deny one device (also used by the Notifications page). */
@@ -166,6 +205,7 @@ export function body() {
         ${feed ? html`<span class="muted small">Read ${when(feed.at)}</span>` : ''}${isDemo() ? html`<span class="chip warn">Demo: sample people</span>` : ''}</div>
       ${said ? html`<p class="callout ${said.ok ? 'ok' : 'bad'}" role="status"><b>${said.ok ? '✓' : '✗'}</b> <span>${said.text}</span></p>` : ''}
       ${signupsCard(catalog)}
+      ${crewCard()}
       ${waits.length ? html`<h4>New sign-ins <span class="chip high">${waits.length} new</span></h4><ul class="list fu-devs">${waits.map(deviceRow)}</ul>` : ''}
       ${people.length ? html`<div class="table-wrap"><table class="table compact fu-table">
         <thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Access</th><th>Role</th><th>Status</th><th>Action</th><th></th></tr></thead>
@@ -225,6 +265,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
     } catch (err) { say(false, err.message); }
     finally { busy = false; store.notify(); }
   },
+  fuCrew(el) { return crewDecide(el.dataset.p, el.dataset.v === 'approve', crewWaiting().filter(r => r.proj === el.dataset.p && (!el.dataset.id || r.id === el.dataset.id))); },
   fuOpen(el) { openAccess = openAccess === el.dataset.e ? '' : el.dataset.e; },
   fuDecide(el) { return decide(el.dataset.e, el.dataset.dev, el.dataset.v); },
   /** Save a row: projects and role, then name and position (confirmed), then the chosen action. */

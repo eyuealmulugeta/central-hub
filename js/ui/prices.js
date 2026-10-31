@@ -20,6 +20,10 @@ import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, 
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
 import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
+import { transferMember } from '../engine/sitecrew.js';
+
+/** v0.28.0: the projects a team member can be moved to. */
+const otherProjects = p => store.projects.filter(x => x.id !== p.id && !x.binned && x.status !== 'closed');
 import { focusOn as focusPerson, relink } from './hr.js';
 import { describe as describeSession } from '../engine/session.js';
 import { targetFor, parseDates, companyCalendar, ownWeekOf, ownOffOf, projectPatch } from '../engine/calendar.js';
@@ -436,7 +440,7 @@ const projectBar = (c, what) => html`
 function linksPage(c) {
   return html`<div class="side settings">
     ${projectBar(c, 'Field Report and import for')}
-    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length + fieldusers.signupsWaiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
+    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length + fieldusers.signupsWaiting().length + fieldusers.crewWaiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
     ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : linkTab === 'users' ? fieldusers.body() : fieldsetup.body(c)}
   </div>`;
 }
@@ -488,6 +492,7 @@ function projectPage(c) {
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
             <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${p.payCurrency || p.currency}` : 'No rate'}</span>
             ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
+            ${store.isAdmin && otherProjects(p).length ? html`<select data-chg="memberMove" data-id="${m.id}" aria-label="Move ${m.name} to another project"><option value="">Move to…</option>${otherProjects(p).map(x => html`<option value="${x.id}">${x.name}</option>`)}</select>` : ''}${m.wageReview ? html`<span class="chip warn" title="The site typed ${m.wageReview.wage} a day; the trade's daily wage is ${m.wageReview.tradeWage}. Clear it on Payments.">Wage to review</span>` : ''}
           </li>` : html`
           <li class="team-row">
             <input data-chg="member" data-id="${m.id}" data-f="name" data-fk="tm-n-${m.id}" value="${m.name}" placeholder="Name" aria-label="Name">
@@ -497,6 +502,7 @@ function projectPage(c) {
             <label class="check" title="Untick when the person leaves this project"><input type="checkbox" data-chg="memberActive" data-id="${m.id}" ${m.active === false ? '' : 'checked'}> On site</label>
             <input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="Day rate" title="Day rate in ${p.payCurrency || p.currency}" aria-label="Day rate of ${m.name}">
             <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button>
+            ${store.isAdmin && otherProjects(p).length ? html`<select data-chg="memberMove" data-id="${m.id}" aria-label="Move ${m.name} to another project"><option value="">Move to…</option>${otherProjects(p).map(x => html`<option value="${x.id}">${x.name}</option>`)}</select>` : ''}${m.wageReview ? html`<span class="chip warn" title="The site typed ${m.wageReview.wage} a day; the trade's daily wage is ${m.wageReview.tradeWage}. Clear it on Payments.">Wage to review</span>` : ''}
           </li>`)}</ul>
           <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.payCurrency || p.currency}; all of them are on Payments, Day rates and pay period.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
         ${store.isAdmin && c.company.staff.some(x => x.status !== 'left' && !assignmentOf(x, p.id)) ? html`<form data-form="fromDirectory" class="entry">
@@ -847,6 +853,26 @@ export const changes = {
   /** The dates nobody works on the open project, one per line. */
   nonWorking(el) { store.updateProject(p => { p.nonWorking = parseDates(el.value); }); },
   /** Open a person's directory record, on its Projects tab. */
+  /** v0.28.0: move a team member to another project; a directory person's assignments follow. */
+  async memberMove(el, c) {
+    const to = store.projects.find(x => x.id === el.value), from = c.project, m = c.ws.team.find(x => x.id === el.dataset.id);
+    if (!to || !m || !store.isAdmin) return;
+    if (!confirm(`Move ${m.name} from ${from.name} to ${to.name}?\n\nThey leave this project's attendance list (their records here stay) and join ${to.name} with the same day rate.`)) { el.value = ''; return; }
+    const at = new Date().toISOString();
+    let moved = null;
+    const keep = structuredClone(c.ws);
+    await store.updateOther(to.id, ws => { moved = transferMember(keep, ws, m.id, () => uid('m'), at, from.name); });
+    store.update(ws => { const x = ws.team.find(y => y.id === m.id); if (x) x.active = false; });
+    if (m.personId) {
+      store.updateCompany(co => {
+        const x = (co.staff || []).find(y => y.id === m.personId);
+        if (!x) return;
+        const old = assignmentOf(x, from.id) || {};
+        x.assignments = [...(x.assignments || []).filter(a => a.projectId !== from.id && a.projectId !== to.id), { ...old, projectId: from.id, active: false }, { projectId: to.id, role: old.role || m.role || '', dayRate: dayRateOf(c.ws, m.id), active: true }];
+      });
+    }
+    tell(moved ? `✓ ${m.name} moved to ${to.name}.` : `✗ ${m.name} could not be moved.`);
+  },
   memberActive(el) { store.update(ws => { const m = ws.team.find(x => x.id === el.dataset.id); if (m) m.active = el.checked; }); },
   /** The activity types of the open project, one per line. */
   activities(el) { store.updateProject(p => { p.activities = parseList(el.value); }); },

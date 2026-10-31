@@ -46,6 +46,7 @@ export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_RO
 
 /** What a person earned in a period, from their row on the Attendance sheet. */
 export function earnedOf(row, pay, project, period) {
+  if (!(row.present > 0) && !(row.ot > 0)) return 0;   // v0.28.0: no day present, nothing earned (and off the salary sheet)
   if (pay.per === 'month') {
     // the share of each month's wage for the days of the period in it
     return r2(daysBetween(period.from, period.to).reduce((s, d) => s + pay.wage / daysInMonth(d), 0));
@@ -107,8 +108,10 @@ export function payLines(ctx, period) {
       ...(locked ? { per: locked.per || pay.per, wage: +locked.wage || pay.wage } : {}),
       present: row.present, absent: row.absent, ot: row.ot, earned, adjust: +adj.adjust || 0, note: adj.note || '',
       brought, due, paid, paidToDate: paidOf(ws.payments, row.key, p => p.periodFrom <= period.from), outstanding: r2(due - paid),
+      review: ws.team.find(m => m.id === row.id)?.wageReview || null,
     };
-  }).filter(l => l.earned || l.brought || l.paid || l.adjust || crew.some(m => keyOf(m) === l.key))
+  // v0.28.0: the salary sheet has everyone with at least one day present; people absent all period are left off
+  }).filter(l => l.present > 0 || l.ot > 0 || l.earned || l.brought || l.paid || l.adjust)
     .sort((a, b) => a.name.localeCompare(b.name));
   const total = f => r2(lines.reduce((s, l) => s + l[f], 0));
   return { run, lines, totals: { earned: total('earned'), adjust: total('adjust'), brought: total('brought'), due: total('due'), paid: total('paid'), outstanding: total('outstanding') } };

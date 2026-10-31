@@ -153,7 +153,7 @@ export function render(c) {
           <th class="r">Earned</th><th class="r">Adjust</th><th class="r">Brought forward</th><th class="r">Due</th><th class="r">Paid</th><th class="r">Total paid to date</th><th class="r">Outstanding</th><th class="no-print"></th>
         </tr></thead>
         <tbody>${lines.map(l => html`<tr>
-          <td><button type="button" class="linkish" data-act="openPerson" data-k="${l.key}" title="Details and payments of ${l.name}"><b>${l.name}</b></button></td><td>${l.role || ''}</td>
+          <td><button type="button" class="linkish" data-act="openPerson" data-k="${l.key}" title="Details and payments of ${l.name}"><b>${l.name}</b></button>${l.review ? html` <span class="chip warn no-print" title="The site typed ${l.review.wage} a day; the trade's daily wage is ${l.review.tradeWage}">Wage to review</span>${store.isAdmin ? html` <button type="button" class="btn ghost small no-print" data-act="wageOk" data-id="${l.id}">Wage OK</button>` : ''}` : ''}</td><td>${l.role || ''}</td>
           <td>${l.per === 'month' ? 'Monthly' : 'Daily'}</td>
           <td class="r nowrap" title="From the ${FROM[l.from] || l.from}">${l.from === 'missing' ? html`<span class="bad">Monthly wage missing</span>` : money(l.wage, l.currency, 2)}<span class="muted">/${l.per === 'month' ? 'month' : 'day'}</span>${l.from === 'trade' ? html` <span class="muted no-print">*</span>` : ''}</td>
           <td class="r">${l.present || ''}</td><td class="r">${l.ot || ''}</td>
@@ -229,6 +229,8 @@ export const changes = {
 };
 
 export const actions = {
+  /** v0.28.0: the Admin checked a wage the site typed that is not the trade's daily wage. */
+  wageOk(el) { if (store.isAdmin) store.update(ws => { const m = ws.team.find(x => x.id === el.dataset.id); if (m) delete m.wageReview; }); },
   print() { print(); },
   payView(el) { view = el.dataset.v || ''; paying = null; payAll = false; },
   shift(el, c) { at = shiftPeriod(c.project, periodOf(c), +el.dataset.n).from; paying = null; payAll = false; notice = ''; },

@@ -1018,7 +1018,8 @@ export const changes = {
       });
       // v0.31.1: the project's crew goes to Field Report straight away
       Promise.resolve(store.updateOther(pid, ws => (on ? assign(ws, person, a) : unassign(ws, person))))
-        .then(ws => sendListsFor(project, ws)).then(ok => tell(ok ? `✓ Field Report has the new crew of ${project?.name || 'the project'}.` : `${project?.fieldCode ? '✗ Field Report could not be told yet: use Send lists in Field Report and import.' : ''}`));
+        .then(ws => sendListsFor(project, ws)).catch(e => e.message || String(e))
+        .then(ok => tell(ok === true ? `✓ Field Report has the new crew of ${project?.name || 'the project'}.` : !project?.fieldCode ? `${project?.name || 'This project'} has no Field Report code, so Field Report is not told.` : `✗ Field Report was not told: ${ok || 'no answer'}`));
       relink(person, pid, on);
     } else if (u) {
       const live = store.projects.map(x => x.id);

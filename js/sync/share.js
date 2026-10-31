@@ -144,7 +144,8 @@ function unbreakable(element) {
 
 /** A real PDF file of the sheet, A4, as wide as the page, in as many pages as it needs. Screen-only controls and the chart are left out, as in the emailed PDF. */
 export async function makePdf(paper, name) {
-  const [html2canvas, JsPdf, mark] = await Promise.all([loadLib('html2canvas'), loadLib('jspdf'), loadWatermark()]);
+  // v0.32.0: the Daily site report has no watermark
+  const [html2canvas, JsPdf, mark] = await Promise.all([loadLib('html2canvas'), loadLib('jspdf'), paper?.classList?.contains('dsr') ? null : loadWatermark()]);
   const { host, element } = await prepareSheet(paper);
   try {
     const total = Math.max(1, element.scrollHeight);

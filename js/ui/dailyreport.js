@@ -58,12 +58,7 @@ export function dailyDoc(r, c, { office = false } = {}) {
         <div><b>${m.equipment.reduce((s, e) => s + e.qty, 0)}</b><span>Equipment</span></div>
         <div class="${m.delayHours ? 'warn' : ''}"><b>${num(m.delayHours)} h</b><span>Delay</span></div>
       </div>
-      <p class="dsr-labels">${labels.map(([cls, t]) => html`<span class="dsr-l ${cls}">${t}</span>`)}</p>
-      <div class="dsr-charts">
-        <div><h4>Man-hours by trade</h4>${bars(m.trades.map(t => ({ label: t.trade, v: t.manHours })), ' h')}</div>
-        <div><h4>Work items by ${m.work.length ? 'task' : 'zone'}</h4>${bars(m.itemsChart.map(x => ({ label: x.label, v: x.n })))}</div>
-        <div><h4>Equipment hours</h4>${bars(m.equipment.filter(e => e.machineHours).map(e => ({ label: e.name, v: e.machineHours })), ' h')}</div>
-      </div>`)}
+      <p class="dsr-labels">${labels.map(([cls, t]) => html`<span class="dsr-l ${cls}">${t}</span>`)}</p>`)}
 
     ${sec(2, 'Information', html`<div class="dsr-info">
       ${[['Date', fmtFull(r.date)], ['Prepared by', [r.by, f.position].filter(Boolean).join(', ')], ['Working hours', f.hours?.start ? `${f.hours.start} to ${f.hours.end}` : ''],

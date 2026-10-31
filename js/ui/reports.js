@@ -18,7 +18,6 @@ import { mySignature, openPad } from './sigpad.js';
 import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
 import { checksOf, approveSummary, pinsMessage, SECTIONS, sectionLabel } from '../engine/review.js';
 import { dailyDoc } from './dailyreport.js';
-import { clientBrief } from './brief.js';
 import { photoGrid } from './photos.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
@@ -472,14 +471,13 @@ function docView(r, c) {
   return html`
     <div class="toolbar no-print">
       <button class="btn small" data-act="closeDoc" data-fresh>‹ Back</button>
-      <div class="seg" role="group" aria-label="Which document"><button class="${brief ? '' : 'on'}" data-act="docKind" data-kind="office">Daily site report</button><button class="${brief ? 'on' : ''}" data-act="docKind" data-kind="brief" title="One page for the client: progress, site plan, S-curve, manpower and safety. No money, no names of workers.">Client brief</button></div><span class="muted">${fmtDate(r.date)}${r.field?.no ? `, No. ${r.field.no}` : ''}. ${notice}</span><span class="grow"></span>
+      <b>Daily site report</b><span class="muted">${fmtDate(r.date)}${r.field?.no ? `, No. ${r.field.no}` : ''}. ${notice}</span><span class="grow"></span>
       ${office && !brief ? html`<label class="check"><input type="checkbox" data-chg="withAtt" ${withAtt ? 'checked' : ''}> With the attendance page (office copy)</label>` : ''}
       <button class="btn" data-act="emailDoc" data-id="${r.id}">Email as PDF</button>
       <button class="btn" data-share title="Send this report as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="printDoc">Print</button>
     </div>
-    ${r.review === 'pending' ? html`<p class="callout warn no-print"><b>!</b> <span>Not approved yet: the report says "Awaiting approval" until it is.</span></p>` : ''}
-    <section class="card sheet dsr-sheet">${brief ? clientBrief(r, c) : dailyDoc(r, c, { office: office && withAtt })}</section>`;
+    <section class="card sheet dsr-sheet">${dailyDoc(r, c, { office: office && withAtt })}</section>`;   // v0.32.0: no client brief
 }
 
 /** The report's own PDF, shown from Google Drive. */
@@ -894,7 +892,7 @@ export async function sendListsFor(project, ws) {
     await sendSetup(setup);
     store.patchProject(project.id, { fieldSetupAt: todayISO(), fieldCrewKey: JSON.stringify(setup.staff) });
     return true;
-  } catch (err) { console.warn(`The lists of ${project.name} could not be sent:`, err.message); return false; }
+  } catch (err) { console.warn(`The lists of ${project.name} could not be sent:`, err.message); return err.message || String(err); }   // v0.31.2: the reason, shown
 }
 
 /** Send the project's lists to Field Report again, quietly, when something that changes them came in (a no-work day). */

@@ -55,6 +55,7 @@ export function spotRows(list, { tone = '', about = '' } = {}) {
 function spotCard(c) {
   const code = String(c.project.fieldCode || '').toUpperCase();
   if (spot.code !== code) Object.assign(spot, { list: null, code, err: '', tone: '', about: '' });
+  if (code && !spot.list && !spot.busy && !spot.err) queueMicrotask(() => actions.spotLoad());   // v0.30.1: loads by itself, no extra click
   const rows = spotRows(spot.list, spot), abouts = [...new Set((spot.list || []).map(x => x.about))].sort();
   const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).length - pos;
   const media = x => (x.media || []).map((m, i) => html`${i ? ' · ' : ''}<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener">${/^video/.test(m.type) ? 'Video' : 'Photo'} ${i + 1}</a>`);

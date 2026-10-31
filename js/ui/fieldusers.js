@@ -143,9 +143,11 @@ async function crewDecide(code, yes, list, quiet = false) {
   if (!yes && !confirm(`Reject ${who} for ${code}? They are not added to the crew.`)) return;
   busy = true; store.notify();
   try {
-    if (yes) await store.updateOther(pj.id, ws => { approveCrew(ws, list, () => uid('m'), new Date().toISOString()); });
+    let ws = null;
+    if (yes) ws = await store.updateOther(pj.id, w => { approveCrew(w, list, () => uid('m'), new Date().toISOString()); });
     await apply('crewDecide', { proj: code, ids: list.map(r => r.id) });
-    say(true, yes ? `${who} added to the crew of ${pj.name}${quiet ? `, approved in Field Report by ${list[0].ok?.by || 'the Project engineer'}` : ''}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}` : `Rejected: ${who}.`);
+    const sent = yes && ws ? await (await import('./reports.js')).sendListsFor(pj, ws) : false;   // loaded here: reports.js needs this file first   // v0.32.1: they join the Office attendance list on the phone
+    say(true, yes ? `${who} added to the crew of ${pj.name}${quiet ? `, approved in Field Report by ${list[0].ok?.by || 'the Project engineer'}` : ''}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}${yes ? (sent === true ? ' Field Report has the new crew.' : ' Use Send lists to tell Field Report.') : ''}` : `Rejected: ${who}.`);
   } catch (err) { say(false, err.message); }
   finally { busy = false; store.notify(); }
 }

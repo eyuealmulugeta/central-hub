@@ -13,7 +13,8 @@ import { summaryOf } from './seen.js';
 import { html, options, chip } from './dom.js';
 import { connected } from './fieldsetup.js';
 import { openPanel } from './prices.js';
-import { toTrash, inBin, restore as restoreTrash, purge, isExpired, daysLeft, RETENTION_DAYS } from '../engine/trash.js';
+import { toTrash, restore as restoreTrash } from '../engine/trash.js';
+import { mySignature, openPad } from './sigpad.js';
 import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
 import { checksOf, approveSummary, pinsMessage, SECTIONS, sectionLabel } from '../engine/review.js';
 import { dailyDoc } from './dailyreport.js';
@@ -179,6 +180,26 @@ const pdfLink = (r, c) => {
   return x.pdfId ? html`<span class="actions left"><a href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open the Field Report PDF</a>${locate(x, r.field || {})}</span>` : '';
 };
 
+/** v0.26.0: the "Checked by" signature a Field Report brings (FR release 1), when the checker already signed there. */
+const fieldSig = r => (r.field?.checked?.sig || r.field?.checkSig || '');
+const at = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${fmtDate(iso.slice(0, 10))} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`; };
+
+/** Who checks the report signs "Checked by": with the signature saved for them, or the one given in Field Report. */
+function checkedBy(r) {
+  if (fieldSig(r)) return html`<div class="sig-check"><span class="muted">Checked by, signed in Field Report${r.field?.checked?.by ? ` by ${r.field.checked.by}` : ''}</span><img src="${fieldSig(r)}" alt="Signature given in Field Report"></div>`;
+  const sig = mySignature();
+  return sig
+    ? html`<div class="sig-check"><span class="muted">Checked by ${store.profile.name || ''}</span><img src="${sig}" alt="Your signature"><button class="btn small ghost" type="button" data-act="sigDraw">Change</button></div>`
+    : html`<div class="sig-check"><span>Checked by: <b>sign before approving</b></span><button class="btn small" type="button" data-act="sigDraw">Sign</button><span class="muted small">Your signature is kept for the next reports, on every device.</span></div>`;
+}
+
+/** Who approved and signed, and when: in Central Hub's history of the report, not on its PDF. */
+function approvalLine(r) {
+  const a = r.approval;
+  if (!a && !r.approvedBy) return '';
+  return html`<div class="sig-check approved no-print"><span class="muted">Approved and signed by <b>${a?.by || r.approvedBy}</b>${a?.title ? `, ${a.title}` : ''}${(a?.at || r.approvedAt) ? `, ${at(a?.at || r.approvedAt)}` : ''}${a?.from === 'field' ? ' (signature given in Field Report)' : ''}.</span>${a?.sig ? html`<img src="${a.sig}" alt="Signature of ${a.by}">` : ''}</div>`;
+}
+
 /**
  * The approver's decision on a report under review (v0.20.0). Approve applies the figures above to the schedule,
  * counts the day's attendance, pay and labour cost, and tells the site; Send back and Comment only write to the site.
@@ -191,6 +212,7 @@ function decideBar(r, c, tasks = 0) {
     ${field ? pinBox(r) : ''}
     <p class="approve-sum">${approveSummary(r, tasks, billingOf(c.project).hoursPerDay)}</p>
     ${field ? html`<textarea name="msg" rows="2" placeholder="Message to ${r.by}: what to correct, or a comment (also sent with Approve)" aria-label="Message to the person who prepared the report"></textarea>` : ''}
+    ${store.canApprove ? checkedBy(r) : ''}
     <div class="actions left">
       ${store.canApprove ? html`<button class="btn primary" ${sending.has(r.id) ? 'disabled' : ''}>Approve</button>` : html`<span class="chip warn">Only the Admin and approvers can approve</span>`}
       ${field ? html`${send('changes', n ? `Send back with ${n} comment${n === 1 ? '' : 's'}` : 'Send back for changes')}${send('comment', 'Comment only')}` : ''}
@@ -382,7 +404,7 @@ export function render(c) {
           </div>
           ${expanded.has(r.id) ? sheet(r, c) : ''}
         </li>`)}</ul>` : html`<p class="empty">${reports.length ? 'No reports in this period.' : 'No reports yet.'}</p>`}
-      ${binBody(c)}
+      ${binBody()}
     </section>`;
 
   // Reading a report: its PDF on top, then the details or the form to confirm it, and the history beside it.
@@ -391,7 +413,7 @@ export function render(c) {
       <div class="rv">
         <div class="rv-main">
           ${cur ? formCard : readCard(open, c)}
-          ${store.isAdmin ? html`<section class="card">${binBody(c)}</section>` : ''}
+          ${binBody()}
         </div>
         <aside class="rv-side">
           ${pdfCard(open, c)}
@@ -459,8 +481,8 @@ function readCard(r, c) {
   return html`<section class="card">
     <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
       ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
-      <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin for ${RETENTION_DAYS} days">Delete</button></div>
-    ${r.approvedBy ? html`<p class="muted">Approved by ${r.approvedBy}${r.approvedAt ? ` on ${fmtDate(r.approvedAt.slice(0, 10))}` : ''}.</p>` : ''}
+      <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin">Delete</button></div>
+    ${approvalLine(r)}
     ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
     ${sheet(r, c)}
   </section>`;
@@ -474,26 +496,15 @@ function historyList(reports, activeId) {
       const [label, cls] = FIELD_STATUS[r.field?.status] || [];
       return html`<li class="${r.id === activeId ? 'on' : ''}"><button type="button" class="link tl" data-act="openReport" data-fresh data-id="${r.id}">
         <span><b>${fmtDate(r.date)}</b> ${r.review === 'pending' ? chip('To approve', 'warn') : ''}${r.field?.nowork ? chip('No work') : label && r.source === 'field' ? chip(label, cls) : ''}</span>
-        <span class="muted">${r.field?.nowork ? r.field.reason || '' : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site`}</span></button></li>`;
+        <span class="muted">${r.field?.nowork ? r.field.reason || '' : `${r.by}, ${sum(r.manpower || [], m => m.count)} on site`}</span>
+        ${r.approval || r.approvedBy ? html`<span class="muted small">Approved by ${r.approval?.by || r.approvedBy}${(r.approval?.at || r.approvedAt) ? `, ${at(r.approval?.at || r.approvedAt)}` : ''}${r.approval?.sig ? ', signed' : ''}</span>` : ''}</button></li>`;
     })}</ul>`;
 }
 
-/** Deleted reports, kept 30 days: the Admin restores them or removes them for good. */
-function binBody(c) {
-  if (!store.isAdmin) return '';
-  const items = inBin(c.ws);
-  return html`<div id="recycle-bin" class="bin">
-    <div class="toolbar"><h2>Recycle bin</h2><span class="muted">${binNotice || (items.length ? `${items.length} deleted. Each is removed for good ${RETENTION_DAYS} days after it was deleted.` : '')}</span></div>
-    ${items.length ? html`<table class="table compact">
-      <thead><tr><th>Report</th><th>Deleted</th><th>By</th><th class="r">Days left</th><th></th></tr></thead>
-      <tbody>${items.map(t => html`<tr>
-        <td><b>${fmtDate(t.record.date)}</b> <span class="muted">${t.record.field?.nowork ? `No work: ${t.record.field.reason || ''}` : `${t.record.by}, ${t.record.field?.no ? `No. ${t.record.field.no}` : ''}`}</span>${t.items?.length ? html`<span class="muted note">${t.items.length} follow-up${t.items.length === 1 ? '' : 's'} with it</span>` : ''}</td>
-        <td class="nowrap">${fmtDate(t.deletedAt.slice(0, 10))}</td><td>${t.byName || t.by}</td>
-        <td class="r ${daysLeft(t) <= 3 ? 'bad' : ''}">${daysLeft(t)}</td>
-        <td class="r nowrap"><button class="btn small primary" data-act="restoreReport" data-id="${t.id}">Restore</button>
-          <button class="btn ghost small" data-act="removeForGood" data-id="${t.id}">Delete permanently</button></td></tr>`)}</tbody>
-    </table>` : html`<p class="muted">Empty. A deleted report waits here for ${RETENTION_DAYS} days before it is removed for good.</p>`}
-  </div>`;
+/** v0.26.0: deleted reports are in the hub's recycle bin (Admin settings); this line points there. */
+function binBody() {
+  if (!store.isAdmin || !binNotice) return '';
+  return html`<p class="callout ok no-print" role="status"><b>✓</b> <span>${binNotice} <a href="#bin">Open the recycle bin</a></span></p>`;
 }
 
 /** The first time the page opens, clear what has been in the bin too long. Only the Admin can delete, so only the Admin does. */
@@ -501,8 +512,9 @@ export function onEnter() {
   const ws = store.ws;
   // older reports carry their PDF's Drive ids, which Site users can read: the office moves them out (v0.22.6)
   if (store.role !== 'site' && !store.loading && ws.reports.some(r => r.field && ('pdfId' in r.field || 'folderId' in r.field))) store.update(w => { movePdfIds(w); });
-  if (!store.isAdmin || !ws.trash?.some(t => isExpired(t) || ws.reports.some(r => r.id === t.record?.id))) return;
-  store.update(w => { purge(w); });
+  // v0.26.0: a deleted report's line here only stops the import bringing it back; the hub's recycle bin keeps the report
+  if (!store.isAdmin || !ws.trash?.some(t => ws.reports.some(r => r.id === t.record?.id))) return;
+  store.update(w => { w.trash = w.trash.filter(t => !ws.reports.some(r => r.id === t.record?.id)); });
 }
 
 export const submits = {
@@ -532,11 +544,15 @@ export const submits = {
 
     if (cur) {
       if (!store.canApprove) { notice = 'Only the Admin and approvers can approve.'; return false; }
+      const sig = fieldSig(cur) || mySignature();
+      if (!sig) { notice = 'Sign "Checked by" first: press Sign.'; return false; }
       // the site's own entries stay as written; the approver adds the progress and may correct the crew
       const hrs = new Map((cur.manpower || []).map(m => [m.trade, m.hrs]));
-      const who = store.profile.name || store.user?.name || store.user?.email || '';
+      const who = store.profile.name || store.user?.name || store.user?.email || 'Admin';
       store.update(ws => Object.assign(underReview(ws), {
         by, weather: fd.get('weather'), entries, review: 'done', approvedBy: who, approvedAt: new Date().toISOString(),
+        // v0.26.0: who approved and signed "Checked by", and when (kept in the history here, not on the PDF)
+        approval: { by: who, email: store.user?.email || '', title: store.profile.title || '', at: new Date().toISOString(), sig, from: fieldSig(cur) ? 'field' : 'hub' },
         // v0.23.2: the site still has to be told; the server import tells it again until it has been (see importer.js)
         ...(cur.source === 'field' && cur.field?.pdf ? { tellSite: true } : {}),
         manpower: manpower.map(m => (hrs.get(m.trade) != null && m.ot === cur.manpower.find(x => x.trade === m.trade)?.ot ? { ...m, hrs: hrs.get(m.trade) } : m)),
@@ -612,11 +628,12 @@ export const changes = {
 };
 
 export const actions = {
+  async sigDraw() { await openPad('Checked by: your signature'); store.notify(); },
   remove(el, c) {
     const r = c.ws.reports.find(x => x.id === el.dataset.id);
     if (!r) return;
     const again = r.source === 'field' && connected(c.project) ? '\n\nIt came from Field Report, so the next check brings it back as a report to confirm.' : '';
-    if (!confirm(`Delete the report of ${fmtDate(r.date)}? Its progress, manpower and labour cost are taken out of the schedule and costs.\n\nIt goes to the recycle bin for ${RETENTION_DAYS} days. Restore it from there if you change your mind.${again}`)) return;
+    if (!confirm(`Delete the report of ${fmtDate(r.date)}? Its progress, manpower and labour cost are taken out of the schedule and costs.\n\nIt goes to the recycle bin (Admin settings). Restore it from there if you change your mind.${again}`)) return;
     const who = { by: store.user?.email || '', byName: store.profile.name || store.user?.name || 'Admin' };
     store.update(ws => { ws.trash.push(toTrash(r, ws, who)); ws.reports = ws.reports.filter(x => x.id !== r.id); });
     if (viewing === r.id) viewing = null;

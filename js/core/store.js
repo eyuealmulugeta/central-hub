@@ -22,6 +22,7 @@ import { DIVIDED, stampPlan } from './division.js';
 import { prefs, prefsPath } from './prefs.js';
 import { OWNER_RANKS } from '../engine/evaluation.js';
 import { lostBetween, restore } from '../engine/undo.js';
+import { binEntry, projectEntry, restoreEntry, binExpired, binDays } from '../engine/bin.js';
 import { isLimited, isActive } from '../engine/deployment.js';
 import { claim, sessionPath, newDeviceId, deviceName, isEnded, HEARTBEAT_MS } from '../engine/session.js';
 
@@ -50,6 +51,9 @@ const undoSubscribers = new Set();   // told when a person deleted or cleared so
 const netSubscribers = new Set();    // told when the count of changes waiting to reach the database changes
 let pending = 0;                      // changes sent and not yet confirmed by the database (they wait here while offline)
 let userEditing = false;               // true while a handler of something a person did runs: only those can be undone
+let deleting = null;                  // v0.26.0: { page } while a delete handler runs: what it takes away goes to the recycle bin
+let bin = [];                          // v0.26.0: the recycle bin (bin/<id>), read by the Admin only
+const NO_BIN = new Set(['messages', 'trash', 'signfiles']);
 let faults = [];                      // problems reported by devices: the Owner sees these
 const emit = () => subscribers.forEach(fn => fn());
 
@@ -136,6 +140,24 @@ const send = promise => {
 };
 
 /** After something a person did: if it deleted or cleared anything, offer to put it back. */
+/** v0.26.0: what a delete took away, kept in the recycle bin with who, when and from which page. */
+function toBin(before, after, sections, place) {
+  if (!deleting) return;
+  const lost = lostBetween(before, after, sections.filter(s => !NO_BIN.has(s)));
+  if (!lost?.removed.length) return;
+  addBin(binEntry({ ...lost, label: lost.removed.length === 1 ? lost.label.split(',')[0] : `Deleted ${lost.removed.length} items` }, place,
+    { page: deleting.page, by: me?.email || '', byName: profile?.name || me?.name || (api ? '' : 'Admin') }));
+}
+function addBin(e) {
+  bin = [e, ...bin.filter(x => x.id !== e.id)];
+  if (api) send(api.set(`bin/${e.id}`, clean(e))); else write('sf:bin', bin);
+}
+function dropBin(id) {
+  bin = bin.filter(x => x.id !== id);
+  if (api) send(api.remove(`bin/${id}`)); else write('sf:bin', bin);
+}
+const live = () => meta.projects.filter(p => !p.binned);
+
 function offerUndo(before, after, sections, apply) {
   if (!userEditing) return;
   const lost = lostBetween(before, after, sections);
@@ -193,7 +215,7 @@ function openWorkspace(id) {
 
 function setProjects(list) {
   meta.projects = [...list].sort((a, b) => (a.created || 0) - (b.created || 0) || a.name.localeCompare(b.name));
-  if (!meta.projects.some(p => p.id === meta.activeId)) meta.activeId = meta.projects[0]?.id || null;
+  if (!live().some(p => p.id === meta.activeId)) meta.activeId = live()[0]?.id || null;
   if (meta.activeId !== openId) openWorkspace(meta.activeId);
   emit();
 }
@@ -205,6 +227,7 @@ export const store = {
     global = read(K.global);
     company = { ...emptyCompany(), ...read(K.company) };
     booking = read('sf:booking');
+    bin = read('sf:bin') || [];
     cache.clear();
     if (!meta?.projects?.length || !global) install(seed(today));
   },
@@ -280,6 +303,8 @@ export const store = {
       shared.push(api.watchCol('users', docs => { users = docs; emit(); }, fail));
       shared.push(api.watchCol('sessions', docs => { sessions = docs; emit(); }, () => {}));
       shared.push(api.watchCol('diagnostics', docs => { faults = docs; emit(); }, () => {}));
+      // quiet until the rules with the recycle bin are published
+      shared.push(api.watchCol('bin', docs => { bin = docs; emit(); }, () => {}));
       // quiet when the rules that allow requests have not been published yet
       shared.push(api.watchCol('requests', docs => { requests = docs; emit(); }, () => {}));
     }
@@ -355,7 +380,48 @@ export const store = {
   /** Call fn({ label, undo }) when a person deletes or clears something; undo() puts it back. */
   onUndoable(fn) { undoSubscribers.add(fn); return () => undoSubscribers.delete(fn); },
   /** Mark that the code now running answers something a person did (a click, a typed change, a submitted form). */
-  userEdit(on) { userEditing = !!on; },
+  /** `del` = { page } when the handler deletes: what it takes away goes to the recycle bin. */
+  userEdit(on, del = null) { userEditing = !!on; deleting = on ? del : null; },
+  /** v0.26.0: the recycle bin, for the Admin. */
+  get bin() { return bin; },
+  /**
+   * Put an entry back where it came from, with the records deleted with it. A project comes back as it was:
+   * its records never left. Resolves { ok, message }.
+   */
+  async restoreBin(id) {
+    const e = bin.find(x => x.id === id);
+    if (!e || viewOnly()) return { ok: false, message: 'That item is no longer in the bin.' };
+    deleting = null;
+    if (e.kind === 'project') {
+      const p = meta.projects.find(x => x.id === e.projectId);
+      if (!p) { dropBin(id); return { ok: false, message: 'That project is gone.' }; }
+      delete p.binned;
+      if (api) send(api.set(`projects/${p.id}`, clean(p))); else write(K.meta, meta);
+    } else if (e.scope === 'company') this.updateCompany(co => restoreEntry(co, e));
+    else if (e.scope === 'global') this.updateGlobal(g => restoreEntry(g, e));
+    else {
+      if (!live().some(p => p.id === e.projectId)) return { ok: false, message: `Restore the project "${e.projectName}" first.` };
+      await this.updateOther(e.projectId, ws => restoreEntry(ws, e));
+    }
+    dropBin(id);
+    emit();
+    return { ok: true, message: `Restored: ${e.what.replace(/^Deleted /, '')}${e.projectName && e.kind !== 'project' ? ` (${e.projectName})` : ''}.` };
+  },
+  /** Admin only: erase an entry for good. A project in the bin is deleted with all its records. */
+  eraseBin(id) {
+    const e = bin.find(x => x.id === id);
+    if (!e || viewOnly()) return;
+    if (e.kind === 'project') this.eraseProject(e.projectId);
+    dropBin(id);
+    emit();
+  },
+  /** What has been in the bin longer than its days is erased. Returns how many. */
+  purgeBin(now = new Date().toISOString()) {
+    if (role !== 'owner' && api) return 0;
+    const old = bin.filter(e => binExpired(e, binDays(global), now));
+    for (const e of old) this.eraseBin(e.id);
+    return old.length;
+  },
   /** Problems reported by devices (the Owner only), newest first. */
   get faults() { return [...faults].sort((a, b) => String(b.at).localeCompare(String(a.at))); },
   clearFaults() { if (viewOnly()) return; send(api.batch(faults.map(f => ({ path: `diagnostics/${f.id}`, data: null })))); },
@@ -395,6 +461,7 @@ export const store = {
     if (viewOnly()) return;
     const before = structuredClone(company);
     fn(company);
+    toBin(before, company, COMPANY_SECTIONS, { scope: 'company' });
     if (!api) {
       write(K.company, company);
     } else {
@@ -433,15 +500,16 @@ export const store = {
   },
   /** Demo only: another tab of this browser (the signing page) changed the company records. */
   reloadCompany() { if (!api) { company = { ...emptyCompany(), ...read(K.company) }; booking = read('sf:booking'); emit(); } },
-  get projects() { return meta.projects; },
-  get project() { return meta.projects.find(p => p.id === meta.activeId) || meta.projects[0]; },
+  /** The projects, without those in the recycle bin. */
+  get projects() { return live(); },
+  get project() { return live().find(p => p.id === meta.activeId) || live()[0]; },
   /** The active project's workspace. The only mutable handle on operational data. */
   get ws() { return load(this.project.id); },
   /** Read-only copy of another project's workspace (local mode; in the cloud only the open project is loaded). */
   peek(id) { return structuredClone(load(id)); },
 
   switchTo(id) {
-    if (!meta.projects.some(p => p.id === id)) return;
+    if (!live().some(p => p.id === id)) return;
     meta.activeId = id;
     if (api) { ls().setItem(K.active, id); openWorkspace(id); } else write(K.meta, meta);
     emit();
@@ -454,6 +522,7 @@ export const store = {
     const ws = load(id);
     const before = structuredClone(ws);
     fn(ws);
+    toBin(before, ws, Object.keys(emptyWorkspace()), { scope: 'project', projectId: id, projectName: this.project.name });
     if (!api) {
       write(K.ws(id), ws);
     } else {
@@ -519,7 +588,9 @@ export const store = {
   },
   updateGlobal(fn) {
     if (viewOnly()) return;
+    const before = deleting ? structuredClone(global) : null;
     fn(global);
+    if (before) toBin(before, global, Object.keys(before).filter(k => k !== 'fx' && before[k] && typeof before[k] === 'object'), { scope: 'global' });
     if (api) send(api.set('global/main', clean(global))); else write(K.global, global);
     emit();
   },
@@ -545,10 +616,30 @@ export const store = {
     return project;
   },
 
-  /** Deletes a project and its workspace. The last remaining project cannot be deleted. */
+  /**
+   * v0.26.0: a deleted project goes to the recycle bin: it is hidden, its records stay, and it can be restored
+   * until the bin erases it. The last remaining project cannot be deleted.
+   */
   removeProject(id) {
     if (viewOnly()) return;
-    if (meta.projects.length < 2 || !meta.projects.some(p => p.id === id)) return false;
+    const p = live().find(x => x.id === id);
+    if (live().length < 2 || !p) return false;
+    const who = { by: me?.email || '', byName: profile?.name || me?.name || 'Admin' };
+    p.binned = { at: new Date().toISOString(), by: who.by };
+    if (meta.activeId === id) meta.activeId = live()[0].id;
+    addBin(projectEntry(p, who, p.binned.at));
+    if (api) {
+      send(api.set(`projects/${id}`, clean(p)));
+      if (openId === id) openWorkspace(meta.activeId);
+    } else write(K.meta, meta);
+    emit();
+    return true;
+  },
+
+  /** Deletes a project and its workspace for good (the recycle bin, after its days or when the Admin empties it). */
+  eraseProject(id) {
+    if (viewOnly()) return;
+    if (!meta.projects.some(p => p.id === id)) return false;
     meta.projects = meta.projects.filter(p => p.id !== id);
     if (meta.activeId === id) meta.activeId = meta.projects[0].id;
     if (api) {

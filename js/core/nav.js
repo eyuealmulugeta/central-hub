@@ -41,7 +41,7 @@ const today = { id: 'home', label: 'Today', icon: 'home', tabs: ['home', 'notifi
 const team = [
   { id: 'discuss', label: 'Discuss', icon: 'discuss', tabs: ['discuss'], team: true },
   { id: 'meetings', label: 'Meetings', icon: 'meetings', tabs: ['meetings'], team: true },
-  { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links'], team: true },
+  { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'], team: true },
 ];
 
 export const MENUS = {

@@ -44,7 +44,7 @@ import { alertCount as hrAlerts } from './engine/hr.js';
 import { unseenAlerts, unseenCount, alertKeys, summaryOf, headline, moneyOf, markKeysSeen, reportsOf } from './ui/seen.js';
 import * as badges from './core/badges.js';
 import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
-import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, permKey, MONEY_PAGES } from './core/access.js';
+import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, isDelete, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
 import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS } from './core/nav.js';
 import { healthOf } from './engine/today.js';
@@ -59,14 +59,14 @@ import { describePaper, makePdf, canShareFile, shareFile, whatsappUrl, TELEGRAM_
 import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
 const APP = 'Central Hub';
-const VIEWS = { home, notifications, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, notifications, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
 const COMPANY_VIEWS = { home: 'What needs you, across all projects', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { mine: 'My settings', home: 'Today', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { mine: 'My settings', home: 'Today', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -506,7 +506,8 @@ function dispatch(kind, attr, e) {
     refresh();
     return;
   }
-  store.userEdit(true);   // what this handler deletes or clears can be undone
+  // what this handler deletes or clears can be undone, and what it deletes goes to the recycle bin
+  store.userEdit(true, isDelete(el.dataset[attr]) ? { page: TITLES[route()] || route() } : null);
   try {
     if (kind === 'submits') {
       e.preventDefault();

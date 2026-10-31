@@ -5,6 +5,7 @@ import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
 import * as fieldusers from './fieldusers.js';
+import { binPage, binActions, binChanges, purgeOld } from './bin.js';
 import { typesOf } from '../core/seed.js';
 import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
@@ -77,7 +78,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // The pages of Settings, listed down the left with their icons, the way a settings screen
 // usually is: the list stays put and only the right side changes.
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
-  ['catalog', 'Currency', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
+  ['catalog', 'Currency', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links'], ['bin', 'Recycle bin', 'backup']];
 const link = ([k, label, ic]) => html`
       <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
 // v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)
@@ -435,7 +436,7 @@ const projectBar = (c, what) => html`
 function linksPage(c) {
   return html`<div class="side settings">
     ${projectBar(c, 'Field Report and import for')}
-    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
+    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length + fieldusers.signupsWaiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
     ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : linkTab === 'users' ? fieldusers.body() : fieldsetup.body(c)}
   </div>`;
 }
@@ -603,6 +604,7 @@ export function render(c) {
   if (section === 'prices') return html`${nav()}${projectPage(c)}`;
   if (section === 'access') return html`${nav()}${accessPage(c)}`;
   if (section === 'links') return html`${nav()}${linksPage(c)}`;
+  if (section === 'bin') return html`${nav()}${binPage(c)}`;
   const { global: g, project: p } = c;
   const co = g.company || {};
 
@@ -650,7 +652,11 @@ export function render(c) {
     </div>`;
 }
 
+/** v0.26.0: what has been in the recycle bin too long is erased when the Admin opens Settings. */
+export function onEnter() { purgeOld(); }
+
 export const actions = {
+  ...binActions,
   ...fieldsetup.actions,
   /** Edit in the directory: the person's record in Crew, Employee data, on its Projects tab. */
   openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
@@ -779,13 +785,14 @@ export const actions = {
   },
   deleteProject(el, c) {
     if (store.projects.length < 2) { alert('This is the only project, so it cannot be deleted.'); return; }
-    if (confirm(`Delete "${c.project.name}" and all of its reports, schedule, costs and estimate? This cannot be undone.`)) {
+    if (confirm(`Delete "${c.project.name}" with its reports, schedule, costs and estimate?\n\nIt goes to the recycle bin (Admin settings). Restore it from there if you change your mind.`)) {
       store.removeProject(c.project.id);
     }
   },
 };
 
 export const changes = {
+  ...binChanges,
   ...fieldsetup.changes,
   ...fieldprojects.changes,
   ...fieldusers.changes,

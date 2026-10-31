@@ -11,7 +11,7 @@ export const TRADING_PAGES = ['trade', 'stock'];
 export const COMPANY_PAGES = ['finance', 'contracts'];
 /** Admin only, always. */
 /** The five Settings pages, in menu order. */
-export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links'];
+export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'];
 /** v0.24.0: Settings in two: My settings (everyone) and the Admin settings (the rest). */
 export const MY_SETTINGS = ['mine'];
 export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', ...SETTINGS_PAGES.filter(k => !MY_SETTINGS.includes(k))];   // notifications: v0.23.0
@@ -153,4 +153,7 @@ const ADMIN_ONLY = {
   reports: new Set(['clearField']),
 };
 /** True when `name` (a data-act, data-chg or data-form value on `page`) is reserved for the Admin. */
+/** v0.26.0: is this handler a delete? Then what it takes away goes to the recycle bin. */
+export const isDelete = name => DELETES.test(name) && !NOT_A_DELETE.has(name) && !BIN_ITSELF.has(name);
+const BIN_ITSELF = new Set(['removeForGood', 'removeBin', 'removeBinAll']);
 export const adminOnly = (page, name) => (DELETES.test(name) && !NOT_A_DELETE.has(name)) || !!ADMIN_ONLY[key(page)]?.has(name);

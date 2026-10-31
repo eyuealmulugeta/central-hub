@@ -1505,3 +1505,12 @@ body.side-narrow .side-health { display: none; }
 .older-reports { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
 .older-reports h4 { margin: 0 0 6px; font-size: 13px; }
 .older-reports ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+
+/* v0.26.0: "Checked by" signature, and the full-screen signing pad */
+.sig-check { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; }
+.sig-check img { max-height: 56px; max-width: 220px; background: #fff; border: 1px solid var(--line, #ddd); border-radius: 6px; padding: 2px 6px; }
+.sigpad-overlay { position: fixed; inset: 0; z-index: 1000; background: var(--bg, #fff); display: flex; flex-direction: column; padding: 12px; gap: 10px; }
+.sigpad-top { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.sigpad-canvas { flex: 1; width: 100%; min-height: 200px; background: #fff; border: 2px dashed var(--line, #bbb); border-radius: 10px; touch-action: none; cursor: crosshair; }
+.sigpad-bar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.bin-t .note { display: block; }

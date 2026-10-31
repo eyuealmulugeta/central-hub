@@ -8,7 +8,7 @@ import { fieldReady, fieldUsers, fieldUserDo } from '../sync/fieldreport.js';
 import { positionGroups } from '../engine/positions.js';
 import { groupOptions } from './choose.js';
 import { tell } from '../core/image.js';
-import { html, options } from './dom.js';
+import { html, options, chip } from './dom.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
@@ -34,6 +34,10 @@ const demoFeed = () => ({
   devices: [
     { email: 'abebe@example.com', dev: 'demo0001aaaa', st: 'wait', name: 'abebe k', role: 'engineer', first: '2026-10-26T06:05:00Z', ua: 'Android 13; SM-A145F · Chrome', ip: '196.188.34.10', loc: 'Modjo, Oromia, Ethiopia' },
     { email: 'sara@example.com', dev: 'demo0002bbbb', st: 'ok', name: 'Sara T', role: 'coordinator', first: '2026-10-19T07:00:00Z', ua: 'Android 14 · Chrome', ip: '196.188.1.2', loc: 'Addis Ababa, Ethiopia', by: 'Demo Admin', at: '2026-10-19T07:10:00Z' },
+  ],
+  signups: [
+    { email: 'meron@example.com', name: 'Meron Alemu', phone: '+251 911 000 111', at: '2026-10-30T07:40:00Z', ip: '196.188.50.7', loc: 'Adama, Oromia, Ethiopia', ua: 'Android 14 · Chrome', st: 'wait' },
+    { email: 'yonas@example.com', name: 'Yonas B', phone: '', at: '2026-10-28T15:10:00Z', ip: '', loc: '', st: 'rejected', by: 'Demo Admin', decidedAt: '2026-10-28T16:00:00Z', mailed: '2026-10-28T16:00:00Z' },
   ],
   inbox: [
     { t: '2026-10-26T06:05:30Z', h: 'New device waiting · abebe k', m: 'abebe@example.com\nIP 196.188.34.10 · Modjo, Oromia, Ethiopia (approximate)', f: 'Field Report' },
@@ -63,11 +67,37 @@ async function apply(action, body) {
     if (action === 'accessSet' && p) Object.assign(p, { role: body.role, projects: body.projects });
     if (action === 'accessRemove') feed.people = feed.people.filter(x => x.email !== body.email);
     if (action === 'devDecide') Object.assign(feed.devices.find(d => d.dev === body.device) || {}, { st: body.decision === 'approve' ? 'ok' : 'deny', by: 'Demo Admin', at: new Date().toISOString() });
-    return;
+    if (action === 'signupDecide') Object.assign(feed.signups.find(r => r.email === body.email) || {}, { st: body.decision === 'approve' ? 'approved' : 'rejected', by: 'Demo Admin', decidedAt: new Date().toISOString(), mailed: '' });
+    return { mailed: false, demo: true };
   }
   const out = await fieldUserDo(action, body);
+  if (out.signups) feed = { ...feed, signups: out.signups };
   if (out.people) feed = { ...feed, people: out.people, catalog: out.catalog || feed.catalog };
   if (out.devices) feed = { ...feed, devices: out.devices };
+  return out;
+}
+
+/** v0.26.0 (script 7.35.0): the people who asked to use Field Report, waiting for the Admin. */
+export const signupsWaiting = () => (feed?.signups || []).filter(r => r.st === 'wait');
+const SU_WORDS = { approved: ['Approved', 'ok'], rejected: ['Rejected', 'high'] };
+function signupRow(r, catalog) {
+  return html`<li class="fu-dev su-row" data-e="${r.email}">
+    <div><b>${r.name || 'No name given'}</b> <span class="muted">${r.email}</span>${r.phone ? html` <span class="muted">· ${r.phone}</span>` : ''}
+      <span class="muted note">${place(r)} · asked ${when(r.at)}${r.ua ? ` · ${r.ua}` : ''}</span></div>
+    <div class="entry">
+      <select data-su="role" aria-label="Field Report role for ${r.email}">${options(ROLE_WORDS, 'engineer')}</select>
+      <select data-su="proj" aria-label="Project for ${r.email}">${options([['', 'Project…'], ...catalog.map(x => [x.code, `${x.code} ${x.label || ''}`])], '')}</select>
+      <button class="btn small primary" type="button" data-act="fuSignup" data-e="${r.email}" data-v="approve" ${busy ? 'disabled' : ''}>Approve</button>
+      <button class="btn small ghost" type="button" data-act="fuSignup" data-e="${r.email}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button>
+    </div></li>`;
+}
+function signupsCard(catalog) {
+  const all = feed?.signups || [], wait = all.filter(r => r.st === 'wait'), done = all.filter(r => r.st !== 'wait').slice(0, 8);
+  if (!all.length) return '';
+  return html`<h4>Sign-up requests ${wait.length ? html`<span class="chip high">${wait.length} waiting</span>` : ''}</h4>
+    <p class="muted small">People who signed in to Field Report with a Google account that has no access yet. Approve gives the role and project you choose and approves the phone they asked from. Either way they get an email with the result.</p>
+    ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>` : html`<p class="muted">No request is waiting.</p>`}
+    ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span></li>`)}</ul></details>` : ''}`;
 }
 
 /** Approve or deny one device (also used by the Notifications page). */
@@ -133,6 +163,7 @@ export function body() {
       <div class="actions left"><button class="btn" type="button" data-act="fuLoad" ${busy ? 'disabled' : ''}>${busy ? 'Working…' : 'Refresh from Field Report'}</button>
         ${feed ? html`<span class="muted small">Read ${when(feed.at)}</span>` : ''}${isDemo() ? html`<span class="chip warn">Demo: sample people</span>` : ''}</div>
       ${said ? html`<p class="callout ${said.ok ? 'ok' : 'bad'}" role="status"><b>${said.ok ? '✓' : '✗'}</b> <span>${said.text}</span></p>` : ''}
+      ${signupsCard(catalog)}
       ${waits.length ? html`<h4>New sign-ins <span class="chip high">${waits.length} new</span></h4><ul class="list fu-devs">${waits.map(deviceRow)}</ul>` : ''}
       ${people.length ? html`<div class="table-wrap"><table class="table compact fu-table">
         <thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Access</th><th>Role</th><th>Status</th><th>Action</th><th></th></tr></thead>
@@ -154,6 +185,27 @@ const person = email => (feed?.people || []).find(p => p.email === email);
 
 export const actions = {
   fuLoad() { return load(true); },
+  /** Approve (role and project first, then the decision, which emails the person) or reject a sign-up request. */
+  async fuSignup(el) {
+    const r = (feed?.signups || []).find(x => x.email === el.dataset.e);
+    if (!r || busy) return;
+    const row = el.closest('.su-row'), role = row?.querySelector('[data-su=role]')?.value || 'engineer', proj = row?.querySelector('[data-su=proj]')?.value || '';
+    const yes = el.dataset.v === 'approve';
+    if (yes && ONE_PER_PROJECT.includes(role) && !proj) return say(false, `Choose the project ${r.name || r.email} reports on.`);
+    if (!yes && !confirm(`Reject the request of ${r.name || r.email}?\n\nThey get an email saying it was not approved, and cannot ask again from that account.`)) return;
+    busy = true; store.notify();
+    try {
+      if (yes) {
+        await apply('accessSet', { email: r.email, role, projects: proj ? [proj] : [] });
+        if (r.name) await apply('userSet', { email: r.email, full: r.name, ok: true });
+      }
+      const out = await apply('signupDecide', { email: r.email, decision: yes ? 'approve' : 'reject', by: store.profile.name || store.user?.name || 'Admin' });
+      const mail = out?.demo ? ' (demo: no email is sent)' : out?.mailed ? ` An email went to ${r.email}.` : ` The email could not be sent (${out?.mailError || 'unknown reason'}): tell them yourself.`;
+      say(true, `${yes ? 'Approved' : 'Rejected'}: ${r.name || r.email}.${mail}`);
+      if (yes && isDemo()) feed.people.push({ email: r.email, id: r.email.split('@')[0].toUpperCase().slice(0, 6), role, projects: proj ? [proj] : [], st: 'active', full: r.name || '', pos: '', uName: r.name || '', uPos: '', ok: true });
+    } catch (err) { say(false, err.message); }
+    finally { busy = false; store.notify(); }
+  },
   fuOpen(el) { openAccess = openAccess === el.dataset.e ? '' : el.dataset.e; },
   fuDecide(el) { return decide(el.dataset.e, el.dataset.dev, el.dataset.v); },
   /** Save a row: projects and role, then name and position (confirmed), then the chosen action. */

@@ -25,7 +25,7 @@ export function laborRows(ws, project) {
       id: 'auto-' + r.id, date: r.date, type: 'expense', category: 'labor', auto: true, ...(estimate ? { estimate: true } : {}),
       description: `Site labour, ${sum(r.manpower, m => m.count)} on site (from daily report)`,
       amount: sum(r.manpower, cost),
-      currency: project.currency,
+      currency: project.payCurrency || project.currency,   // v0.25.0: day rates are in the project's pay currency
     }))
     .filter(r => r.amount > 0);
 }

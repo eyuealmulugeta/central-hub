@@ -2,6 +2,7 @@
 // Shipments belong to the company, not to one project; each can be tied to
 // the project it is for, and its landed cost posted to that project's costs.
 
+import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { STAGES, MODES, INCOTERMS, COST_KINDS, stageLabel, nextStage, costLabel, nextRef, landed, tradeSummary, stockAndSales, priceForMargin, isStock } from '../engine/trade.js';
 import { convert } from '../engine/pricing.js';
@@ -25,7 +26,7 @@ const find = company => company.shipments.find(s => s.id === selected);
 export function render(c) {
   const { company, global, project } = c;
   const cur = global.fx.base;
-  const currencies = Object.keys(global.fx.rates).map(k => [k, k]);
+  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
   const sum = tradeSummary(company.shipments, global.fx, c.today, cur);
   const rows = [...sum.rows].sort((a, b) => (a.state.done ? 1 : 0) - (b.state.done ? 1 : 0) || (a.s.eta || '9').localeCompare(b.s.eta || '9'));
   const row = sum.rows.find(r => r.s.id === selected);

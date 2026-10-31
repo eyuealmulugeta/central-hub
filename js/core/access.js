@@ -141,7 +141,8 @@ export const appOn = (global, page) => !(global?.appsOff || []).includes(page);
 
 /** Pages a project can switch off because they do not apply to it. Home always stays. */
 export const SWITCHABLE = PROJECT_PAGES.filter(p => p !== 'dashboard');
-export const pageOn = (project, page) => !(project?.off || []).includes(page);
+// v0.25.0: "Pages this project uses" is gone from Settings: every project shows every page its people may open
+export const pageOn = () => true;
 
 // Things only the Admin may do, wherever the button or field is. Deleting is matched by name.
 const DELETES = /^(remove|drop|delete)/;

@@ -1,6 +1,7 @@
 // Contracts: the register of agreements with clients, suppliers and
 // subcontractors, with their values, terms and key dates.
 
+import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { KINDS, STATUS_LABEL, kindLabel, isIncome, nextRef, contractsSummary } from '../engine/contracts.js';
 import { uid, money, fmtFull, clamp } from '../core/util.js';
@@ -26,7 +27,7 @@ const isLink = v => /^https?:\/\//i.test(v || '');
 export function render(c) {
   const { company, global } = c;
   const cur = global.fx.base;
-  const currencies = Object.keys(global.fx.rates).map(k => [k, k]);
+  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
   const sum = contractsSummary(company.contracts, global.fx, c.today, cur);
   const shown = sum.rows.filter(r => filter === 'all' || (filter === 'client' ? isIncome(r.c.kind) : !isIncome(r.c.kind)));
   const row = sum.rows.find(r => r.c.id === selected);

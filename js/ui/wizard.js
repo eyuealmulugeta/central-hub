@@ -22,7 +22,7 @@ export function openWizard() {
   const near = store.project;
   const region = g.regions.find(r => r.id === near?.regionId) || g.regions[0];
   a = {
-    template: 'container', name: '', regionId: region?.id, currency: near?.currency || region?.currency || g.fx.base,
+    template: 'container', name: '', regionId: region?.id, currency: 'USD',   // v0.25.0: contracts are in USD only
     client: '', contractValue: '', vat: defaultVat(near?.currency || region?.currency || g.fx.base), vatTouched: false,
     billing: templateOf('container').billing, billingTouched: false, start: todayISO(), standardTasks: false,
   };
@@ -50,7 +50,6 @@ function draw() {
       <label>Project name <input data-w="name" value="${a.name}" autocomplete="off" placeholder="e.g. Mosestro Israel: container house installation"></label>
       <div class="grid2">
         <label>Country <select data-w="regionId">${options(countryList(), a.regionId)}</select></label>
-        <label>Currency <select data-w="currency">${options(Object.keys(g.fx.rates).map(k => [k, k]), a.currency)}</select></label>
       </div>
       <span class="muted">Projects in Ethiopia are in ETB, all others in USD. The country sets the price list; you can add a country under Settings.</span>` : ''}
     ${step === 2 ? html`

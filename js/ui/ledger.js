@@ -1,3 +1,4 @@
+import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { CATEGORIES } from '../engine/ledger.js';
 import { statement, budgetLines } from '../engine/statement.js';
@@ -110,7 +111,7 @@ function entries(c) {
   const { led, project: p, global } = c;
   const rows = led.rows.filter(r => !only || r.type === only);
   const cur = p.currency;
-  const currencies = Object.keys(global.fx.rates).map(k => [k, k]);
+  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
   const top = Math.max(1, ...Object.values(led.byCategory));
 
   const kpi = (label, value, sub, cls = '') => html`

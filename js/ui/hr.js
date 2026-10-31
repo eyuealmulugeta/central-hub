@@ -5,6 +5,7 @@
 // someone, and a form per employee with a header (photo, name, job) and tabs
 // for work details, private details, the agreement and pay, and their papers.
 
+import { PAY_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, RATING_FILTERS, agreementLabel, hrSummary, filterStaff, ratingOf } from '../engine/hr.js';
 import { uid, money, fmtFull } from '../core/util.js';
@@ -272,7 +273,7 @@ function accessPane(p) {
 function form({ p, alerts, monthly }, c) {
   const a = p.agreement || {};
   const base = c.global.fx.base;
-  const currencies = Object.keys(c.global.fx.rates).map(k => [k, k]);
+  const currencies = PAY_OPTIONS;   // v0.25.0: each person is paid in USD or ETB
   const others = c.company.staff.filter(x => x.id !== p.id && x.status !== 'left').map(x => [x.id, x.title ? `${x.name}, ${x.title}` : x.name]);
   const text = (label, f, fk, type = 'text', extra = '') => html`<label>${label} <input type="${type}" data-chg="set" data-f="${f}" data-fk="${fk}" value="${p[f] ?? ''}" ${extra}></label>`;
   const agree = (label, f, fk, type = 'text', extra = '') => html`<label>${label} <input type="${type}" data-chg="agreement" data-f="${f}" data-fk="${fk}" value="${a[f] ?? ''}" ${extra}></label>`;

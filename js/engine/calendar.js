@@ -64,3 +64,37 @@ export function mergeCalendar(project, payload = {}) {
     theirs: off,
   };
 }
+
+// v0.25.0 (Phase A2): one company calendar (Admin settings, Company): the working week and the public holidays of
+// every project, with each project's own exceptions (its own week, its own days off). The result is still written
+// on each project (workDays, nonWorking), so the schedule, the target date, pay and Field Report read it as before.
+export const sameWeek = (a = [], b = []) => [...a].sort().join() === [...b].sort().join();
+
+/** The company calendar; before it is first saved, the week most projects use and no holidays (nothing changes). */
+export function companyCalendar(global, projects = []) {
+  const c = global?.calendar;
+  if (c) return { workDays: c.workDays?.length ? [...c.workDays].sort() : [...DEFAULT_WEEK], holidays: [...new Set((c.holidays || []).filter(isDate))].sort() };
+  const count = new Map();
+  for (const p of projects) { const k = weekdays(p).sort().join(); count.set(k, (count.get(k) || 0) + 1); }
+  const best = [...count].sort((a, b) => b[1] - a[1])[0];
+  return { workDays: best ? best[0].split(',').map(Number) : [...DEFAULT_WEEK], holidays: [] };
+}
+/** Does this project keep a working week of its own? */
+export const ownWeekOf = (p, cal) => (typeof p?.ownWeek === 'boolean' ? p.ownWeek : !sameWeek(weekdays(p), cal.workDays));
+/** The dates off of this project only (not the company's holidays). */
+export const ownOffOf = (p, cal) => (Array.isArray(p?.ownOff) ? p.ownOff.filter(isDate) : (p?.nonWorking || []).filter(d => isDate(d) && !cal.holidays.includes(d)));
+
+/**
+ * What to save on a project when the company calendar or its own exceptions change: its working week and every
+ * date off (the company's holidays, its own, and any other date already on it, such as a reported no-work day).
+ */
+export function projectPatch(p, oldCal, cal, { ownWeek = ownWeekOf(p, oldCal), week = weekdays(p), ownOff = ownOffOf(p, oldCal) } = {}) {
+  const oldOwn = ownOffOf(p, oldCal);
+  const kept = (p.nonWorking || []).filter(d => isDate(d) && !oldCal.holidays.includes(d) && !oldOwn.includes(d));
+  const own = [...new Set(ownOff.filter(isDate))].sort();
+  return {
+    ownWeek, ownOff: own,
+    workDays: (ownWeek ? [...week] : [...cal.workDays]).sort(),
+    nonWorking: [...new Set([...cal.holidays, ...own, ...kept])].sort(),
+  };
+}

@@ -355,5 +355,7 @@ const MIXED_TASKS = [
 
 export const TASK_TEMPLATES = { steel: STEEL_TASKS, container: CONTAINER_TASKS, mixed: MIXED_TASKS };
 /** The kinds of project, as shown wherever one is chosen. */
-export const PROJECT_TYPES = [['steel', 'Steel structure'], ['container', 'Container building'], ['mixed', 'Steel structure and container building']];
-export const typeLabel = type => (PROJECT_TYPES.find(([k]) => k === type) || PROJECT_TYPES[0])[1];
+export const PROJECT_TYPES = [['steel', 'Steel structure'], ['container', 'Container house'], ['mixed', 'Steel structure and container house']];
+/** v0.25.0: the types of work, with those the Admin added ("Add new"). */
+export const typesOf = global => [...PROJECT_TYPES, ...(global?.projectTypes || [])];
+export const typeLabel = (type, global) => (typesOf(global).find(([k]) => k === type) || PROJECT_TYPES[0])[1];

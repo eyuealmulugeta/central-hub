@@ -240,6 +240,7 @@ a.row:hover, .row.pick:hover { background: var(--surface-2); border-radius: 8px;
 .pending { --c: var(--pending); }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
 .legend { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.toolbar .legend { flex-wrap: wrap; min-width: 0; max-width: 100%; }   /* v0.25.0: the Schedule legend wraps on a phone */
 .lg { width: 14px; height: 8px; border-radius: 3px; background: var(--c); margin-left: 8px; }
 .lg.plan { height: 3px; background: var(--pending); }
 .editor { width: 320px; }

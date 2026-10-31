@@ -29,18 +29,19 @@ export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_RO
   const member = ws.team.find(m => m.id === row.id) || ws.team.find(m => keyOf({ name: m.name }) === row.key);
   const person = member?.personId ? staff.find(p => p.id === member.personId) : null;
   const a = person?.agreement || {};
-  const currency = a.currency || project.currency;
+  const payCur = project.payCurrency || project.currency;   // v0.25.0: the currency of this project's day rates
+  const currency = a.currency || payCur;
   if (a.payPer === 'month' && +a.pay > 0) return { per: 'month', wage: +a.pay, currency, from: 'agreement' };
   const role = norm(member?.role || row.role || person?.title);
   if (a.payPer !== 'day' && role && monthlyRoles.some(r => norm(r) === role)) {
     return +a.pay > 0 && !a.payPer ? { per: 'month', wage: +a.pay, currency, from: 'agreement' } : { per: 'month', wage: 0, currency, from: 'missing' };
   }
   const day = member ? dayRateOf(ws, member.id) : 0;
-  if (day > 0) return { per: 'day', wage: day, currency: project.currency, from: 'project' };
+  if (day > 0) return { per: 'day', wage: day, currency: payCur, from: 'project' };
   if (a.payPer === 'day' && +a.pay > 0) return { per: 'day', wage: +a.pay, currency, from: 'agreement' };
   const trade = ws.laborRates?.[member?.role || row.role];
-  if (+trade > 0) return { per: 'day', wage: +trade, currency: project.currency, from: 'trade' };
-  return { per: 'day', wage: 0, currency: project.currency, from: '' };
+  if (+trade > 0) return { per: 'day', wage: +trade, currency: payCur, from: 'trade' };
+  return { per: 'day', wage: 0, currency: payCur, from: '' };
 }
 
 /** What a person earned in a period, from their row on the Attendance sheet. */
@@ -128,11 +129,15 @@ export const runStatus = (run, lines) => (!run ? 'draft' : run.status === 'draft
 export const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', paid: 'Paid' };
 
 /** The payment record and the labour expense in Costs that goes with it. */
-export function paymentFor(line, { amount, date, method, ref, period, by, at, id }) {
+export function paymentFor(line, { amount, date, method, ref, period, by, at, id, usdRate = 0 }) {
   const pay = { id, key: line.key, personId: line.id, name: line.name, role: line.role, amount: r2(amount), currency: line.currency, date, method, ref: ref || '', periodFrom: period.from, by, at };
+  // v0.25.0: a pay in ETB keeps its own ETB-to-USD rate; its labour cost is booked in USD at that rate
+  const foreign = line.currency && line.currency !== 'USD' && +usdRate > 0;
+  if (foreign) pay.usdRate = +usdRate;
   const cost = {
     // kept in paycosts, not the general Costs list, so only those who see pay read it
-    id: `pay-${id}`, payId: id, date, type: 'expense', category: 'labor', amount: pay.amount, currency: line.currency,
+    id: `pay-${id}`, payId: id, date, type: 'expense', category: 'labor', amount: foreign ? r2(pay.amount / usdRate) : pay.amount, currency: foreign ? 'USD' : line.currency,
+    ...(foreign ? { fxFrom: { currency: line.currency, ratePerUsd: +usdRate, on: date, was: { amount: pay.amount } } } : {}),
     description: `Crew pay, ${line.name}${line.role ? ` (${line.role})` : ''}, ${period.label || `${period.from} to ${period.to}`}`,
     method, bankRef: ref || '',
   };

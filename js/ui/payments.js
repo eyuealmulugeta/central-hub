@@ -3,6 +3,9 @@
 // paid daily or monthly, wage, days, overtime, earned, paid and outstanding. Each payment is also a labour cost
 // under Costs. Approving a period locks what was earned; what is still owed carries over to the next period.
 
+import { usdOf, PAY_OPTIONS } from '../engine/currencies.js';
+import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
+import { dayRateOf, setDayRate } from '../engine/people.js';
 import { store } from '../core/store.js';
 import { periodFor, shiftPeriod, waitingNote } from '../engine/attendance.js';
 import { payLines, monthlyRolesOf, newRun, lockLines, runStatus, STATUS_LABEL, METHODS, methodLabel, paymentFor, csvRows, runId, personSummary } from '../engine/crewpay.js';
@@ -32,10 +35,54 @@ const mayApprove = () => mayPay() && store.canApprove;
 const FROM = { project: 'day rate on this project', agreement: 'HR agreement', trade: 'trade rate (no rate of their own)', missing: 'position paid monthly, but no monthly wage in the HR agreement', '': 'no wage found' };
 const STATUS_TONE = { draft: '', approved: 'info', paid: 'ok' };
 
-const VIEWS = [['', 'Payments'], ['crew', 'Site pay sheet'], ['staff', 'Monthly staff and labour cost']];
+const VIEWS = [['', 'Payments'], ['crew', 'Site pay sheet'], ['staff', 'Monthly staff and labour cost'], ['rates', 'Day rates and pay period']];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const num = el => Math.max(0, +el.value || 0);
+
+/**
+ * v0.25.0 (moved from Settings, This project): how often the crew is paid, the day rate of each trade, and each
+ * person's wage, from their place on this project or their HR agreement in the Manpower Directory.
+ */
+function ratesView(c) {
+  const { project: p, ws } = c;
+  const can = mayPay();
+  const cur = p.payCurrency || p.currency;
+  const staff = c.company.staff || [];
+  const dis = can ? '' : 'disabled';
+  return html`<div class="set-cols" id="panel-rates">
+    <section class="card set-box"><h3>Pay period of the crew</h3>
+      <p class="muted">How often the site crew of this project is paid. The Attendance sheet shows the same period.</p>
+      <div class="grid2">
+        <label>Paid <select data-chg="payPeriod" data-fk="pp-kind" ${dis}>${options(PAY_PERIODS, payPeriodOf(p))}</select></label>
+        ${payPeriodOf(p) === 'monthly' ? '' : html`<label>A pay week starts on <select data-chg="payWeekStart" data-fk="pp-start" ${dis}>${options(WEEKDAYS.map((d, i) => [String(i), d]), String(weekStartOf(p)))}</select></label>`}
+        <label title="The currency of the day rates below. Each person's HR agreement can say otherwise.">Day rates are in <select data-chg="payCurrency" data-fk="pp-cur" ${dis}>${options(PAY_OPTIONS, cur)}</select></label>
+      </div>
+    </section>
+    <section class="card set-box"><h3>Labour day rates <span class="muted">${cur}</span></h3>
+      <div class="grid2">${Object.entries(ws.laborRates || {}).map(([trade, rate], i) => html`
+        <label>${trade} <input type="number" min="0" step="any" data-chg="labor" data-t="${trade}" data-fk="lb-${i}" value="${rate}" ${dis}></label>`)}</div>
+      ${can ? html`<form data-form="trade" class="entry">
+        <input name="trade" placeholder="New trade" required aria-label="Trade" class="wide">
+        <input type="number" name="rate" min="0" step="any" placeholder="Day rate" required aria-label="Day rate" class="amount">
+        <button class="btn">Add</button>
+      </form>` : ''}
+    </section>
+    <section class="card set-box"><h3>Wage of each person</h3>
+      ${ws.team.length ? html`<table class="table compact"><thead><tr><th>Person</th><th>Role</th><th class="r">Day rate here (${cur})</th><th>HR agreement (Manpower Directory)</th></tr></thead>
+        <tbody>${ws.team.map(m => { const a = staff.find(x => x.id === m.personId)?.agreement || {}; return html`<tr>
+          <td>${m.name}</td><td>${m.role || ''}</td>
+          <td class="r"><input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="—" aria-label="Day rate of ${m.name}" ${dis}></td>
+          <td>${+a.pay > 0 ? `${money(+a.pay, a.currency || cur, 0)} ${a.payPer === 'day' ? 'per day' : a.payPer === 'hour' ? 'per hour' : 'per month'}` : html`<span class="muted">none</span>`}</td></tr>`; })}</tbody></table>
+        <p class="muted">A day rate here wins over the trade rate. A monthly wage comes from the person's HR agreement (Crew, Employee data).</p>` : html`<p class="muted">Nobody is on this project yet (Settings, This project, Team).</p>`}
+    </section>
+  </div>`;
+}
 const TITLE = { '': 'Crew payments', crew: 'Site pay sheet', staff: 'Monthly staff and labour cost' };
 /** What the project has paid its crew and staff so far, in the project's currency (for the labour budget). */
-const paidToDate = c => (c.ws.payments || []).filter(x => x.currency === c.project.currency).reduce((s, x) => s + (+x.amount || 0), 0);
+const paidToDate = c => (c.ws.payments || []).reduce((s, x) => s + usdOf(x.amount, x.currency, x.usdRate), 0);   // v0.25.0: in USD, each ETB pay at its own rate
+/** v0.25.0: the ETB-to-USD rate typed with an ETB pay (the table's rate is only a suggestion). */
+const rateField = (cur, c) => (cur && cur !== 'USD' ? html`<label>${cur} per 1 USD, today <input type="number" name="usdRate" min="0.0001" step="any" required value="${c.global.fx.rates[cur] || ''}" title="The rate of this pay. It is kept with it; the cost is booked in USD at this rate."></label>` : '');
+const rateOf = fd => +fd.get('usdRate') || 0;
 
 /** Make the run record of a period when anything is first done with it. */
 function ensureRun(ws, period) {
@@ -50,6 +97,7 @@ function payForm(l, c) {
     <form data-form="pay" data-k="${l.key}" class="entry pay-form">
       <b>Pay ${l.name}</b>
       <label>Amount <input type="number" name="amount" min="0.01" step="0.01" required value="${l.outstanding > 0 ? l.outstanding : ''}"> ${l.currency}</label>
+      ${rateField(l.currency, c)}
       <label>Date <input type="date" name="date" required value="${c.today}" max="${c.today}"></label>
       <label>How <select name="method">${options(METHODS, 'cash')}</select></label>
       <input name="ref" placeholder="Reference (bank, receipt no.)" aria-label="Reference">
@@ -91,12 +139,13 @@ export function render(c) {
     ${payAll ? html`<form data-form="payAll" class="card entry pay-form no-print">
       <b>Pay everyone what is outstanding (${owing.length} people, ${byCurrency(owing, 'outstanding')})</b>
       <label>Date <input type="date" name="date" required value="${c.today}" max="${c.today}"></label>
+      ${[...new Set(owing.map(l => l.currency))].filter(k => k && k !== 'USD').map(k => rateField(k, c))}
       <label>How <select name="method">${options(METHODS, 'cash')}</select></label>
       <input name="ref" placeholder="Reference" aria-label="Reference">
       <button class="btn primary">Save ${owing.length} payments</button>
       <button type="button" class="btn ghost" data-act="closePay">Cancel</button>
     </form>` : ''}
-    ${view ? html`<section class="card sheet pay-sheet pay-doc">${view === 'crew' ? crewSheet(c, p, lines, status) : staffSheet(c, p, lines, status, paidToDate(c))}</section>` : html`<section class="card sheet pay-sheet"><div class="paper dsr land doc-paper" data-foot="${footText(c, 'Crew payments', payRef(c, p, 'ALL'), { note: 'confidential' })}">
+    ${view === 'rates' ? ratesView(c) : view ? html`<section class="card sheet pay-sheet pay-doc">${view === 'crew' ? crewSheet(c, p, lines, status) : staffSheet(c, p, lines, status, paidToDate(c))}</section>` : html`<section class="card sheet pay-sheet"><div class="paper dsr land doc-paper" data-foot="${footText(c, 'Crew payments', payRef(c, p, 'ALL'), { note: 'confidential' })}">
       ${docHead(c, { title: 'Crew payments', sub: p.label, ref: payRef(c, p, 'ALL'), status: STATUS_LABEL[status], tone: status === 'draft' ? 'warn' : 'ok', facts: [['Project', c.project.name], ['Period', p.label], ['People', String(lines.length)], ['Due', byCurrency(lines, 'due')]] })}
       ${lines.length ? html`<div class="att-scroll"><table class="pay-grid">
         <thead><tr>
@@ -156,9 +205,9 @@ function personPanel(l, c, can) {
 }
 
 /** Save one payment and its labour cost. */
-function record(c, l, { amount, date, method, ref }) {
+function record(c, l, { amount, date, method, ref, usdRate = 0 }) {
   const p = periodOf(c);
-  const { pay, cost } = paymentFor(l, { amount, date, method, ref, period: p, by: store.user?.email || 'this computer', at: new Date().toISOString(), id: uid('pay') });
+  const { pay, cost } = paymentFor(l, { amount, date, method, ref, usdRate, period: p, by: store.user?.email || 'this computer', at: new Date().toISOString(), id: uid('pay') });
   store.update(ws => {
     ensureRun(ws, p);
     (ws.payments ||= []).push(pay);
@@ -167,6 +216,11 @@ function record(c, l, { amount, date, method, ref }) {
 }
 
 export const changes = {
+  payPeriod(el) { if (mayPay()) store.updateProject(p => { p.payPeriod = el.value; }); },
+  payWeekStart(el) { if (mayPay()) store.updateProject(p => { p.payWeekStart = +el.value; }); },
+  payCurrency(el) { if (mayPay() && PAY_OPTIONS.some(([k]) => k === el.value)) store.updateProject(p => { p.payCurrency = el.value; }); },
+  labor(el) { if (mayPay()) store.update(ws => { ws.laborRates[el.dataset.t] = num(el); }); },
+  memberRate(el) { if (mayPay()) store.update(ws => { if (ws.team.some(x => x.id === el.dataset.id)) setDayRate(ws, el.dataset.id, num(el)); }); },
   adjust(el, c) {
     const p = periodOf(c);
     const v = Math.round((+el.value || 0) * 100) / 100;
@@ -221,18 +275,22 @@ export const actions = {
 };
 
 export const submits = {
+  trade(fd) {
+    const trade = String(fd.get('trade') || '').trim();
+    if (trade && mayPay()) store.update(ws => { ws.laborRates[trade] = Math.max(0, +fd.get('rate') || 0); });
+  },
   pay(fd, c, form) {
     const key = form?.dataset?.k || paying;
     const l = payLines(ctxOf(c), periodOf(c)).lines.find(x => x.key === key);
     const amount = +fd.get('amount');
     if (!l || !(amount > 0)) return false;
-    record(c, l, { amount, date: fd.get('date'), method: fd.get('method'), ref: String(fd.get('ref') || '').trim() });
+    record(c, l, { amount, date: fd.get('date'), method: fd.get('method'), ref: String(fd.get('ref') || '').trim(), usdRate: rateOf(fd) });
     tell(`✓ ${money(amount, l.currency, 2)} paid to ${l.name}.`);
     paying = null;
   },
   payAll(fd, c) {
     const owing = payLines(ctxOf(c), periodOf(c)).lines.filter(l => l.outstanding > 0.004);
-    for (const l of owing) record(c, l, { amount: l.outstanding, date: fd.get('date'), method: fd.get('method'), ref: String(fd.get('ref') || '').trim() });
+    for (const l of owing) record(c, l, { amount: l.outstanding, date: fd.get('date'), method: fd.get('method'), ref: String(fd.get('ref') || '').trim(), usdRate: rateOf(fd) });
     tell(`✓ ${owing.length} payments saved.`);
     payAll = false;
   },

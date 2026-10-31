@@ -474,6 +474,14 @@ export const store = {
     if (!api) return load(id).tasks || [];
     return sectionFromDocs('tasks', await api.list(`projects/${id}/tasks`));
   },
+  /** v0.25.0: a copy of any project's workspace, to look at only (the currency list before converting). */
+  async readOther(id) {
+    if (id === this.project?.id) return structuredClone(this.ws);
+    if (!api) return load(id);
+    const ws = emptyWorkspace();
+    for (const section of readable()) ws[section] = sectionFromDocs(section, await api.list(`projects/${id}/${section}`));
+    return ws;
+  },
   async updateOther(id, fn) {
     if (viewOnly()) return;
     if (id === this.project?.id) { this.update(fn); return load(id); }

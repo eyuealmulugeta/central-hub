@@ -2,6 +2,7 @@
 // taken on site. Draft, then approved (locked), then paid. Prints as a payroll sheet, each person gets
 // a payslip to print or email, and a CSV goes to the accountant. Admin only: it is built from HR pay.
 
+import { usdOf } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import {
   DEFAULT_SETTINGS, statusLabel, monthLabel, newLines, newLine, attendanceFor, compute, totals, warnings, csvRows,
@@ -16,6 +17,8 @@ import { withFixes } from '../engine/attendance.js';
 import { paidOnSite } from '../engine/crewpay.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { openMail, emailIn } from './maildialog.js';
+/** v0.25.0: does this run pay anyone in ETB? Then it needs its own ETB-to-USD rate. */
+const etbIn = run => (run.lines || []).some(l => l.currency === 'ETB');
 // the attendance as the office corrected it on the Attendance sheet
 const sheetReports = c => withFixes(c.ws.reports, c.ws.attendance);
 // site crew of a project that pays through Payments is paid there, not here
@@ -101,8 +104,8 @@ function detail(run, c) {
     ${warn.length ? html`<ul class="plain bad no-print">${warn.map(w => html`<li>${w}</li>`)}</ul>` : ''}
     <section class="card no-print">
       <div class="grid4">
-        ${[['hoursPerDay', 'Hours in a day'], ['otMultiplier', 'Overtime x'], ['monthDays', 'Days in a month'], ['pensionEmployee', 'Pension, employee %'], ['pensionEmployer', 'Pension, employer %']].map(([k, label]) => html`
-          <label>${label} ${draft ? html`<input type="number" min="0" step="any" data-chg="setting" data-f="${k}" data-fk="ps-${k}" value="${s[k]}">` : html`<b>${s[k]}</b>`}</label>`)}
+        ${[['hoursPerDay', 'Hours in a day'], ['otMultiplier', 'Overtime x'], ['monthDays', 'Days in a month'], ['pensionEmployee', 'Pension, employee %'], ['pensionEmployer', 'Pension, employer %'], ...(etbIn(run) ? [['etbPerUsd', 'ETB per 1 USD, this pay']] : [])].map(([k, label]) => html`
+          <label>${label} ${draft ? html`<input type="number" min="0" step="any" data-chg="setting" data-f="${k}" data-fk="ps-${k}" value="${s[k] ?? ''}">` : html`<b>${s[k] ?? ''}</b>`}</label>`)}
       </div>
       <div style="overflow-x:auto"><table class="table compact">
         <thead><tr><th>Employee</th><th>Pay</th><th class="r">Days worked</th><th class="r">Overtime h</th><th class="r">Unpaid days</th><th class="r">Allowances</th><th class="r">Income tax</th><th class="r">Other deductions</th><th class="r">Net pay</th><th></th></tr></thead>
@@ -129,8 +132,9 @@ function detail(run, c) {
           <td class="r">${m(r.basic)}</td><td class="r">${m(r.overtime)}</td><td class="r">${m(r.allowances)}</td><td class="r">${m(r.gross)}</td>
           <td class="r">${m(r.pensionEmployee)}</td><td class="r">${m(r.tax)}</td><td class="r">${m(r.other)}</td><td class="r"><b>${m(r.net)}</b></td></tr>`; })}</tbody></table>
       <h3 class="pay-k">Totals, by currency</h3>
-      <table class="dsr-t"><thead><tr><th>Currency</th><th class="r">People</th><th class="r">Gross</th><th class="r">Deductions</th><th class="r">Net pay</th><th class="r">Employer pension</th><th class="r">Cost to company</th></tr></thead>
-        <tbody>${tot.map(t => html`<tr><td>${t.currency || '—'}</td><td class="r">${t.people}</td><td class="r">${m(t.gross)}</td><td class="r">${m(t.gross - t.net)}</td><td class="r"><b>${m(t.net)}</b></td><td class="r">${m(t.pensionEmployer)}</td><td class="r">${m(t.cost)}</td></tr>`)}</tbody></table>
+      <table class="dsr-t"><thead><tr><th>Currency</th><th class="r">People</th><th class="r">Gross</th><th class="r">Deductions</th><th class="r">Net pay</th><th class="r">Employer pension</th><th class="r">Cost to company</th><th class="r">Cost in USD</th></tr></thead>
+        <tbody>${tot.map(t => html`<tr><td>${t.currency || '—'}</td><td class="r">${t.people}</td><td class="r">${m(t.gross)}</td><td class="r">${m(t.gross - t.net)}</td><td class="r"><b>${m(t.net)}</b></td><td class="r">${m(t.pensionEmployer)}</td><td class="r">${m(t.cost)}</td><td class="r">${t.currency === 'USD' || s.etbPerUsd > 0 ? m(usdOf(t.cost, t.currency, s.etbPerUsd)) : html`<span class="bad">rate missing</span>`}</td></tr>`)}</tbody></table>
+      ${etbIn(run) && s.etbPerUsd > 0 ? html`<p class="muted p-notes">ETB at ${s.etbPerUsd} per 1 USD, the rate of this pay.</p>` : ''}
       <p class="muted p-notes">Overtime is paid at ${s.otMultiplier} x the hourly rate, with a working day of ${s.hoursPerDay} hours${s.pensionEmployee || s.pensionEmployer ? `. Pension: ${s.pensionEmployee}% employee, ${s.pensionEmployer}% employer, on basic pay` : ''}.</p>
       ${signoff([{ label: 'Prepared by' }, { label: 'Approved by', name: run.approvedBy || '' }])}
     </div></section>`;

@@ -1,6 +1,7 @@
 // Finance: the whole company on one screen, across every project. Other
 // projects' data is read when the screen opens (and on Refresh), not kept live.
 
+import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { companyFinance, invoiceExport, entryExport } from '../engine/finance.js';
 import { stockAndSales, tradeSummary } from '../engine/trade.js';
@@ -111,7 +112,7 @@ const figures = c => companyFinance(store.projects, data.workspaces, c.global, c
 export function render(c) {
   if (part === 'trading') return tradingPage(c);
   const cur = currency || c.global.fx.base;
-  const currencies = Object.keys(c.global.fx.rates).map(k => [k, k]);
+  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
   const toolbar = html`
     <div class="toolbar">
       <h2>All projects</h2>
@@ -213,7 +214,7 @@ export function render(c) {
 /** The trading side on its own: what is in stock, on the way, sold and still owed. Nothing from the projects is in it. */
 function tradingPage(c) {
   const cur = currency || c.global.fx.base;
-  const currencies = Object.keys(c.global.fx.rates).map(k => [k, k]);
+  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
   const m = v => money(v, cur);
   const st = stockAndSales(c.company, c.global.fx, cur);
   const ship = tradeSummary(c.company.shipments, c.global.fx, c.today, cur);

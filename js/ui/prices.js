@@ -1,11 +1,11 @@
 import { store } from '../core/store.js';
-import { ALLOWED, isForeign, foreignSummary, convertGlobal, convertProject, convertCompany } from '../engine/currencies.js';
+import { isForeign, foreignSummary, convertGlobal, convertProject, convertCompany } from '../engine/currencies.js';
 import { uid } from '../core/util.js';
 import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
 import * as fieldusers from './fieldusers.js';
-import { PROJECT_TYPES } from '../core/seed.js';
+import { typesOf } from '../core/seed.js';
 import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
 import { record as recordFault } from '../core/diagnostics.js';
@@ -21,7 +21,7 @@ import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
 import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { focusOn as focusPerson, relink } from './hr.js';
 import { describe as describeSession } from '../engine/session.js';
-import { targetFor, parseDates } from '../engine/calendar.js';
+import { targetFor, parseDates, companyCalendar, ownWeekOf, ownOffOf, projectPatch } from '../engine/calendar.js';
 import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUsers, LIMITS } from '../engine/deployment.js';
 import { money, num, fmtFull } from '../core/util.js';
 import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
@@ -50,13 +50,14 @@ export function indexText(c) {
   } finally { ({ projTab, accTab, linkTab } = keep); }
   return parts.join(' ');
 }
-const SECTION_OF = { fx: 'catalog', company: 'company', monthly: 'company', field: 'links', import: 'links' };
+const SECTION_OF = { fx: 'catalog', company: 'company', calendar: 'company', monthly: 'company', field: 'links', import: 'links' };
 /** Jump to the tab that holds a card (Setup's "Do this" buttons use the card's id). */
-const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team', rates: 'week' };
+const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team' };
 export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
 // Two pages are split in tabs: This project (Basics, Site, Team, Calendar and rates) and People and access
 // (People, You, Problems). One tab is on screen at a time, so a page is short and nothing has to be scrolled past.
-const PROJ_TABS = [['basics', 'Basics'], ['site', 'Site and deployment'], ['team', 'Team'], ['week', 'Calendar and rates']];
+// v0.25.0: the calendar went to Admin settings, Company; day rates and the pay period to Payments
+const PROJ_TABS = [['basics', 'Basics'], ['site', 'Site and deployment'], ['team', 'Team']];
 let projTab = 'basics';
 let accTab = 'people';
 let linkTab = 'field';
@@ -76,7 +77,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // The pages of Settings, listed down the left with their icons, the way a settings screen
 // usually is: the list stays put and only the right side changes.
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
-  ['catalog', 'Currencies', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
+  ['catalog', 'Currency', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
 const link = ([k, label, ic]) => html`
       <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
 // v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)
@@ -121,6 +122,8 @@ let rulesNotice = '';
 let transferNotice = '';
 let coOwnerNotice = '';
 let fxNotice = '';
+let fxPlan = null;      // v0.25.0: the list of what converting would change, shown before anything is saved
+let calFor = '';        // v0.25.0: the project whose exceptions are open on the company calendar
 let coOwnerBad = false;
 let pack = null;        // a data pack that has been chosen and is waiting for confirmation
 let packFor = '';       // the project that was open when it was chosen: it is imported there and nowhere else
@@ -440,7 +443,6 @@ function linksPage(c) {
 /** The open project, as four tabs. */
 function projectPage(c) {
   const { global: g, project: p, ws } = c;
-  const currencies = Object.keys(g.fx.rates).filter(k => ALLOWED.includes(k)).map(k => [k, k]);
   const linked = assignedUsers(store.users, p.id).length;
   const t = targetFor(p, c.ws, c.today);
   const reported = t.nonWorking.filter(d => !(p.nonWorking || []).includes(d));
@@ -451,19 +453,12 @@ function projectPage(c) {
       ${box('project', 'The project', html`
         <label>Project name <input data-chg="project" data-f="name" data-fk="pj-name" value="${p.name}"></label>
         <div class="grid2">
-          <label>Type of work <select data-chg="project" data-f="type" data-fk="pj-type">${options(PROJECT_TYPES, p.type || 'steel')}</select></label>
-          <label>Currency <select data-chg="project" data-f="currency" data-fk="pj-cur">${options(currencies, p.currency)}</select></label>
+          <label>Type of work <select data-chg="ptype" data-fk="pj-type">${options([...typesOf(g), ['__new', 'Add new…']], p.type || 'steel')}</select></label>
+          <label title="Contracts, costs and payments to the company are in USD only">Currency <input value="USD" disabled></label>
           <label>Budget <input type="number" min="0" step="any" data-chg="project" data-f="budget" data-fk="pj-budget" value="${p.budget}"></label>
           <label>Contract value <input type="number" min="0" step="any" data-chg="project" data-f="contractValue" data-fk="pj-contract" value="${p.contractValue}"></label>
           <label title="The labour line of the budget: crew and staff pay. Printed on the labour cost sheet (Payments).">Labour budget <input type="number" min="0" step="any" data-chg="project" data-f="labourBudget" data-fk="pj-labour" value="${p.labourBudget || ''}"></label>
         </div>`)}
-      <div class="set-stack">
-        ${box('markups', 'Markups %', html`<div class="grid4">${MARKUPS.map(([k, label]) => html`
-          <label>${label} <input type="number" min="0" step="any" data-chg="markup" data-k="${k}" data-fk="mk-${k}" value="${p.markups[k]}"></label>`)}</div>`)}
-        ${box('pages', 'Pages this project uses', html`
-          ${pills(SWITCHABLE.map(k => html`<label class="check pill"><input type="checkbox" data-chg="pageOn" data-p="${k}" ${pageOn(p, k) ? 'checked' : ''}> ${PAGE_NAME[k]}</label>`))}
-          <p class="muted">Untick a page this project does not need. It leaves the menu for everyone; the records stay.</p>`)}
-      </div>
     </div>
     <div class="actions left"><button class="btn danger" data-act="deleteProject">Delete this project</button></div>`;
 
@@ -478,9 +473,6 @@ function projectPage(c) {
           <label>Layout or drawings link <input type="url" data-chg="project" data-f="layoutLink" data-fk="pj-layout" value="${p.layoutLink || ''}" placeholder="https://..."></label>
         </div>
         <label>Scope of work <textarea data-chg="project" data-f="scope" data-fk="pj-scope" maxlength="${LIMITS.scope}" rows="4" placeholder="What this project covers">${p.scope || ''}</textarea></label>`)}
-      ${box('acts', 'Activity types for the daily report', html`
-        <textarea data-chg="activities" data-fk="pj-acts" rows="9" aria-label="Activity types, one per line">${activitiesOf(p).join('\n')}</textarea>
-        <p class="muted">One per line, at most ${LIMITS.activities} of ${LIMITS.activity} characters. They go to Field Report with the project's other lists. Links must start with http:// or https://.</p>`)}
     </div>`;
 
   const team = html`
@@ -493,7 +485,7 @@ function projectPage(c) {
             <span class="muted">${m.contact || ''}</span>
             <span title="${levelLabel(levelOf(m))}">Tier ${levelOf(m).slice(1)}</span>
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
-            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${p.currency}` : 'No rate'}</span>
+            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${p.payCurrency || p.currency}` : 'No rate'}</span>
             ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
           </li>` : html`
           <li class="team-row">
@@ -502,10 +494,10 @@ function projectPage(c) {
             <input data-chg="member" data-id="${m.id}" data-f="contact" data-fk="tm-c-${m.id}" value="${m.contact || ''}" placeholder="Email or phone" aria-label="Contact of ${m.name}">
             <select data-chg="member" data-id="${m.id}" data-f="level" data-fk="tm-l-${m.id}" aria-label="Evaluation tier of ${m.name}" title="Decides who evaluates this person: the tier above">${options(SHORT_TIERS, levelOf(m))}</select>
             <label class="check" title="Untick when the person leaves this project"><input type="checkbox" data-chg="memberActive" data-id="${m.id}" ${m.active === false ? '' : 'checked'}> On site</label>
-            <input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="Day rate" title="Day rate in ${p.currency}" aria-label="Day rate of ${m.name}">
+            <input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="Day rate" title="Day rate in ${p.payCurrency || p.currency}" aria-label="Day rate of ${m.name}">
             <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button>
           </li>`)}</ul>
-          <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.currency}.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
+          <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.payCurrency || p.currency}; all of them are on Payments, Day rates and pay period.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
         ${store.isAdmin && c.company.staff.some(x => x.status !== 'left' && !assignmentOf(x, p.id)) ? html`<form data-form="fromDirectory" class="entry">
           <select name="personId" aria-label="Person from the directory">${options(c.company.staff.filter(x => x.status !== 'left' && !assignmentOf(x, p.id)).map(x => [x.id, x.title ? `${x.name}, ${x.title}` : x.name]), null)}</select>
           <select name="role" aria-label="Role here"><option value="">Role: same as their job</option>${groupOptions(positionGroups(), null)}</select>
@@ -528,38 +520,11 @@ function projectPage(c) {
           </li>`)}</ul>` : html`<p class="muted">Nobody else has access yet. Add people under People and access.</p>`}`)}
     </div>`;
 
-  const week = html`
-    <div class="set-cols">
-      <div class="set-stack">
-        ${box('week', 'Working week', html`
-          ${pills(WEEKDAYS.map((d, i) => html`<label class="check pill"><input type="checkbox" data-chg="weekday" data-d="${i}" ${p.workDays.includes(i) ? 'checked' : ''}> ${d}</label>`))}`)}
-        ${box('payperiod', 'Pay period of the crew', html`
-          <p class="muted">How often the site crew of this project is paid. The Attendance sheet shows the same period.</p>
-          <div class="grid2">
-            <label>Paid <select data-chg="payPeriod" data-fk="pp-kind">${options(PAY_PERIODS, payPeriodOf(p))}</select></label>
-            ${payPeriodOf(p) === 'monthly' ? '' : html`<label>A pay week starts on <select data-chg="payWeekStart" data-fk="pp-start">${options(WEEKDAYS.map((d, i) => [String(i), d]), String(weekStartOf(p)))}</select></label>`}
-          </div>`)}
-        ${box('calendar', 'Non-working dates and target date', html`
-          <label>One date per line (YYYY-MM-DD): holidays and days nobody works
-            <textarea data-chg="nonWorking" data-fk="pj-nw" rows="3" placeholder="2026-11-12">${(p.nonWorking || []).join('\n')}</textarea></label>
-          <p class="muted">Weekly off days: ${t.nwDow.length ? t.nwDow.map(d => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d]).join(', ') : 'none'}. ${reported.length ? `Also counted: ${reported.length} day${reported.length === 1 ? '' : 's'} the site reported no work.` : ''}</p>
-          ${t.targetDate ? html`<p>Target date: <b>${fmtFull(t.targetDate)}</b>, ${t.plannedWorkingDays} planned working days, ${t.workingDaysLeft} left. Each non-working day moves it one working day later.</p>` : html`<p class="muted">The target date appears once the schedule has tasks.</p>`}`)}
-      </div>
-      ${box('rates', 'Labour day rates', html`
-        <div class="grid2">${Object.entries(ws.laborRates).map(([trade, rate], i) => html`
-          <label>${trade} <input type="number" min="0" step="any" data-chg="labor" data-t="${trade}" data-fk="lb-${i}" value="${rate}"></label>`)}</div>
-        <form data-form="trade" class="entry">
-          <input name="trade" placeholder="New trade" required aria-label="Trade" class="wide">
-          <input type="number" name="rate" min="0" step="any" placeholder="Day rate" required aria-label="Day rate" class="amount">
-          <button class="btn">Add</button>
-        </form>`, p.currency)}
-    </div>`;
-
   return html`<div class="side settings">
     ${projectBar(c, 'Setting up')}
     <p class="muted project-bar-sub">${plural(linked, 'person', 'people')} linked. ${p.currency}. Everything on this page is for this project only.</p>
     ${tabStrip(tabs, projTab, 'projTab')}
-    ${projTab === 'site' ? site : projTab === 'team' ? team : projTab === 'week' ? week : basics}
+    ${projTab === 'site' ? site : projTab === 'team' ? team : basics}
   </div>`;
 }
 
@@ -594,6 +559,42 @@ function appsPage(c) {
       <p class="muted">Who may open each app is set under People and access. Pages a single project does not need are switched off under This project.</p>
     </div>`;
 }
+/** v0.25.0: save the company calendar and write it on every project (each keeps its own week and days off). */
+function saveCalendar(fn) {
+  const old = companyCalendar(store.global, store.projects);
+  const cal = structuredClone(old);
+  fn(cal);
+  store.updateGlobal(g => { g.calendar = cal; });
+  for (const p of store.projects) store.patchProject(p.id, projectPatch(p, old, cal));
+}
+/** One project's exceptions: its own working week, its own days off. */
+function saveOwn(id, change) {
+  const p = store.projects.find(x => x.id === id);
+  if (!p) return;
+  const cal = companyCalendar(store.global, store.projects);
+  if (!store.global.calendar) store.updateGlobal(g => { g.calendar = cal; });
+  store.patchProject(id, projectPatch(p, cal, cal, change));
+}
+/** The company calendar (Admin settings, Company): the week, the holidays, and each project's exceptions. */
+function calendarPanel(c) {
+  const cal = companyCalendar(c.global, store.projects);
+  const p = store.projects.find(x => x.id === calFor) || c.project;
+  const t = p.id === c.project.id ? targetFor(p, c.ws, c.today) : null;
+  const own = ownWeekOf(p, cal);
+  return html`
+    <p class="muted">Every project works this week and stops on these holidays, unless it has exceptions of its own below. The schedule, the target date, pay and the calendar sent to Field Report all use it.</p>
+    <h4>Working week</h4>
+    ${pills(WEEKDAYS.map((d, i) => html`<label class="check pill"><input type="checkbox" data-chg="calWeekday" data-d="${i}" ${cal.workDays.includes(i) ? 'checked' : ''}> ${d}</label>`))}
+    <label>Public holidays and days nobody works, one date per line (YYYY-MM-DD)
+      <textarea data-chg="calHolidays" data-fk="cal-hol" rows="4" placeholder="2026-11-12">${cal.holidays.join('\n')}</textarea></label>
+    <h4>Exceptions of one project</h4>
+    <label>Project <select data-chg="calProject" data-fk="cal-p">${options(store.projects.map(x => [x.id, x.name]), p.id)}</select></label>
+    <label class="check"><input type="checkbox" data-chg="calOwnWeek" data-p="${p.id}" ${own ? 'checked' : ''}> Its own working week</label>
+    ${own ? pills(WEEKDAYS.map((d, i) => html`<label class="check pill"><input type="checkbox" data-chg="calOwnDay" data-p="${p.id}" data-d="${i}" ${(p.workDays || []).includes(i) ? 'checked' : ''}> ${d}</label>`)) : ''}
+    <label>Its own days off, one date per line
+      <textarea data-chg="calOwnOff" data-p="${p.id}" data-fk="cal-own-${p.id}" rows="3" placeholder="2026-11-20">${ownOffOf(p, cal).join('\n')}</textarea></label>
+    ${t ? (t.targetDate ? html`<p>Target date of ${p.name}: <b>${fmtFull(t.targetDate)}</b>, ${t.plannedWorkingDays} planned working days, ${t.workingDaysLeft} left. Each day off moves it one working day later.</p>` : html`<p class="muted">The target date of ${p.name} appears once its schedule has tasks.</p>`) : html`<p class="muted">Open ${p.name} to see its target date here.</p>`}`;
+}
 const chipText = text => html`<span class="chip ok">${text}</span>`;
 
 export function render(c) {
@@ -608,24 +609,25 @@ export function render(c) {
   return html`
     ${nav()}
     <div class="side settings">
-    ${panel('fx', 'Exchange rates', Object.keys(g.fx.rates).join(', '), () => html`
-        <p class="muted">Central Hub works in ETB, USD and AED. Units per 1 ${g.fx.base}. Sample values: enter your own.</p>
-        <div class="grid2">${Object.entries(g.fx.rates).map(([k, v]) => html`
-          <label>${k} <input type="number" min="0" step="any" data-chg="fx" data-k="${k}" data-fk="fx-${k}" value="${v}" ${k === g.fx.base ? 'disabled' : ''}></label>`)}</div>
+    ${panel('fx', 'Currency', 'USD; staff pay in USD or ETB', () => html`
+        <p class="muted">Contracts, costs, invoices and payments to the company are in USD only. Staff pay is in USD or ETB, chosen per person in their HR agreement (and for day rates, on Payments). Each ETB pay keeps its own ETB-to-USD rate, typed with that pay.</p>
         ${(() => {
           const left = [...foreignSummary(g, store.projects, store.company), ...((store.ws?.ledger || []).some(e => isForeign(e.currency)) ? [`Costs of ${p.name} in another currency`] : [])];
           return left.length ? html`<div class="card"><b>Still in other currencies</b>
             <ul>${left.map(r => html`<li>${r}</li>`)}</ul>
-            <p class="muted">Converting changes them to USD at the rates above, for every project. The original amount and currency stay in a note on each record. Export a backup first (Backup, Export JSON).</p>
-            ${store.isAdmin && !store.readOnly ? html`<button class="btn primary" data-act="convertCurrencies">Convert to USD</button>` : ''}
-          </div>` : html`<p class="ok">Everything is in ETB, USD or AED.</p>`;
+            <p class="muted">Each record is converted to USD at the rate saved on it; one with no rate of its own uses the rate below. The original amount and currency stay in a note on each record. Export a backup first (Backup, Export JSON).</p>
+            <div class="grid2">${Object.entries(g.fx.rates).filter(([k]) => k !== 'USD').map(([k, v]) => html`
+              <label>${k} per 1 USD <input type="number" min="0" step="any" data-chg="fx" data-k="${k}" data-fk="fx-${k}" value="${v}"></label>`)}</div>
+            ${store.isAdmin && !store.readOnly ? html`<button class="btn" data-act="planCurrencies">Show the list of changes</button>` : ''}
+            ${fxPlan ? html`<div class="fx-plan"><h4>What converting changes (${fxPlan.length})</h4>
+              <ul class="plain">${fxPlan.map(x => html`<li>${x.text}</li>`)}</ul>
+              <p class="muted">Nothing is saved until you press Convert.</p>
+              <button class="btn primary" data-act="convertCurrencies">Convert these to USD</button> <button class="btn ghost" data-act="closePlan">Cancel</button></div>` : ''}
+          </div>` : html`<p class="ok">Everything is in USD, and staff pay in USD or ETB.</p>`;
         })()}
-        ${fxNotice ? html`<p class="ok">${fxNotice}</p>` : ''}
-        ${ALLOWED.some(k => !g.fx.rates[k]) ? html`<form data-form="currency" class="entry">
-          <select name="code" aria-label="Currency">${options(ALLOWED.filter(k => !g.fx.rates[k]).map(k => [k, k]))}</select>
-          <input type="number" name="rate" min="0" step="any" placeholder="Per 1 ${g.fx.base}" required aria-label="Units per 1 ${g.fx.base}" class="amount">
-          <button class="btn">Add</button>
-        </form>` : ''}`)}
+        ${fxNotice ? html`<p class="ok">${fxNotice}</p>` : ''}`)}
+
+    ${panel('calendar', 'Company calendar', 'The working week and holidays of every project', () => calendarPanel(c))}
 
     ${panel('company', 'Company letterhead', co.name || 'Name, address, bank details and logo for printed documents', () => html`
         <p class="muted">Printed at the top of every invoice, quotation, purchase order and report. Shared by all projects.</p>
@@ -723,21 +725,33 @@ export const actions = {
   /** End someone's session, for example when their phone is lost, so they can sign in on another device. */
   resetSession(el) { if (confirm(`End the session of ${el.dataset.id}? They are signed out on that device and can sign in on another.`)) store.resetSession(el.dataset.id); },
   /** Everything in another currency to USD, at today's table: every project, the company records, then the shared settings. */
+  /** v0.25.0: the list of every record that would change, worked out without saving anything. */
+  async planCurrencies(el, c) {
+    if (!store.isAdmin) return;
+    const fx = store.global.fx, on = c.today, list = [];
+    for (const p of [...store.projects]) list.push(...convertProject(p, await store.readOther(p.id), fx, on).changes);
+    list.push(...convertCompany(store.company, fx, on).changes, ...convertGlobal(store.global, on).changes);
+    fxPlan = list.map(x => (typeof x === 'string' ? { text: x } : x));
+    fxNotice = fxPlan.length ? '' : 'Nothing to convert.';
+    store.notify();
+  },
+  closePlan() { fxPlan = null; },
   async convertCurrencies(el, c) {
-    if (!store.isAdmin || store.readOnly) return;
-    if (!confirm('Convert everything that is in another currency to USD, at the rates in this table?\n\nThis changes every project. The original amount and currency stay in a note on each record. Export a backup first if you have not.')) return;
+    if (!store.isAdmin || store.readOnly || !fxPlan) return;
+    if (!confirm(`Convert the ${fxPlan.length} items on the list to USD?\n\nThe original amount and currency stay in a note on each record. Export a backup first if you have not.`)) return;
+    fxPlan = null;
     const fx = structuredClone(store.global.fx), on = c.today;
     let n = 0;
     for (const p of [...store.projects]) {
       let next = null;
       await store.updateOther(p.id, ws => { const r = convertProject(p, ws, fx, on); n += r.changes.length; next = r.project; Object.assign(ws, r.ws); });
-      if (next && next !== p) store.patchProject(p.id, { currency: next.currency, budget: next.budget, contractValue: next.contractValue, fxFrom: next.fxFrom });
+      if (next && next !== p) store.patchProject(p.id, { currency: next.currency, budget: next.budget, labourBudget: next.labourBudget, contractValue: next.contractValue, fxFrom: next.fxFrom, ...(next.payCurrency ? { payCurrency: next.payCurrency } : {}) });
     }
     const co = convertCompany(store.company, fx, on);
     if (co.changes.length) store.updateCompany(x => Object.assign(x, co.sections));
     const gl = convertGlobal(store.global, on);
     store.updateGlobal(g => { g.fx = gl.global.fx; g.regions = gl.global.regions; g.prices = gl.global.prices; });
-    fxNotice = `Converted to USD: ${n + co.changes.length + gl.changes.length} item${n + co.changes.length + gl.changes.length === 1 ? '' : 's'}. The rate table now holds ETB, USD and AED.`;
+    fxNotice = `Converted to USD: ${n + co.changes.length + gl.changes.length} item${n + co.changes.length + gl.changes.length === 1 ? '' : 's'}. Staff pay stays in USD or ETB.`;
     store.notify();
   },
   removeCoOwner(el) {
@@ -916,7 +930,28 @@ export const changes = {
     if (f === 'name' && !value.trim()) return;
     store.updateProject(p => { p[f] = typeof value === 'number' ? Math.max(0, value) : value; });
   },
-  markup(el) { store.updateProject(p => { p.markups[el.dataset.k] = Math.max(0, field(el)); }); },
+  /** v0.25.0: the type of work, or a new one the Admin names. */
+  ptype(el) {
+    if (el.value !== '__new') { store.updateProject(p => { p.type = el.value; }); return; }
+    const name = (prompt('Name of the new type of work') || '').trim().slice(0, 60);
+    if (!name) { store.notify(); return; }
+    const id = `t_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`;
+    store.updateGlobal(g => { if (!typesOf(g).some(([k]) => k === id)) g.projectTypes = [...(g.projectTypes || []), [id, name]]; });
+    store.updateProject(p => { p.type = id; });
+  },
+  calProject(el) { calFor = el.value; },
+  /** The company's working week or holidays: written on every project, each keeping its own exceptions. */
+  calWeekday(el) { saveCalendar(cal => { const days = cal.workDays.filter(x => x !== +el.dataset.d); if (el.checked) days.push(+el.dataset.d); if (days.length) cal.workDays = days.sort(); }); },
+  calHolidays(el) { saveCalendar(cal => { cal.holidays = parseDates(el.value); }); },
+  calOwnWeek(el) { saveOwn(el.dataset.p, { ownWeek: el.checked }); },
+  calOwnDay(el) {
+    const p = store.projects.find(x => x.id === el.dataset.p);
+    if (!p) return;
+    const days = (p.workDays || []).filter(x => x !== +el.dataset.d);
+    if (el.checked) days.push(+el.dataset.d);
+    if (days.length) saveOwn(p.id, { ownWeek: true, week: days });
+  },
+  calOwnOff(el) { saveOwn(el.dataset.p, { ownOff: parseDates(el.value) }); },
   weekday(el) {
     const d = +el.dataset.d;
     store.updateProject(p => {

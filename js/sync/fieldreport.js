@@ -96,7 +96,7 @@ export async function reviewFieldReport({ name, decision, text }) {
 }
 
 /**
- * Is the server's last Field Report import (system/fieldImport, written every 5 minutes by functions/) recent
+ * Is the server's last Field Report import (system/fieldImport, written every 2 minutes by functions/ since v0.24.1) recent
  * enough for browsers to leave the checking to it? Older than 15 minutes, the browser checks again itself.
  */
 export const serverFresh = (status, now = Date.now(), minutes = 15) =>

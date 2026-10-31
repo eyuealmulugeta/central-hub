@@ -554,7 +554,7 @@ export const submits = {
           if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) { rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' }; delete rec.tellSite; } });
           replyNotice = `${done} The site is notified and the report is locked in Field Report.`;
         })
-        .catch(err => { replyNotice = `${done} The site was not told yet (${err.message}). Central Hub tries again every 5 minutes, or press Approve under the report.`; })
+        .catch(err => { replyNotice = `${done} The site was not told yet (${err.message}). Central Hub tries again every 2 minutes, or press Approve under the report.`; })
         .finally(() => { sending.delete(id); store.notify(); });
       return;
     }
@@ -735,14 +735,14 @@ export const actions = {
 };
 
 const autoReady = (project, cfg) => !!((fieldServer.call || (cfg.url && cfg.key)) && project?.fieldCode && project.fieldLabel);
-// the server's import status, read at most once a minute (Step 1: the server imports every 5 minutes)
+// the server's import status, read at most once a minute (v0.24.1: the server imports every 2 minutes)
 let server = null, serverReadAt = 0;
 const hhmm = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 function autoLine(project, cfg) {
   if (serverFresh(server) && project?.fieldCode && project.fieldLabel) {
     const mine = server.projects?.[project.id];
     return mine?.error ? `The server could not check at ${hhmm(mine.checkedAt)}: ${mine.error}`
-      : `Checked by the server every 5 minutes, last at ${hhmm(mine?.checkedAt || server.lastRun)}`;
+      : `Checked by the server every 2 minutes, last at ${hhmm(mine?.checkedAt || server.lastRun)}`;
   }
   return !autoReady(project, cfg) ? ''
     : checkedAt ? `Checks every few seconds while this page is open, last at ${checkedAt}` : 'Checks every few seconds while this page is open';

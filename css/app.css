@@ -1513,3 +1513,20 @@ body.side-narrow .side-health { display: none; }
 .sigpad-canvas { flex: 1; width: 100%; min-height: 200px; background: #fff; border: 2px dashed var(--line, #bbb); border-radius: 10px; touch-action: none; cursor: crosshair; }
 .sigpad-bar { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .bin-t .note { display: block; }
+
+/* v0.31.0: on a computer, the normal size of an office app (the phone keeps its bigger text and buttons) */
+@media (min-width: 901px) {
+  body { font-size: 13px; }
+  .top h1 { font-size: 18px; }
+  h2 { font-size: 15px; }
+  .btn { min-height: 32px; padding: 0 14px; }
+  input, select, textarea { padding: 5px 8px; }
+  .kpi strong { font-size: 21px; }
+  .side-link { min-height: 32px; }
+}
+/* v0.31.0: Manpower on site as one table */
+.mp-table { max-width: 520px; }
+.mp-table td, .mp-table th { padding: 4px 8px; }
+.mp-table .num { text-align: right; width: 120px; }
+.mp-table input { width: 90px; text-align: right; }
+.mp-table tfoot th { border-top: 1px solid var(--line); }

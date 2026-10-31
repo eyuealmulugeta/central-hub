@@ -25,6 +25,7 @@ export const ALIASES = {
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },
   attendance: { view: 'attendance', title: 'Attendance sheet', switch: 'reports' },
+  spotlight: { view: 'reports', title: 'Spotlight', preset: { spot: true }, switch: 'reports' },   // v0.31.0, Admin only
 };
 
 /** Old addresses (links, alerts, bookmarks) that now belong to a page of the new menu. */
@@ -49,7 +50,7 @@ export const MENUS = {
   installation: [
     today,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
-    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance'] },
+    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight'] },
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewletters', 'evaluation', 'directory', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'cashflow', 'income', 'expenses', 'summary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },

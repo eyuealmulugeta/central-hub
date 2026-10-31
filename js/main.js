@@ -786,7 +786,7 @@ function start() {
       setTimeout(quick, FAST_PULL_MS);
     };
     setTimeout(quick, FAST_PULL_MS);
-    store.subscribe(() => refresh());
+    store.subscribe(() => { refresh(); reports.watchCrew(); });   // v0.31.0: allocated crew goes to Field Report
     addEventListener('storage', e => { if (e.key === 'sf:company' || e.key === 'sf:booking') store.reloadCompany(); });
     store.onError(toast);
     addEventListener('hashchange', () => refresh());

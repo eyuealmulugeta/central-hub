@@ -162,7 +162,6 @@ function sheet(r, c, { reviewing: inReview = false } = {}) {
     ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
     ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
     ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, photoGrid(r, c), '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
-    ${pdfLink(r, c)}
     ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
   </div>`;
 }
@@ -271,7 +270,12 @@ function replyBox(r, c) {
   </div>`;
 }
 
+/** v0.31.0: opened as Spotlight (its own tab) or as the Daily field report. */
+let spotPage = false;
+export function preset(p = {}) { spotPage = !!p.spot; }
+
 export function render(c) {
+  if (spotPage) return store.isAdmin ? html`<div class="side">${spotCard(c)}</div>` : '';
   const { ws, project } = c;
   const cur = underReview(ws);
   const tasks = reportable(c);
@@ -354,13 +358,11 @@ export function render(c) {
           <textarea name="summary" rows="3" placeholder="e.g. Installed 25 pcs roof sheeting between Axis 04 and 08"></textarea></label>`}
 
         <h3>Manpower on site</h3>
-        <div class="grid4">${trades.map((t, i) => html`
-          <label>${t}
-            <span class="pair">
-              <input type="number" name="m_${i}" min="0" value="${crew.get(t)?.count || 0}" title="People on site" aria-label="${t}, people on site">
-              <input type="number" name="o_${i}" min="0" step="any" placeholder="OT h" value="${crew.get(t)?.ot || ''}" title="Total overtime hours" aria-label="${t}, overtime hours">
-            </span>
-          </label>`)}</div>
+        ${trades.length ? html`<table class="table compact mp-table"><thead><tr><th>Trade</th><th class="num">People</th><th class="num">Overtime, h</th></tr></thead>
+          <tbody>${trades.map((t, i) => html`<tr><td>${t}</td>
+            <td class="num"><input type="number" name="m_${i}" min="0" value="${crew.get(t)?.count || 0}" aria-label="${t}, people on site"></td>
+            <td class="num"><input type="number" name="o_${i}" min="0" step="any" placeholder="0" value="${crew.get(t)?.ot || ''}" aria-label="${t}, overtime hours"></td></tr>`)}</tbody>
+          <tfoot><tr><th>Total</th><th class="num">${trades.reduce((n, t) => n + (Number(crew.get(t)?.count) || 0), 0)}</th><th class="num">${trades.reduce((n, t) => n + (Number(crew.get(t)?.ot) || 0), 0) || ''}</th></tr></tfoot></table>` : ''}
         ${trades.length ? '' : html`<p class="muted">Add trades and their day rates under Settings, Labour day rates.</p>`}
 
         ${cur ? '' : html`
@@ -453,12 +455,12 @@ export function render(c) {
       </div>`;
   }
   const now = tab || (c.role === 'site' ? 'enter' : 'list');
-  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report'], ...(store.isAdmin ? [['spot', 'Spotlight']] : [])];
+  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report']];   // v0.31.0: Spotlight has its own tab at the top
   // one column: Field Report first, then the tabs
   return html`<div class="side">${fieldCard}
     <div class="emp-tabs set-tabs" role="tablist">${tabs.map(([k, label, n]) => html`
       <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="repTab" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>
-    ${now === 'spot' && store.isAdmin ? spotCard(c) : now === 'enter' || back ? formCard : listCard}</div>`;
+    ${now === 'enter' || back ? formCard : listCard}</div>`;
 }
 
 /** The report as the Daily Site Report, with Print, Email as PDF and WhatsApp. The attendance page is the office's only. */
@@ -864,6 +866,23 @@ async function pullOther(project) {
   }
 }
 
+/**
+ * v0.31.0: the crew allocated in Central Hub reaches Field Report by itself. A while after a change, when the site roll
+ * of the open project differs from the one last sent, the lists go again (only once they were sent from Settings).
+ */
+let crewTimer = 0;
+export function watchCrew() {
+  clearTimeout(crewTimer);
+  crewTimer = setTimeout(() => {
+    const p = store.project;
+    if (!p?.fieldCode || !p.fieldSetupAt || store.role === 'site' || !store.ws?.team) return;
+    let key;
+    try { key = JSON.stringify(buildSetup({ ...derive(p, store.ws, store.global, todayISO()), people: store.users }, todayISO()).staff); } catch { return; }
+    if (key === p.fieldCrewKey) return;
+    resendSetup().then(ok => { if (ok) store.updateProject(x => { x.fieldCrewKey = key; }); });
+  }, 4000);
+}
+
 /** Send the project's lists to Field Report again, quietly, when something that changes them came in (a no-work day). */
 async function resendSetup() {
   const project = store.project;
@@ -872,7 +891,8 @@ async function resendSetup() {
     const c = derive(project, store.ws, store.global, todayISO());
     await sendSetup(buildSetup({ ...c, people: store.users }, todayISO()));
     store.updateProject(p => { p.fieldSetupAt = todayISO(); });
-  } catch (err) { console.warn('The lists could not be sent again:', err.message); }
+    return true;
+  } catch (err) { console.warn('The lists could not be sent again:', err.message); return false; }
 }
 
 async function pullReports(quiet) {

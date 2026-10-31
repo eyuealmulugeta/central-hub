@@ -14,7 +14,7 @@ export const COMPANY_PAGES = ['finance', 'contracts'];
 export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'];
 /** v0.24.0: Settings in two: My settings (everyone) and the Admin settings (the rest). */
 export const MY_SETTINGS = ['mine'];
-export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', ...SETTINGS_PAGES.filter(k => !MY_SETTINGS.includes(k))];   // notifications: v0.23.0
+export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', 'spotlight', ...SETTINGS_PAGES.filter(k => !MY_SETTINGS.includes(k))];   // notifications: v0.23.0
 
 /** What the Admin can grant to anyone but the Admin (Office and Site alike), in groups. 'trade' covers both trading pages. */
 export const GRANT_GROUPS = [

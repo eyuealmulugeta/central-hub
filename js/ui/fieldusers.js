@@ -37,6 +37,7 @@ const demoFeed = () => ({
   ],
   signups: [
     { email: 'meron@example.com', name: 'Meron Alemu', phone: '+251 911 000 111', at: '2026-10-30T07:40:00Z', ip: '196.188.50.7', loc: 'Adama, Oromia, Ethiopia', ua: 'Android 14 · Chrome', st: 'wait' },
+    { email: 'hana@example.com', name: 'Hana G', phone: '', at: '2026-10-30T09:12:00Z', ip: '', loc: '', st: 'wait' },
     { email: 'yonas@example.com', name: 'Yonas B', phone: '', at: '2026-10-28T15:10:00Z', ip: '', loc: '', st: 'rejected', by: 'Demo Admin', decidedAt: '2026-10-28T16:00:00Z', mailed: '2026-10-28T16:00:00Z' },
   ],
   inbox: [
@@ -96,7 +97,8 @@ function signupsCard(catalog) {
   if (!all.length) return '';
   return html`<h4>Sign-up requests ${wait.length ? html`<span class="chip high">${wait.length} waiting</span>` : ''}</h4>
     <p class="muted small">People who signed in to Field Report with a Google account that has no access yet. Approve gives the role and project you choose and approves the phone they asked from. Either way they get an email with the result.</p>
-    ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>` : html`<p class="muted">No request is waiting.</p>`}
+    ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>
+      ${wait.length > 1 ? html`<div class="actions left"><button class="btn small ghost" type="button" data-act="fuRejectAll" ${busy ? 'disabled' : ''}>Reject all ${wait.length}</button></div>` : ''}` : html`<p class="muted">No request is waiting.</p>`}
     ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span></li>`)}</ul></details>` : ''}`;
 }
 
@@ -185,6 +187,23 @@ const person = email => (feed?.people || []).find(p => p.email === email);
 
 export const actions = {
   fuLoad() { return load(true); },
+  /** v0.27.0: reject every waiting sign-up request at once; each person gets the email. */
+  async fuRejectAll() {
+    const wait = signupsWaiting();
+    if (!wait.length || busy || !confirm(`Reject all ${wait.length} waiting sign-up requests?
+
+Each person gets an email saying it was not approved, and cannot ask again from that account.`)) return;
+    busy = true; store.notify();
+    let done = 0, mailed = 0;
+    try {
+      for (const r of wait) {
+        const out = await apply('signupDecide', { email: r.email, decision: 'reject', by: store.profile.name || store.user?.name || 'Admin' });
+        done++; if (out?.mailed) mailed++;
+      }
+      say(true, `Rejected ${done} request${done === 1 ? '' : 's'}.${isDemo() ? ' (demo: no email is sent)' : ` ${mailed} email${mailed === 1 ? '' : 's'} sent.`}`);
+    } catch (err) { say(false, `${done} rejected, then: ${err.message}`); }
+    finally { busy = false; store.notify(); }
+  },
   /** Approve (role and project first, then the decision, which emails the person) or reject a sign-up request. */
   async fuSignup(el) {
     const r = (feed?.signups || []).find(x => x.email === el.dataset.e);

@@ -462,7 +462,7 @@ export async function fieldPhoto(proj, report, id) {
  * devDecide { email, device, decision } or (script 7.35.0) signupDecide { email, decision, by }, which emails the person the result.
  */
 export async function fieldUserDo(action, body) {
-  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide', 'crewDecide'].includes(action)) throw new Error('Unknown change.');   // crewDecide: script 7.37.0
+  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide', 'crewDecide', 'accessRules'].includes(action)) throw new Error('Unknown change.');   // crewDecide: script 7.37.0; accessRules: 7.38.0
   const out = await post({ action, ...body });
   if (!out.ok) throw new Error(out.error || 'Field Report refused the change.');
   return out;

@@ -36,6 +36,8 @@ import * as signatures from './ui/signatures.js';
 import * as setup from './ui/setup.js';
 import * as owners from './ui/owners.js';
 import * as notifications from './ui/notifications.js';
+import * as fieldusers from './ui/fieldusers.js';
+import { sendRules } from './ui/prices.js';
 import { fillPhotos } from './ui/photos.js';
 import { openWizard } from './ui/wizard.js';
 import { needsSync, syncTeam } from './engine/people.js';
@@ -774,6 +776,8 @@ function start() {
     setTimeout(async () => { if (store.cloud && store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.stampDivisions(); } catch { /* tried again next time */ } } }, 30_000);
     // 0.18.0: day rates move off the team records (which Site reads) into crewRates, once, by the first Admin
     setTimeout(async () => { if (store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.movePay(); } catch { /* tried again next start */ } } }, 35_000);
+    // v0.29.0: crew approved on a phone joins its team, and Field Report gets the access rules, soon after the Admin opens Central Hub
+    setTimeout(() => { if (store.cloud && store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { fieldusers.load(); sendRules(); } }, 25_000);
     // the weekly full copy: checked a minute after start, then every 6 hours
     setTimeout(weeklyBackup, 60_000);
     setInterval(weeklyBackup, 6 * 3600_000);

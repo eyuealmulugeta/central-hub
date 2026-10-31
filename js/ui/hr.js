@@ -7,6 +7,7 @@
 
 import { PAY_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
+import { syncPages, sendRules } from './prices.js';   // v0.29.0: access follows the rules
 import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, RATING_FILTERS, agreementLabel, hrSummary, filterStaff, ratingOf } from '../engine/hr.js';
 import { uid, money, fmtFull } from '../core/util.js';
 import { ratingsOf, rankLabel, scaleLabel, averages, LEVELS, levelOf } from '../engine/evaluation.js';
@@ -258,7 +259,7 @@ function accessPane(p) {
         <label>Title <select data-chg="accessTitle">
           <option value="" ${titleOf(u) ? '' : 'selected'}>Choose a title…</option>${GROUPS.map(g => html`<optgroup label="${g}">${options(TITLES.filter(t => t[2] === g).map(([k, label]) => [k, label]), titleOf(u) || null)}</optgroup>`)}</select></label>
         <label>Department <select data-chg="accessDivision">${divisionsOf(u).length ? '' : html`<option value="">Not assigned: cannot sign in</option>`}${options(DIVISIONS, divisionsOf(u)[0] || null)}</select></label>
-        <p class="muted">${projects.length ? `Linked to: ${projects.map(x => x.name).join(', ')}.` : 'Not linked to a project yet: put the person on one under Projects.'} The pages an Office person may open are ticked under Settings, People and access.</p>
+        <p class="muted">${projects.length ? `Linked to: ${projects.map(x => x.name).join(', ')}.` : 'Not linked to a project yet: put the person on one under Projects.'} What they may see and do is set under Settings, People and access, Access rules.</p>
         <div class="actions left"><button class="btn danger small" data-act="removeAccess">Remove access</button></div>`
       : html`
         <p class="muted">${mail} cannot sign in yet.</p>
@@ -518,6 +519,12 @@ export const changes = {
     if (!p) return;
     const value = f === 'active' ? el.checked : f === 'dayRate' ? Math.max(0, field(el)) : f === 'role' ? chosenValue(el, 'role') : el.value.trim();
     if (value === null) { store.notify(); return; }
+    const pn = store.projects.find(x => x.id === pid)?.name || 'the project';   // v0.29.0: a project or its role is asked first
+    if ((f === 'active' || f === 'role') && !confirm(f === 'active' ? `${value ? 'Put' : 'Take'} ${p.name} ${value ? 'on' : 'off'} ${pn}?
+
+Press OK to apply, Cancel to leave it as it is.` : `Make ${p.name} ${value || 'no role'} on ${pn}?
+
+Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }
     let next;
     store.updateCompany(co => {
       const x = find(co);
@@ -526,14 +533,26 @@ export const changes = {
     if (next) store.updateOther(pid, ws => assign(ws, p, next));
     if (f === 'active') relink(p, pid, value);
   },
-  accessRole(el, c) { const p = find(c.company); if (p) store.setUser(accountOf(p), { role: el.value }); },
+  accessRole(el, c) {
+    const p = find(c.company), u = p && store.users.find(x => x.email === accountOf(p));
+    if (!u || !confirm(`Make ${p.name} ${el.value === 'office' ? 'Office' : 'Site'} (was ${u.role === 'office' ? 'Office' : 'Site'})?
+
+Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }
+    store.setUser(u.email, { role: el.value });
+    syncPages([{ ...u, role: el.value }]); sendRules();
+  },
   accessTitle(el, c) {
     const p = find(c.company);
     if (!p) return;
     const u = store.users.find(x => x.email === accountOf(p));
     const may = el.value ? mayTake(u, el.value, store.projects.map(x => x.id)) : { ok: true };
     if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
-    store.setUser(accountOf(p), titlePatch(el.value));
+    const patch = titlePatch(el.value);
+    if (!confirm(`Make ${p.name} a ${patch.title || 'person with no title'} (was ${u?.title || 'no title'})? Their access follows the new title.
+
+Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }
+    store.setUser(accountOf(p), patch);
+    if (u) { syncPages([{ ...u, ...patch }]); sendRules(); }
   },
   accessDivision(el, c) { const p = find(c.company); if (p) store.setUser(accountOf(p), { divisions: [el.value] }); },
   accessTick(el, c) {
@@ -552,6 +571,9 @@ export const changes = {
   set(el) {
     const f = el.dataset.f;
     const value = el.value.trim();
+    if (f === 'level' && !confirm(`Put ${find(store.company)?.name || 'this person'} in ${el.selectedOptions?.[0]?.textContent || value}?
+
+Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }   // v0.29.0
     store.updateCompany(co => { const p = find(co); if (p) p[f] = value; });
   },
   /** A position or department chosen from a list (or typed once through Other...). */
@@ -559,6 +581,9 @@ export const changes = {
     const value = chosenValue(el, el.dataset.what || 'value');
     if (value === null) { store.notify(); return; }
     const f = el.dataset.f;
+    if (f === 'title' && !confirm(`Make ${find(store.company)?.name || 'this person'} a ${value} (was ${find(store.company)?.title || 'no position'})?
+
+Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }   // v0.29.0
     store.updateCompany(co => { const p = find(co); if (p) p[f] = value; });
   },
   /** Move a person to the other division: they leave this list and appear in the other one. */
@@ -628,6 +653,9 @@ export const submits = {
     const account = store.users.find(x => x.email === accountOf(p));
     const may = account ? mayJoin(account, pid, store.projects.map(x => x.id)) : { ok: true };
     if (!may.ok) { notice = may.reason; return false; }
+    if (!confirm(`Put ${p.name} on ${store.projects.find(x => x.id === pid)?.name || 'the project'}?
+
+Press OK to apply, Cancel to leave it as it is.`)) return false;   // v0.29.0
     const a = { projectId: pid, role: String(fd.get('role') || '').trim(), dayRate: Math.max(0, +fd.get('dayRate') || 0), active: true };
     store.updateCompany(co => { const x = find(co); x.assignments = [...(x.assignments || []).filter(y => y.projectId !== pid), a]; });
     store.updateOther(pid, ws => assign(ws, p, a));

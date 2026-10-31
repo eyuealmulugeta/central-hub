@@ -21,6 +21,8 @@ import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
 import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { transferMember } from '../engine/sitecrew.js';
+import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo } from '../engine/accessrules.js';
+import { fieldReady, fieldUserDo } from '../sync/fieldreport.js';
 
 /** v0.28.0: the projects a team member can be moved to. */
 const otherProjects = p => store.projects.filter(x => x.id !== p.id && !x.binned && x.status !== 'closed');
@@ -65,6 +67,8 @@ export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
 const PROJ_TABS = [['basics', 'Basics'], ['site', 'Site and deployment'], ['team', 'Team']];
 let projTab = 'basics';
 let accTab = 'people';
+let accScope = 'pos';     // v0.29.0: the Access rules tab shows a tier, a position or a person
+let accPick = '';
 let linkTab = 'field';
 let who = null;                 // the email of the person open on the People tab
 const tabStrip = (list, now, act) => html`<div class="emp-tabs set-tabs" role="tablist">${list.map(([k, label, n]) => html`
@@ -249,7 +253,8 @@ function personDetail(u) {
 
         <div class="set-box">
           <h3>Pages this person may open</h3>
-          ${pageTicks(u)}
+          ${rulesOn() ? html`<p>${pagesOf(u).map(k => PAGE_WORD[k] || k).join(', ') || 'None yet'}</p><p class="muted">Set by the access rules (${positionWords(positionOf(u))}, Tier ${tierOf(u)}).</p>
+            <div class="actions left"><button class="btn small" type="button" data-act="openRules" data-id="${u.email}">Change in Access rules</button></div>` : pageTicks(u)}
           ${u.role === 'office' ? html`<label class="check"><input type="checkbox" data-chg="userApprover" data-id="${u.email}" ${u.approver ? 'checked' : ''}> May approve and issue client reports</label>` : ''}
           <h3>Projects <span class="muted">${ONE_PROJECT.includes(titleOf(u)) ? `a ${titleLabel(titleOf(u))} is on one only` : 'one or several'}</span></h3>
           ${pills(store.projects.map(p => html`<label class="check pill"><input type="checkbox" data-chg="userProject" data-id="${u.email}" data-p="${p.id}" ${(u.projects || []).includes(p.id) ? 'checked' : ''}> ${p.name}</label>`))}
@@ -304,28 +309,93 @@ function peopleTab() {
     </div>`;
 }
 
-/** Every person and every app in one table: the permission list for all roles. */
+/** v0.29.0: are the access rules in use? Until the Admin starts them, the page ticks of before decide. */
+export const rulesOn = () => !!store.global?.access?.started;
+const rulesNow = () => store.global?.access || blank();
+// the demo has nobody who signs in: the Access rules show sample people there
+const SAMPLE = [{ email: 'sara@example.com', name: 'Sara (sample)', role: 'office', ranks: ['project_manager'] }, { email: 'abebe@example.com', name: 'Abebe (sample)', role: 'site', ranks: ['site_engineer'] },
+  { email: 'hana@example.com', name: 'Hana (sample)', role: 'office', ranks: ['accountant'] }, { email: 'meron@example.com', name: 'Meron (sample)', role: 'office', ranks: ['coordinator'] }];
+const people = () => (store.cloud ? store.users : SAMPLE);
+const PAGE_WORD = Object.fromEntries(GRANTABLE);
+const scopeWords = (scope, id) => scope === 'person' ? (people().find(u => u.email === id)?.name || id)
+  : scope === 'pos' ? `a ${positionWords(id)}` : `in ${TIERS.find(t => String(t[0]) === String(id))?.[1].split(' · ')[0] || `Tier ${id}`}`;
+
+/** The CH pages each person opens follow the rules: write the ones that changed. Returns how many people changed. */
+export function syncPages(list = store.users, rules = store.global?.access) {
+  if (!rules?.started || !store.cloud) return 0;
+  let n = 0;
+  for (const u of list) {
+    if (u.role === 'owner') continue;
+    const give = pagesFrom(rules, u), want = grantableFor(u).map(([k]) => k).filter(k => give.includes(k));
+    const approver = u.role === 'office' && positionOf(u) === 'general_manager';   // issuing the client PDF: Admin and GM only
+    if (u.pagesV !== 2 || want.join() !== pagesOf(u).join() || !!u.approver !== approver) { store.setUser(u.email, { pages: want, pagesV: 2, approver }); n++; }
+  }
+  return n;
+}
+/** May the signed-in person do this feature? The Admin always; anyone while the rules are not started (the ticks of before decide). */
+export const iMay = feat => store.isAdmin || !rulesOn() || mayDo(rulesNow(), { role: store.role, email: store.user?.email, ranks: store.ranks }, feat);
+let frTimer = 0;
+/** The FR part of the rules goes to the script a moment after the last change (script 7.38.0). */
+export function sendRules() {
+  if (!rulesOn() || !store.cloud || !fieldReady()) return;
+  clearTimeout(frTimer);
+  frTimer = setTimeout(async () => {
+    try { await fieldUserDo('accessRules', { rules: frRules(rulesNow(), store.users) }); }
+    catch (e) { tell(`✗ Field Report did not take the access rules: ${e.message}`); }
+  }, 1500);
+}
+/** A change of position or project: what it does to the person's access, asked before it is made. */
+function verifyMove(u, patch, what) {
+  const next = { ...u, ...patch };
+  let extra = '';
+  if (rulesOn() && 'ranks' in patch) {
+    const now = FEATURES.filter(f => !f.admin).map(f => [f, valueOf(rulesNow(), u, f.key).v, valueOf(rulesNow(), next, f.key).v]).filter(([, a, b]) => a !== b);
+    extra = now.length ? `\n\nTheir access changes:\n${now.slice(0, 14).map(([f, a, b]) => `· ${f.label}: ${a || 'none'} → ${b || 'none'}`).join('\n')}` : '\n\nTheir access stays the same.';
+    extra += `\nTier: ${tierOf(u)} → ${tierOf(next)}`;
+  }
+  return confirm(`${what}?${extra}\n\nPress OK to apply, Cancel to leave it as it is.`);
+}
+
+/** v0.29.0: the access rules. One level at a time: a tier, a position or a person; each tick is asked first. */
 function permsTab() {
-  const list = store.users;
-  if (!list.length) return html`<section class="card"><p class="empty">Nobody else signs in yet. Add people on the People tab.</p></section>`;
-  const order = [['office', 'Office'], ['site', 'Site']];
-  const roleOf = u => (u.role === 'office' ? 'office' : 'site');
+  const r = rulesNow(), on = rulesOn(), users = people().filter(u => u.role !== 'owner');
+  if (!on) {
+    const ch = startChanges(r, users, pagesOf);
+    return html`<section class="card" id="panel-perms">
+      <div class="toolbar"><h2>Access rules</h2></div>
+      <p>The access rules set who <b>sees</b>, who <b>does</b> and who is <b>told</b>, for every feature of Field Report and Central Hub: for a whole tier, a position, or one person. They start from your decisions of 31 October.</p>
+      ${ch.length ? html`<p class="bad">Starting them changes the pages of ${ch.length} ${ch.length === 1 ? 'person' : 'people'}:</p>
+        <ul class="plain">${ch.map(x => html`<li><b>${x.user.name || x.user.email}</b> (${positionWords(positionOf(x.user))})${x.gain.length ? html` · gets ${x.gain.map(k => PAGE_WORD[k] || k).join(', ')}` : ''}${x.lose.length ? html` · loses ${x.lose.map(k => PAGE_WORD[k] || k).join(', ')}` : ''}</li>`)}</ul>`
+        : html`<p class="muted">Nobody's pages change when they start.</p>`}
+      <div class="actions left"><button class="btn primary" type="button" data-act="accStart">Start the access rules</button></div>
+    </section>`;
+  }
+  const lists = { tier: TIERS.map(([k, w]) => [String(k), w]), pos: POSITIONS.map(p => [p.key, `${p.words} (Tier ${p.tier})`]), person: users.map(u => [u.email, `${u.name || u.email} · ${positionWords(positionOf(u))}`]) };
+  const list = lists[accScope];
+  if (!list.some(([k]) => k === accPick)) accPick = list[0]?.[0] || '';
+  const FROM = { 'set here': 'Set here', tier: 'From the tier', position: 'From the position', start: 'Starting value', admin: 'Admin' };
+  const row = f => {
+    if (f.admin) return html`<tr><td class="muted">${f.no}</td><td><b>${f.label}</b><br><span class="muted">${f.about}</span></td><td class="c" colspan="3"><span class="chip">Admin and GM only</span></td><td></td></tr>`;
+    const { v, from } = accPick ? levelValue(r, accScope, accPick, f.key, people()) : { v: '', from: 'start' };
+    const sw = (flag, word) => html`<td class="c"><label class="switch" title="${word}"><input type="checkbox" data-chg="accFlag" data-f="${f.key}" data-fl="${flag}" ${v.includes(flag) ? 'checked' : ''} aria-label="${word}: ${f.label}"><i></i></label></td>`;
+    return html`<tr><td class="muted">${f.no}</td><td><b>${f.label}</b><br><span class="muted">${f.about}</span></td>${sw('S', 'Sees')}${sw('D', 'Does')}${sw('N', 'Is told')}
+      <td>${from === 'set here' ? html`<button type="button" class="btn small ghost" data-act="accClear" data-f="${f.key}" title="Take this away: it follows the level above again">Set here · undo</button>` : html`<span class="muted">${FROM[from] || from}</span>`}</td></tr>`;
+  };
+  const table = (app, words) => html`<h3>${words}</h3><div class="table-wrap"><table class="table compact">
+    <thead><tr><th>#</th><th>Feature</th><th class="c">Sees</th><th class="c">Does</th><th class="c">Is told</th><th>Comes from</th></tr></thead>
+    <tbody>${FEATURES.filter(f => f.app === app).map(row)}</tbody></table></div>`;
+  const who = accPick ? reached(r, people(), accScope, accPick, '__none') : [];
   return html`<section class="card" id="panel-perms">
-    <div class="toolbar"><h2>Permissions</h2><span class="muted">Each person and each app: tick to let them open it. It applies on the projects they are on.</span></div>
-    <div class="table-wrap"><table class="table compact perm-table">
-      <thead>
-        <tr><th colspan="2"></th>${GRANT_GROUPS.map(([g, l]) => html`<th class="c grp" colspan="${l.length}">${g}</th>`)}</tr>
-        <tr><th>Person</th><th>Role</th>${GRANTABLE.map(([, label]) => html`<th class="c">${label}</th>`)}</tr>
-      </thead>
-      <tbody>${order.map(([r, rl]) => list.filter(u => roleOf(u) === r).map(u => {
-        const may = grantableFor(u).map(([k]) => k), have = pagesOf(u), name = u.name || u.email;
-        return html`<tr>
-          <th scope="row"><button type="button" class="linklike" data-act="openUser" data-id="${u.email}" title="Open ${name} on the People tab">${name}</button></th><td>${rl}</td>
-          ${GRANTABLE.map(([k, label]) => html`<td class="c">${may.includes(k) ? html`<input type="checkbox" data-chg="userPage" data-id="${u.email}" data-p="${k}" ${have.includes(k) ? 'checked' : ''} aria-label="${label} for ${name}">` : html`<span class="muted" title="Not for Installation">–</span>`}</td>`)}
-        </tr>`;
-      }))}</tbody>
-    </table></div>
-    <p class="muted">Never ticked, yours alone: HR, Payroll, Letters, Company owners and Settings. Evaluation lets a person rate the tier below them; it starts ticked for anyone whose title rates someone.</p>
+    <div class="toolbar"><h2>Access rules</h2><span class="muted">The nearest wins: person, then position, then tier. You (Admin and GM) have everything.</span></div>
+    <div class="actions left">
+      ${tabStrip([['tier', 'By tier'], ['pos', 'By position'], ['person', 'By person']], accScope, 'accScope')}
+      <label>${accScope === 'tier' ? 'Tier' : accScope === 'pos' ? 'Position' : 'Person'} <select data-chg="accPick" aria-label="Which one">${options(list, accPick)}</select></label>
+      <span class="muted">${accScope === 'person' ? '' : `${who.length} ${who.length === 1 ? 'person' : 'people'} here`}</span>
+    </div>
+    ${table('fr', 'Field Report (the phone app)')}
+    ${table('ch', 'Central Hub (the office app)')}
+    <h3>Changes</h3>
+    ${(r.log || []).length ? html`<ul class="plain">${r.log.slice(0, 25).map(x => html`<li><span class="muted">${String(x.at).slice(0, 16).replace('T', ' ')}</span> · ${x.by || 'Admin'} · ${x.scope === 'all' ? 'The access rules started' : html`${scopeWords(x.scope, x.id)} · ${FEATURES.find(f => f.key === x.feat)?.label || x.feat}: ${x.from || 'none'} → ${x.to || 'none'}`}</li>`)}</ul>` : html`<p class="muted">No changes yet.</p>`}
   </section>`;
 }
 
@@ -415,14 +485,14 @@ function accessPage(c) {
   if (store.role !== 'owner') return html`<div class="side settings"><section class="card"><p class="empty">Only the Admin manages people and access.</p></section></div>`;
   // the demo has nobody who signs in: only the crew of the directory can be allocated there
   const demo = !store.cloud;
-  if (demo) accTab = 'crew';
-  const tabs = demo ? [['crew', 'Allocated Crew']]
-    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Permissions'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
+  if (demo && accTab !== 'perms') accTab = 'crew';
+  const tabs = demo ? [['crew', 'Allocated Crew'], ['perms', 'Access rules']]
+    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
   return html`<div class="side settings">
     <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
     ${tabStrip(tabs, accTab, 'accTab')}
-    ${demo ? html`<p class="muted">Nobody signs in to the demo, so People and Permissions are only in the signed-in version.</p>` : ''}
+    ${demo ? html`<p class="muted">Nobody signs in to the demo, so People is only in the signed-in version. Access rules shows sample people.</p>` : ''}
     ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'perms' ? permsTab() : peopleTab()}
   </div>`;
 }
@@ -671,6 +741,17 @@ export const actions = {
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
+  accScope(el) { accScope = el.dataset.t; accPick = ''; },
+  openRules(el) { accTab = 'perms'; accScope = 'person'; accPick = el.dataset.id; },
+  /** Start the access rules: every person's pages follow them from now on. */
+  accStart() {
+    const ch = startChanges(rulesNow(), people(), pagesOf);
+    if (!confirm(`Start the access rules?\n\n${ch.length ? `The pages of ${ch.length} ${ch.length === 1 ? 'person' : 'people'} change, as listed.` : 'Nobody\'s pages change.'} From now on, access is set here.\n\nPress OK to start, Cancel to wait.`)) return;
+    store.updateGlobal(g => { g.access = { ...blank(), ...(g.access || {}), started: new Date().toISOString(), log: [{ at: new Date().toISOString(), by: store.user?.name || 'Admin', scope: 'all', id: '', feat: 'start', from: '', to: 'started' }] }; });
+    const n = syncPages();
+    sendRules();
+    tell(`✓ The access rules are on. ${n} ${n === 1 ? 'person' : 'people'} updated.`);
+  },
   // v0.24.0: My settings
   setTheme(el) { try { localStorage.setItem('sf:theme', el.dataset.t); } catch { /* this visit only */ } globalThis.applyTheme?.(); },
   async askNotify() { try { await Notification.requestPermission(); } catch { /* the browser says no */ } store.notify(); },
@@ -820,14 +901,20 @@ export const changes = {
   /** Change the project that the Settings pages are about. */
   switchProject(el) { store.switchTo(el.value); },
   userRole(el) {
+    const u = store.users.find(x => x.email === el.dataset.id);
+    if (!u || !confirm(`Make ${u.name || u.email} ${ROLE_NAME[el.value] || el.value} (was ${ROLE_NAME[u.role] || u.role})?\n\nPress OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }
     store.setUser(el.dataset.id, { role: el.value });
+    syncPages([{ ...u, role: el.value }]); sendRules();
   },
   /** One title, which is also the person's one rank for evaluations. */
   userTitle(el) {
     const u = store.users.find(x => x.email === el.dataset.id);
     const ok = el.value ? mayTake(u, el.value, store.projects.map(x => x.id)) : { ok: confirm('Clear this person\'s title?') };
     if (!ok.ok) { if (ok.reason) tell(`✗ ${ok.reason}`); store.notify(); return; }
-    store.setUser(el.dataset.id, titlePatch(el.value));
+    const patch = titlePatch(el.value);
+    if (el.value && !verifyMove(u, patch, `Make ${u.name || u.email} a ${titleLabel(el.value)} (was ${titleLabel(titleOf(u)) || 'no title'})`)) { store.notify(); return; }
+    store.setUser(el.dataset.id, patch);
+    syncPages([{ ...u, ...patch }]); sendRules();
   },
   /** Switch a person on or off the open project: on puts the project in their list, off takes it out. */
   userLink(el) {
@@ -841,6 +928,7 @@ export const changes = {
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
       projects.push(project.id);
     }
+    if (!verifyMove(u, {}, `${el.checked ? 'Put' : 'Take'} ${u.name || u.email} ${el.checked ? 'on' : 'off'} ${project.name}`)) { store.notify(); return; }
     store.setUser(u.email, { projects });
     tell(`${el.checked ? '✓ Linked' : '✓ Unlinked'} ${u.name || u.email} ${el.checked ? 'to' : 'from'} ${project.name}.`);
   },
@@ -885,6 +973,26 @@ export const changes = {
     if (u) store.setUser(u.email, tickPage(u, el.dataset.p, el.checked));
   },
   crewShow(el) { crewShow = el.value; },
+  accPick(el) { accPick = el.value; },
+  /** One tick of the access rules, asked first, with the people it reaches. */
+  accFlag(el) {
+    const feat = el.dataset.f, flag = el.dataset.fl, on = el.checked;
+    const hit = reached(rulesNow(), people(), accScope, accPick, feat);
+    if (!confirm(askText(accScope, scopeWords(accScope, accPick), feat, flag, on, hit))) { store.notify(); return; }
+    let next;
+    store.updateGlobal(g => { next = setFlag(g.access, accScope, accPick, feat, flag, on, store.user?.name || 'Admin', new Date().toISOString(), people()); next.started = g.access?.started; g.access = next; });
+    syncPages(hit, next);
+    sendRules();
+    tell(`✓ Applied. ${hit.length} ${hit.length === 1 ? 'person' : 'people'} reached.`);
+  },
+  accClear(el) {
+    const feat = el.dataset.f, hit = reached(rulesNow(), people(), accScope, accPick, feat);
+    if (!confirm(`Take away what is set here for "${FEATURES.find(f => f.key === feat)?.label}"? It follows the level above again.\n\n${hit.length} ${hit.length === 1 ? 'person' : 'people'} may change.\n\nPress OK to apply.`)) return;
+    let next;
+    store.updateGlobal(g => { next = clearAt(g.access, accScope, accPick, feat, store.user?.name || 'Admin', new Date().toISOString(), people()); next.started = g.access?.started; g.access = next; });
+    syncPages(people(), next);
+    sendRules();
+  },
   payPeriod(el) { store.updateProject(p => { p.payPeriod = el.value; }); },
   payWeekStart(el) { store.updateProject(p => { p.payWeekStart = +el.value; }); },
   /** Allocated Crew: put a person on a project or take them off. A directory person goes the way of their HR record. */
@@ -898,6 +1006,7 @@ export const changes = {
       const may = mayJoin(u, pid, store.projects.map(x => x.id));
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
     }
+    if (!confirm(`${on ? 'Put' : 'Take'} ${person?.name || u?.name || mail} ${on ? 'on' : 'off'} ${project?.name || 'the project'}?\n\nPress OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }
     if (person) {
       let a;
       store.updateCompany(co => {
@@ -933,6 +1042,8 @@ export const changes = {
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }
       projects.push(el.dataset.p);
     }
+    const pn = store.projects.find(x => x.id === el.dataset.p)?.name || 'the project';
+    if (!verifyMove(u, {}, `${el.checked ? 'Put' : 'Take'} ${u.name || u.email} ${el.checked ? 'on' : 'off'} ${pn}`)) { store.notify(); return; }
     store.setUser(el.dataset.id, { projects });
   },
   company(el) { store.updateGlobal(g => { g.company = { ...g.company, [el.dataset.f]: el.value.trim() }; }); },

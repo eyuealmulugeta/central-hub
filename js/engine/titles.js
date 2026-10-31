@@ -18,6 +18,7 @@ export const TITLES = [
   ['procurement_manager', 'Procurement Manager', 'Office', 3],
   ['logistics_coordinator', 'Logistics Coordinator', 'Office', 3],
   ['office_engineer', 'Office Engineer', 'Office', 3],
+  ['architect', 'Architect', 'Office', 3],   // v0.29.0
   ['coordinator', 'Coordinator', 'Office', 3],
   ['hr_assistant', 'HR/Admin Assistant', 'Office', 4],
 ];

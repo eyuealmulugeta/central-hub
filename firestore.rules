@@ -83,8 +83,8 @@ service cloud.firestore {
     function ranks() { return hasUser() ? user().get('ranks', []) : []; }
     function myTier() {
       return ranks().hasAny(['general_manager']) ? 1
-        : ranks().hasAny(['project_manager', 'operations_lead', 'chief_engineer', 'accountant', 'hse_officer']) ? 2
-        : ranks().hasAny(['site_engineer', 'qs', 'procurement_manager', 'logistics_coordinator', 'office_engineer', 'coordinator']) ? 3
+        : ranks().hasAny(['project_manager', 'chief_engineer', 'accountant', 'hse_officer']) ? 2
+        : ranks().hasAny(['site_engineer', 'qs', 'procurement_manager', 'logistics_coordinator', 'office_engineer', 'architect', 'coordinator']) ? 3
         : ranks().hasAny(['technician', 'foreman', 'hr_assistant']) ? 4 : 9;
     }
     function mayRate(level) {
@@ -139,6 +139,11 @@ service cloud.firestore {
     }
 
     // Faults reported by devices (js/core/diagnostics.js): any signed-in person adds their own, small ones; the Admin reads and clears them.
+    // v0.26.0: the recycle bin: what the Admin deleted, with who, when and from which page
+    match /bin/{id} {
+      allow read: if seesAll();
+      allow write: if isOwner();
+    }
     match /diagnostics/{id} {
       allow create: if signedIn() && request.resource.data.by == me()
         && request.resource.data.keys().hasOnly(['id', 'at', 'where', 'message', 'stack', 'count', 'page', 'agent', 'by'])

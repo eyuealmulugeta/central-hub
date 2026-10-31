@@ -23,7 +23,7 @@ export const LEVELS = [['t1', 'Tier 1 · Owners and General Manager (not rated)'
 const ROLE_TIERS = {
   t1: ['General Manager', 'Owner'],
   t2: ['Project Engineer', 'Project Manager', 'Operations Lead', 'Chief Engineer', 'Accountant', 'HSE Officer'],   // Operations Lead: records from before v0.24.0
-  t3: ['Site Engineer', 'Site Architect', 'QS', 'Procurement Manager', 'Logistics Coordinator', 'Quantity Surveyor (QS)', 'Office Engineer', 'Coordinator'],
+  t3: ['Site Engineer', 'Architect', 'Site Architect', 'QS', 'Procurement Manager', 'Logistics Coordinator', 'Quantity Surveyor (QS)', 'Office Engineer', 'Coordinator'],
   t5: ['Daily labor', 'Labourer', 'Site Guard'],
 };
 /** The levels of before the tiers. */

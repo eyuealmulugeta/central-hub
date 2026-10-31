@@ -22,6 +22,7 @@ import { clientBrief } from './brief.js';
 import { photoGrid } from './photos.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
+import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
 
 const WEATHER = ['Clear', 'Cloudy', 'Rain', 'Wind', 'Heat'];
 const GROUND = ['Dry', 'Wet', 'Muddy'];
@@ -520,6 +521,7 @@ export function onEnter() {
 export const submits = {
   report(fd, c) {
     const cur = underReview(c.ws);
+    if (cur && !iMay('fr_approve')) { notice = 'Approving is not yours to do. Ask the Admin under Access rules.'; return false; }
     const date = cur?.date || fd.get('date') || c.today;
     const by = fd.get('by').trim();
     const entries = [];
@@ -704,6 +706,7 @@ export const actions = {
     const decision = el.dataset.d;
     const id = el.dataset.id;
     if (sending.has(id)) return;
+    if (decision !== 'comment' && !iMay('fr_approve')) { replyNotice = 'Approving and sending back are not yours to do. Ask the Admin under Access rules.'; return; }
     const report = c.ws.reports.find(r => r.id === id);
     const typed = (el.closest('.reply')?.querySelector('textarea')?.value || '').trim();
     const text = reviewing === id ? pinsMessage(report.pins, typed) : typed;

@@ -61,6 +61,15 @@ export async function load(force) {
   try { feed = { ...(await fieldUsers()), at: Date.now() }; said = null; }
   catch (err) { said = { ok: false, text: err.message }; }
   busy = false; store.notify();
+  await takeApproved();
+}
+/** v0.29.0: crew a Project engineer approved on the phone, with their wages: added to the team without a second approval. */
+async function takeApproved() {
+  if (!store.isAdmin || store.readOnly) return;
+  const ok = (feed?.crewReqs || []).filter(r => r.ok && projectOf(r.proj));
+  const by = new Map();
+  for (const r of ok) by.set(r.proj, [...(by.get(r.proj) || []), r]);
+  for (const [code, list] of by) await crewDecide(code, true, list, true);
 }
 export const current = () => feed;
 export const isBusy = () => busy;
@@ -127,7 +136,7 @@ function crewCard() {
           <button class="btn small ghost" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button></div></li>`)}</ul>
       ${list.length > 1 && pj ? html`<div class="actions left"><button class="btn small" type="button" data-act="fuCrew" data-p="${code}" data-v="approve" ${busy ? 'disabled' : ''}>Approve all ${list.length}</button></div>` : ''}`; })}`;
 }
-async function crewDecide(code, yes, list) {
+async function crewDecide(code, yes, list, quiet = false) {
   if (!list.length || busy) return;
   const pj = projectOf(code), who = list.length === 1 ? list[0].name : `${list.length} people`;
   if (yes && !pj) return say(false, `No project in Central Hub has the Field Report code ${code}.`);
@@ -136,7 +145,7 @@ async function crewDecide(code, yes, list) {
   try {
     if (yes) await store.updateOther(pj.id, ws => { approveCrew(ws, list, () => uid('m'), new Date().toISOString()); });
     await apply('crewDecide', { proj: code, ids: list.map(r => r.id) });
-    say(true, yes ? `${who} added to the crew of ${pj.name}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}` : `Rejected: ${who}.`);
+    say(true, yes ? `${who} added to the crew of ${pj.name}${quiet ? `, approved in Field Report by ${list[0].ok?.by || 'the Project engineer'}` : ''}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}` : `Rejected: ${who}.`);
   } catch (err) { say(false, err.message); }
   finally { busy = false; store.notify(); }
 }

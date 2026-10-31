@@ -6,17 +6,18 @@
 import { NATIONALITY } from './docread.js';
 
 export const ROLE_GROUPS = [
-  ['Management', ['General Manager', 'Project Engineer', 'Chief Engineer', 'Site Engineer', 'Site Architect']],
+  ['Management', ['General Manager', 'Project Engineer', 'Chief Engineer', 'Site Engineer']],
   ['Supervision', ['Foreman', 'HSE Officer']],
   ['Technicians', ['Technician', 'Welder', 'Mason', 'Electrician', 'Plumber']],
   ['Labour', ['Skilled Labourer', 'Semi-skilled labor', 'Labourer', 'Daily labor', 'Site Guard']],
-  ['Office', ['Accountant', 'Quantity Surveyor (QS)', 'Procurement Manager', 'Logistics Coordinator', 'Office Engineer', 'Coordinator', 'HR/Admin Assistant']],
+  ['Office', ['Accountant', 'Quantity Surveyor (QS)', 'Procurement Manager', 'Logistics Coordinator', 'Office Engineer', 'Architect', 'Coordinator', 'HR/Admin Assistant']],
 ];
 export const ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
 /** v0.24.0: positions merged or renamed by the owner, and the one each became. A record is read as the new one. Operations Lead is gone (shown as old). */
 const OLD_ROLES = {
   'container house technician': 'Technician', 'general foreman': 'Foreman', 'steel structure foreman': 'Foreman',
-  'daily labourer': 'Daily labor', 'semi-skilled labourer': 'Semi-skilled labor',
+  'daily labourer': 'Daily labor', 'site architect': 'Architect',   // v0.29.0: an office position
+  'semi-skilled labourer': 'Semi-skilled labor',
 };
 export const normRole = r => OLD_ROLES[String(r || '').trim().toLowerCase()] || String(r || '').trim();
 

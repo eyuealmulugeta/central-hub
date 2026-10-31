@@ -58,7 +58,10 @@ function spotCard(c) {
   if (code && !spot.list && !spot.busy && !spot.err) queueMicrotask(() => actions.spotLoad());   // v0.30.1: loads by itself, no extra click
   const rows = spotRows(spot.list, spot), abouts = [...new Set((spot.list || []).map(x => x.about))].sort();
   const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).length - pos;
-  const media = x => (x.media || []).map((m, i) => html`${i ? ' · ' : ''}<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener">${/^video/.test(m.type) ? 'Video' : 'Photo'} ${i + 1}</a>`);
+  // v0.31.1: on the page: a photo as a picture, a video in Drive's player (it plays here); a tap on a photo opens it large
+  const media = x => html`<div class="spot-media">${(x.media || []).map(m => /^video/.test(m.type)
+    ? html`<iframe src="https://drive.google.com/file/d/${m.fileId}/preview" title="Video from the site" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>`
+    : html`<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener"><img src="https://drive.google.com/thumbnail?id=${m.fileId}&sz=w800" alt="Photo from the site" loading="lazy"></a>`)}</div>`;
   return html`<section class="card"><div class="card-head"><h2>Spotlight</h2><span class="muted">From the site, for Central Hub only. Not in the report.</span></div>
     ${!code ? html`<p class="muted">This project has no Field Report code.</p>` : html`
     <div class="row"><button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? 'Check again' : 'Show the notes'}</button>
@@ -66,7 +69,7 @@ function spotCard(c) {
       <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select>` : ''}</div>
     ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
     ${spot.list ? (rows.length ? html`<ul class="plain">${rows.map(x => html`<li><span class="pill ${TONE[x.tone]?.[1] || ''}">${TONE[x.tone]?.[0] || ''}</span> <b>${x.cat} · ${x.about}</b>
-      <span class="muted">${fmtDate(String(x.at).slice(0, 10))} ${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.replace('T', ' ')} on the phone` : ''} · by ${x.byName || x.by}</span>${x.note ? html`<div>${x.note}</div>` : ''}${x.media?.length ? html`<div class="small">${media(x)}</div>` : ''}</li>`)}</ul>`
+      <span class="muted">${fmtDate(String(x.at).slice(0, 10))} ${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.replace('T', ' ')} on the phone` : ''} · by ${x.byName || x.by}</span>${x.note ? html`<div>${x.note}</div>` : ''}${x.media?.length ? media(x) : ''}</li>`)}</ul>`
       : html`<p class="muted">No note here.</p>`) : ''}`}</section>`;
 }
 let docOf = null;       // id of the report shown as the Daily Site Report (v0.21.0)
@@ -875,7 +878,7 @@ export function watchCrew() {
   clearTimeout(crewTimer);
   crewTimer = setTimeout(() => {
     const p = store.project;
-    if (!p?.fieldCode || !p.fieldSetupAt || store.role === 'site' || !store.ws?.team) return;
+    if (!p?.fieldCode || store.role === 'site' || !store.ws?.team) return;   // v0.31.1: a confirmed code is enough
     let key;
     try { key = JSON.stringify(buildSetup({ ...derive(p, store.ws, store.global, todayISO()), people: store.users }, todayISO()).staff); } catch { return; }
     if (key === p.fieldCrewKey) return;
@@ -883,10 +886,21 @@ export function watchCrew() {
   }, 4000);
 }
 
+/** v0.31.1: the lists of any project (Allocated Crew changes projects that are not open), with its own workspace. */
+export async function sendListsFor(project, ws) {
+  if (!project?.fieldCode || !ws?.team) return false;
+  try {
+    const setup = buildSetup({ ...derive(project, ws, store.global, todayISO()), people: store.users }, todayISO());
+    await sendSetup(setup);
+    store.patchProject(project.id, { fieldSetupAt: todayISO(), fieldCrewKey: JSON.stringify(setup.staff) });
+    return true;
+  } catch (err) { console.warn(`The lists of ${project.name} could not be sent:`, err.message); return false; }
+}
+
 /** Send the project's lists to Field Report again, quietly, when something that changes them came in (a no-work day). */
 async function resendSetup() {
   const project = store.project;
-  if (!project.fieldCode || !project.fieldSetupAt) return;
+  if (!project.fieldCode) return;
   try {
     const c = derive(project, store.ws, store.global, todayISO());
     await sendSetup(buildSetup({ ...c, people: store.users }, todayISO()));

@@ -27,6 +27,7 @@ import { fieldReady, fieldUserDo } from '../sync/fieldreport.js';
 /** v0.28.0: the projects a team member can be moved to. */
 const otherProjects = p => store.projects.filter(x => x.id !== p.id && !x.binned && x.status !== 'closed');
 import { focusOn as focusPerson, relink } from './hr.js';
+import { sendListsFor } from './reports.js';   // v0.31.1: Allocated Crew reaches Field Report at once
 import { describe as describeSession } from '../engine/session.js';
 import { targetFor, parseDates, companyCalendar, ownWeekOf, ownOffOf, projectPatch } from '../engine/calendar.js';
 import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUsers, LIMITS } from '../engine/deployment.js';
@@ -1015,7 +1016,9 @@ export const changes = {
         a = { ...(old || { projectId: pid, role: x.title || '', dayRate: 0 }), active: on };
         x.assignments = [...(x.assignments || []).filter(y => y.projectId !== pid), a];
       });
-      store.updateOther(pid, ws => (on ? assign(ws, person, a) : unassign(ws, person)));
+      // v0.31.1: the project's crew goes to Field Report straight away
+      Promise.resolve(store.updateOther(pid, ws => (on ? assign(ws, person, a) : unassign(ws, person))))
+        .then(ws => sendListsFor(project, ws)).then(ok => tell(ok ? `✓ Field Report has the new crew of ${project?.name || 'the project'}.` : `${project?.fieldCode ? '✗ Field Report could not be told yet: use Send lists in Field Report and import.' : ''}`));
       relink(person, pid, on);
     } else if (u) {
       const live = store.projects.map(x => x.id);

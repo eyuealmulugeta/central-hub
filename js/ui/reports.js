@@ -23,6 +23,7 @@ import { photoGrid } from './photos.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
+import { fieldSpotlight } from '../sync/fieldreport.js';
 
 const WEATHER = ['Clear', 'Cloudy', 'Rain', 'Wind', 'Heat'];
 const GROUND = ['Dry', 'Wet', 'Muddy'];
@@ -45,6 +46,28 @@ let sentBack = null;    // { id, decision, text }: the reply just sent from the 
 let viewing = null;     // id of a report opened for reading (its PDF on top, the history beside it)
 let binNotice = '';
 let tab = '';           // 'list' (the reports) or 'enter' (the Daily report form); '' until chosen: the site starts on the form
+// v0.30.0: Spotlight, the notes the site sends from Field Report for Central Hub only (the Admin reads them here)
+const spot = { list: null, code: '', busy: false, err: '', tone: '', about: '' };
+const TONE = { pos: ['Positive', 'ok'], neg: ['Negative', 'bad'] };
+export function spotRows(list, { tone = '', about = '' } = {}) {
+  return (list || []).filter(x => (!tone || x.tone === tone) && (!about || x.about === about));
+}
+function spotCard(c) {
+  const code = String(c.project.fieldCode || '').toUpperCase();
+  if (spot.code !== code) Object.assign(spot, { list: null, code, err: '', tone: '', about: '' });
+  const rows = spotRows(spot.list, spot), abouts = [...new Set((spot.list || []).map(x => x.about))].sort();
+  const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).length - pos;
+  const media = x => (x.media || []).map((m, i) => html`${i ? ' · ' : ''}<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener">${/^video/.test(m.type) ? 'Video' : 'Photo'} ${i + 1}</a>`);
+  return html`<section class="card"><div class="card-head"><h2>Spotlight</h2><span class="muted">From the site, for Central Hub only. Not in the report.</span></div>
+    ${!code ? html`<p class="muted">This project has no Field Report code.</p>` : html`
+    <div class="row"><button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? 'Check again' : 'Show the notes'}</button>
+      ${spot.list ? html`<select data-chg="spotTone" aria-label="Positive or negative"><option value="">Positive and negative (${pos} · ${neg})</option>${options([['pos', 'Positive'], ['neg', 'Negative']], spot.tone)}</select>
+      <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select>` : ''}</div>
+    ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
+    ${spot.list ? (rows.length ? html`<ul class="plain">${rows.map(x => html`<li><span class="pill ${TONE[x.tone]?.[1] || ''}">${TONE[x.tone]?.[0] || ''}</span> <b>${x.cat} · ${x.about}</b>
+      <span class="muted">${fmtDate(String(x.at).slice(0, 10))} ${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.replace('T', ' ')} on the phone` : ''} · by ${x.byName || x.by}</span>${x.note ? html`<div>${x.note}</div>` : ''}${x.media?.length ? html`<div class="small">${media(x)}</div>` : ''}</li>`)}</ul>`
+      : html`<p class="muted">No note here.</p>`) : ''}`}</section>`;
+}
 let docOf = null;       // id of the report shown as the Daily Site Report (v0.21.0)
 let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
 let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
@@ -195,6 +218,12 @@ function checkedBy(r) {
 }
 
 /** Who approved and signed, and when: in Central Hub's history of the report, not on its PDF. */
+/** v0.30.0: a report sent from the site without a connection: when Send was pressed and when it reached the office. */
+export function offlineSent(f) {
+  const p = Date.parse(f?.pressedAt || ''), a = Date.parse(f?.receivedAt || '');
+  return p && a && a - p >= 2 * 60e3 ? `Sent offline: Send pressed ${at(f.pressedAt)}, reached the office ${at(f.receivedAt)}` : '';
+}
+
 function approvalLine(r) {
   const a = r.approval;
   if (!a && !r.approvedBy) return '';
@@ -423,12 +452,12 @@ export function render(c) {
       </div>`;
   }
   const now = tab || (c.role === 'site' ? 'enter' : 'list');
-  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report']];
+  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report'], ...(store.isAdmin ? [['spot', 'Spotlight']] : [])];
   // one column: Field Report first, then the tabs
   return html`<div class="side">${fieldCard}
     <div class="emp-tabs set-tabs" role="tablist">${tabs.map(([k, label, n]) => html`
       <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="repTab" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>
-    ${now === 'enter' || back ? formCard : listCard}</div>`;
+    ${now === 'spot' && store.isAdmin ? spotCard(c) : now === 'enter' || back ? formCard : listCard}</div>`;
 }
 
 /** The report as the Daily Site Report, with Print, Email as PDF and WhatsApp. The attendance page is the office's only. */
@@ -483,7 +512,7 @@ function readCard(r, c) {
     <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
       ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin">Delete</button></div>
-    ${approvalLine(r)}
+    ${offlineSent(r.field) ? html`<p class="notice warn no-print">${offlineSent(r.field)}</p>` : ''}${approvalLine(r)}
     ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
     ${sheet(r, c)}
   </section>`;
@@ -621,6 +650,8 @@ export const submits = {
 
 export const changes = {
   withAtt(el) { withAtt = el.checked; },
+  spotTone(el) { spot.tone = el.value; },
+  spotAbout(el) { spot.about = el.value; },
   /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
   period(el) {
     period[el.dataset.f] = +el.value || 0;
@@ -682,6 +713,12 @@ export const actions = {
   /** Discard what was typed: the form is redrawn with its starting values. */
   clearForm() { notice = 'Form cleared. Nothing was saved.'; },
   repTab(el) { tab = el.dataset.t; },
+  async spotLoad() {
+    if (!store.isAdmin || spot.busy || !spot.code) return;
+    spot.busy = true; spot.err = ''; store.notify();
+    try { spot.list = await fieldSpotlight(spot.code); } catch (e) { spot.err = `Could not get the notes: ${e.message || e}`; }
+    finally { spot.busy = false; store.notify(); }
+  },
   openDoc(el, c) { if (isSiteUser(c)) return; docOf = el.dataset.id; withAtt = false; brief = false; notice = ''; },
   docKind(el) { brief = el.dataset.kind === 'brief'; },
   closeDoc() { docOf = null; notice = ''; },

@@ -237,6 +237,8 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         position: meta.position || '', location: meta.location || '', activities: meta.activities || [],
         hours: meta.hours || null, tempC: meta.weather?.tempC ?? null, ground: meta.weather?.ground || '',
         delays: meta.delays || [],
+        pressedAt: meta.pressedAt || '', receivedAt: meta.uploadedAt || '',   // v0.30.0: a report sent offline shows both times
+        attention: Array.isArray(meta.attention) ? meta.attention.map(String).filter(Boolean) : [],   // v0.30.0: a serious issue for the client (Field Report 2.7.0)
         safety: meta.safety?.status || '', toolbox: meta.safety ? !!meta.safety.toolboxTalk : null, safetyNotes: meta.safety?.notes || [],
         equipment: meta.equipment || [],
         progress: meta.progress || [], extra: meta.progressExtra || [], notes: meta.notes || [], plan: meta.plan || [],
@@ -466,6 +468,13 @@ export async function fieldUserDo(action, body) {
   const out = await post({ action, ...body });
   if (!out.ok) throw new Error(out.error || 'Field Report refused the change.');
   return out;
+}
+
+/** v0.30.0: the Spotlight notes of one project from the site (script 7.39.0, spotList), newest first. */
+export async function fieldSpotlight(code) {
+  const out = await post({ action: 'spotList', proj: String(code || '').toUpperCase() });
+  if (!out.ok) throw new Error(/file name|PDF/i.test(out.error || '') ? 'The Field Report script is older than 7.39.0: deploy the new script first.' : out.error || 'Field Report would not say.');
+  return out.notes || [];
 }
 
 /** Why an email can or cannot see each project (the script's linkCheck, admin key): [{ code, name, status, hasLinked, inLinked, visible, why }]. */

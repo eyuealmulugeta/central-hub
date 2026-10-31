@@ -941,7 +941,6 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .gate-or::before, .gate-or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
 .gate-note { margin: 0; font-size: 13px; font-weight: 600; color: var(--brand-2); }
 .gate-note:empty { display: none; }
-.gate-since { margin: 6px 0 0; text-align: center; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 
 /* ---- Discuss ---- */
 .view-discuss { grid-template: minmax(0, 1fr) / 300px minmax(0, 1fr); }

@@ -13,6 +13,12 @@ export function buildFlags({ project, ws, sched, boq, led, bill, today }) {
   const auto = [];
   const flag = (sev, kind, title, detail, link) => auto.push({ sev, kind, title, detail, link });
 
+  // v0.30.0: Attention from the site (Field Report 2.7.0): a serious issue for the client, from the last 14 days
+  for (const r of ws.reports || []) {
+    if (!r.date || toDay(r.date) < T - 14) continue;
+    for (const text of r.field?.attention || []) flag('high', 'Attention', text, `From the site, ${fmtDay(toDay(r.date))}${r.field.no ? ` · report No. ${r.field.no}` : ''}`, 'reports');
+  }
+
   // schedule. A delay runs down the whole chain of tasks behind it, so only the tasks where the
   // delay starts are listed one by one; everything merely pushed back by them is one line.
   const slipOf = new Map(sched.rows.map(r => [r.id, r.progress < 100 ? r.slip : 0]));

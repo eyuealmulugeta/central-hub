@@ -2,8 +2,8 @@
 // file fetched is kept; offline, the last copy kept is used. Only this site's own files and the
 // Firebase scripts are kept. Data never goes through here: Firestore keeps its own offline copy.
 
-const CACHE = 'central-hub-shell-v30';
-const FIRST = ['./', 'index.html', 'css/app.css', 'assets/logo.png', 'manifest.webmanifest'];
+const CACHE = 'central-hub-shell-v32';
+const FIRST = ['./', 'index.html', 'css/app.css', 'js/theme.js', 'assets/logo.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', event => {
   self.skipWaiting();

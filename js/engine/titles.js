@@ -8,7 +8,6 @@
 export const TITLES = [
   ['general_manager', 'General Manager', 'Management', 1],
   ['project_manager', 'Project Engineer', 'Management', 2],
-  ['operations_lead', 'Operations Lead', 'Management', 2],
   ['chief_engineer', 'Chief Engineer', 'Management', 2],
   ['site_engineer', 'Site Engineer', 'Management', 3],
   ['hse_officer', 'HSE Officer', 'Site', 2],

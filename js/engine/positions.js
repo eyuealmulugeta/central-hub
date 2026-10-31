@@ -6,13 +6,19 @@
 import { NATIONALITY } from './docread.js';
 
 export const ROLE_GROUPS = [
-  ['Management', ['General Manager', 'Project Engineer', 'Operations Lead', 'Chief Engineer', 'Site Engineer', 'Site Architect']],
-  ['Supervision', ['General Foreman', 'Steel Structure Foreman', 'HSE Officer']],
-  ['Technicians', ['Container House Technician', 'Technician', 'Welder', 'Mason', 'Electrician', 'Plumber']],
-  ['Labour', ['Skilled Labourer', 'Semi-skilled Labourer', 'Labourer', 'Daily Labourer', 'Site Guard']],
+  ['Management', ['General Manager', 'Project Engineer', 'Chief Engineer', 'Site Engineer', 'Site Architect']],
+  ['Supervision', ['Foreman', 'HSE Officer']],
+  ['Technicians', ['Technician', 'Welder', 'Mason', 'Electrician', 'Plumber']],
+  ['Labour', ['Skilled Labourer', 'Semi-skilled labor', 'Labourer', 'Daily labor', 'Site Guard']],
   ['Office', ['Accountant', 'Quantity Surveyor (QS)', 'Procurement Manager', 'Logistics Coordinator', 'Office Engineer', 'Coordinator', 'HR/Admin Assistant']],
 ];
 export const ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
+/** v0.24.0: positions merged or renamed by the owner, and the one each became. A record is read as the new one. Operations Lead is gone (shown as old). */
+const OLD_ROLES = {
+  'container house technician': 'Technician', 'general foreman': 'Foreman', 'steel structure foreman': 'Foreman',
+  'daily labourer': 'Daily labor', 'semi-skilled labourer': 'Semi-skilled labor',
+};
+export const normRole = r => OLD_ROLES[String(r || '').trim().toLowerCase()] || String(r || '').trim();
 
 export const DEPARTMENTS = ['Executive & General Management', 'Project Management & Site Supervision', 'Engineering & Technical Services',
   'Procurement, Supply Chain & Logistics', 'Finance, Accounting & Administration', 'Commercial, Sales & International Trade'];
@@ -28,11 +34,11 @@ export const SITE_DEPARTMENTS = [DEPARTMENTS[1], DEPARTMENTS[2]];
 const unique = list => [...new Set(list.map(x => String(x || '').trim()).filter(Boolean))];
 
 /** Job positions: the fixed roles, then `current` when it is not one of them. */
-export const positionChoices = ({ current = '' } = {}) => unique([...ROLES, current]);
+export const positionChoices = ({ current = '' } = {}) => unique([...ROLES, normRole(current)]);
 
 /** The roles in their groups; a `current` role outside the list comes first, as the one group "Old". */
 export const positionGroups = (current = '') => {
-  const old = String(current || '').trim();
+  const old = normRole(current);
   return [...(old && !ROLES.includes(old) ? [['Old', [old]]] : []), ...ROLE_GROUPS];
 };
 

@@ -2,6 +2,7 @@
 // Central Hub is the source: what is set here is what Field Report shows, on the desktop and the phone. Pure functions;
 // the calls to the script are in sync/fieldreport.js.
 
+import { iso3 } from './countries.js';
 import { statusOf, activitiesOf, cleanActivities, cleanText, cleanEmail } from './deployment.js';
 
 /** The country codes Field Report takes (three letters), for the countries of the price regions. */
@@ -15,7 +16,7 @@ const up = (v, n) => String(v ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().
  * guess, and Field Report files a project's reports under its country, so a held country is never overwritten by a guess);
  * else from the price region, else ''.
  */
-export const countryOf = (project, regions = [], existing = null) => up(project.fieldCc, 3) || up(existing?.cc, 3) || COUNTRY3[regions.find(r => r.id === project.regionId)?.id] || '';
+export const countryOf = (project, regions = [], existing = null) => up(project.fieldCc, 3) || up(existing?.cc, 3) || COUNTRY3[project.regionId] || iso3(project.regionId) || '';
 
 /**
  * What Field Report should hold for a project. `existing` is what it holds now: fields Central Hub has no say in (the

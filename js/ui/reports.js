@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, movePdfIds } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -38,7 +38,7 @@ let autoFailed = false; // the notice on screen is an error from an automatic ch
 let checkedAt = '';     // time of the last automatic check, e.g. 14:05
 const expanded = new Set(); // ids of submitted reports shown in full
 let replyNotice = '';   // result of the last reply sent to the site
-let replying = false;
+const sending = new Set();   // v0.24.0: reports whose reply is on its way (the page is never held while it goes)
 let sentBack = null;    // { id, decision, text }: the reply just sent from the review, shown until "Go back"
 let viewing = null;     // id of a report opened for reading (its PDF on top, the history beside it)
 let binNotice = '';
@@ -186,13 +186,13 @@ const pdfLink = (r, c) => {
 function decideBar(r, c, tasks = 0) {
   const field = r.source === 'field';
   const n = (r.pins || []).length;
-  const send = (decision, text) => html`<button class="btn" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${replying ? 'disabled' : ''}>${text}</button>`;
+  const send = (decision, text) => html`<button class="btn" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${sending.has(r.id) ? 'disabled' : ''}>${text}</button>`;
   return html`<div class="decide reply">
     ${field ? pinBox(r) : ''}
     <p class="approve-sum">${approveSummary(r, tasks, billingOf(c.project).hoursPerDay)}</p>
     ${field ? html`<textarea name="msg" rows="2" placeholder="Message to ${r.by}: what to correct, or a comment (also sent with Approve)" aria-label="Message to the person who prepared the report"></textarea>` : ''}
     <div class="actions left">
-      ${store.canApprove ? html`<button class="btn primary" ${replying ? 'disabled' : ''}>Approve</button>` : html`<span class="chip warn">Only the Admin and approvers can approve</span>`}
+      ${store.canApprove ? html`<button class="btn primary" ${sending.has(r.id) ? 'disabled' : ''}>Approve</button>` : html`<span class="chip warn">Only the Admin and approvers can approve</span>`}
       ${field ? html`${send('changes', n ? `Send back with ${n} comment${n === 1 ? '' : 's'}` : 'Send back for changes')}${send('comment', 'Comment only')}` : ''}
       <button class="btn ghost" type="button" data-fresh data-act="cancelReview" title="Leave this report waiting">Later</button>
       <span class="muted">${replyNotice || notice}</span>
@@ -204,7 +204,7 @@ function decideBar(r, c, tasks = 0) {
 function replyBox(r, c) {
   const f = r.field;
   const [label, cls] = FIELD_STATUS[f.status] || FIELD_STATUS.submitted;
-  const send = (decision, text, primary) => html`<button class="btn small ${primary ? 'primary' : ''}" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${replying ? 'disabled' : ''}>${text}</button>`;
+  const send = (decision, text, primary) => html`<button class="btn small ${primary ? 'primary' : ''}" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${sending.has(r.id) ? 'disabled' : ''}>${text}</button>`;
   return html`<div class="reply">
     <span><span class="muted">In Field Report</span> ${chip(label, cls)}${f.reviewedBy ? html` <span class="muted">by ${f.reviewedBy}</span>` : ''}</span>
     ${(f.comments || []).length ? html`<ul class="plain">${f.comments.map(x => html`<li><b>${x.by}</b> <span class="muted">${String(x.at || '').slice(0, 10)}</span> ${x.text}</li>`)}</ul>` : ''}
@@ -438,7 +438,20 @@ function pdfCard(r, c) {
       <a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(x, f)}</div>
     <iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
     <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
+    ${olderList(r, c)}
   </section>`;
+}
+
+/** v0.24.0: the other reports of the same day, older than the one shown: never discarded, each can be opened. */
+function olderList(r, c) {
+  const list = r.field?.older || [];
+  if (!list.length || isSiteUser(c)) return '';
+  return html`<div class="older-reports"><h4>Other reports of this day (${list.length})</h4>
+    <ul>${list.map(o => {
+      const x = fileOf(c.ws, { id: olderId(r.id, o) });
+      return html`<li>No. ${o.no || '?'} · ${o.by || 'Site'}${o.at ? ` · sent ${fmtDate(o.at.slice(0, 10))} ${o.at.slice(11, 16)}` : ''}${o.version > 1 ? ` · version ${o.version}` : ''}
+        ${x.pdfId ? html`<a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open</a>` : html`<span class="muted">(${o.pdf || 'no PDF'})</span>`}</li>`;
+    })}</ul></div>`;
 }
 
 /** A report that needs no confirming, read in full. */
@@ -524,6 +537,8 @@ export const submits = {
       const who = store.profile.name || store.user?.name || store.user?.email || '';
       store.update(ws => Object.assign(underReview(ws), {
         by, weather: fd.get('weather'), entries, review: 'done', approvedBy: who, approvedAt: new Date().toISOString(),
+        // v0.23.2: the site still has to be told; the server import tells it again until it has been (see importer.js)
+        ...(cur.source === 'field' && cur.field?.pdf ? { tellSite: true } : {}),
         manpower: manpower.map(m => (hrs.get(m.trade) != null && m.ot === cur.manpower.find(x => x.trade === m.trade)?.ot ? { ...m, hrs: hrs.get(m.trade) } : m)),
       }));
       reviewing = null;
@@ -531,16 +546,16 @@ export const submits = {
       const done = `Field report for ${fmtDate(date)} approved. The schedule, attendance, pay and labour cost are updated.`;
       if (cur.source !== 'field' || !cur.field?.pdf) { notice = done; replyNotice = ''; return; }
       // the site is told after the figures are in: if it cannot be reached, the approval here stands and can be sent again
-      replyNotice = `${done} Telling the site…`;
+      replyNotice = `${done} Telling the site in the background…`;
       const id = cur.id, projectId = c.project.id;
-      replying = true;
+      sending.add(id);
       reviewFieldReport({ name: cur.field.pdf, decision: 'approve', text: pinsMessage(cur.pins, (fd.get('msg') || '').trim()) })
         .then(view => {
-          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' }; });
+          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) { rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' }; delete rec.tellSite; } });
           replyNotice = `${done} The site is notified and the report is locked in Field Report.`;
         })
-        .catch(err => { replyNotice = `${done} The site was not told: ${err.message} Press Approve under the report to send it again.`; })
-        .finally(() => { replying = false; store.notify(); });
+        .catch(err => { replyNotice = `${done} The site was not told yet (${err.message}). Central Hub tries again every 5 minutes, or press Approve under the report.`; })
+        .finally(() => { sending.delete(id); store.notify(); });
       return;
     }
 
@@ -669,34 +684,48 @@ export const actions = {
 
   /** Send approve / changes / comment / reopen to the preparer through the Field Report receiver. */
   async reply(el, c) {
-    if (replying) return;
     const decision = el.dataset.d;
     const id = el.dataset.id;
+    if (sending.has(id)) return;
     const report = c.ws.reports.find(r => r.id === id);
     const typed = (el.closest('.reply')?.querySelector('textarea')?.value || '').trim();
     const text = reviewing === id ? pinsMessage(report.pins, typed) : typed;
     if ((decision === 'changes' || decision === 'comment') && !text) { replyNotice = 'Write the message first.'; return; }
-    const projectId = c.project.id;
-    replying = true;
-    replyNotice = 'Sending…';
+    const projectId = c.project.id, before = structuredClone(report.field || {}), pins = report.pins;
+    // v0.24.0: shown here at once; the site is told in the background (it used to hold the page for 10-15 seconds)
+    const expect = { approve: 'approved', changes: 'changes', reopen: 'submitted' }[decision];
+    const mine = store.profile.name || store.user?.name || store.user?.email || 'Central Hub';
+    store.update(ws => {
+      const rec = ws.reports.find(r => r.id === id);
+      rec.field = { ...rec.field, ...(expect ? { status: expect } : {}), ...(text ? { comments: [...(rec.field?.comments || []), { by: mine, at: new Date().toISOString(), text, sending: true }] } : {}) };
+      if (decision !== 'reopen') delete rec.pins;
+    });
+    replyNotice = `${REPLY_DONE[decision]} (sending in the background)`;
+    if (reviewing === id && (decision === 'changes' || decision === 'approve')) {
+      sentBack = { id, decision, text };
+      if (decision === 'changes') reviewing = null;
+    }
+    sending.add(id);
+    store.notify();
     try {
       const view = await reviewFieldReport({ name: report.field.pdf, decision, text });
-      if (store.project.id !== projectId) throw new Error('The project was switched before the reply was recorded here. It was sent.');
-      store.update(ws => {
-        const rec = ws.reports.find(r => r.id === id);
-        rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' };
-        if (decision !== 'reopen') delete rec.pins;   // sent: the pinned comments are now in the conversation
-      });
-      replyNotice = REPLY_DONE[decision];
-      // a verdict given from the review closes the review: the form gives way to a short confirmation
-      if (reviewing === id && (decision === 'changes' || decision === 'approve')) {
-        sentBack = { id, decision, text };
-        if (decision === 'changes') reviewing = null;
+      if (store.project?.id === projectId) {
+        store.update(ws => {
+          const rec = ws.reports.find(r => r.id === id);
+          if (!rec) return;
+          rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' };
+          delete rec.tellSite;
+        });
       }
+      replyNotice = REPLY_DONE[decision];
     } catch (err) {
-      replyNotice = `Not sent: ${err.message}`;
+      // not delivered: put the report back as it was, so nothing looks sent that was not
+      if (store.project?.id === projectId) {
+        store.update(ws => { const rec = ws.reports.find(r => r.id === id); if (rec) { rec.field = before; if (pins) rec.pins = pins; } });
+      }
+      replyNotice = `Not sent: ${err.message}. Nothing was changed; try again.`;
     }
-    replying = false;
+    sending.delete(id);
     store.notify();
   },
 

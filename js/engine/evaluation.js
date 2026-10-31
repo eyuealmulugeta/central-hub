@@ -10,6 +10,7 @@
 // A rater's tier comes from their title (users/<email>.ranks); the tier of a team member is the one
 // chosen for them (`level`, 't2' to 't5'), else the one of their job position.
 
+import { normRole } from './positions.js';
 import { sum } from '../core/util.js';
 import { TITLES } from './titles.js';
 
@@ -21,9 +22,9 @@ export const LEVELS = [['t1', 'Tier 1 · Owners and General Manager (not rated)'
 /** Job positions by tier, for a member whose tier was never chosen. Anything else is tier 4. */
 const ROLE_TIERS = {
   t1: ['General Manager', 'Owner'],
-  t2: ['Project Engineer', 'Project Manager', 'Operations Lead', 'Chief Engineer', 'Accountant', 'HSE Officer'],
+  t2: ['Project Engineer', 'Project Manager', 'Operations Lead', 'Chief Engineer', 'Accountant', 'HSE Officer'],   // Operations Lead: records from before v0.24.0
   t3: ['Site Engineer', 'Site Architect', 'QS', 'Procurement Manager', 'Logistics Coordinator', 'Quantity Surveyor (QS)', 'Office Engineer', 'Coordinator'],
-  t5: ['Daily Labourer', 'Labourer', 'Site Guard'],
+  t5: ['Daily labor', 'Labourer', 'Site Guard'],
 };
 /** The levels of before the tiers. */
 const OLD_LEVELS = { project_manager: 't2', site_engineer: 't3' };
@@ -36,7 +37,7 @@ export const RATES = { 1: ['t2', 't3', 't4', 't5'], 2: ['t3'], 3: ['t4'], 4: ['t
 export const rankLabel = id => TITLES.find(([k]) => k === id)?.[1] || id;
 export const levelLabel = id => LEVELS.find(([k]) => k === id)?.[1] || LEVELS[3][1];
 export const tierOfRole = role => {
-  const r = String(role || '').trim().toLowerCase();
+  const r = normRole(role).toLowerCase();
   const hit = Object.entries(ROLE_TIERS).find(([, list]) => list.some(x => x.toLowerCase() === r));
   return hit ? hit[0] : 't4';
 };

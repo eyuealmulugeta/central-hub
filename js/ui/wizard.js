@@ -2,6 +2,7 @@
 // rarely think about (markups, working week, hours in a day, overtime, activity types) comes from the
 // template. A project made here opens on its Setup checklist, which says what is still to do.
 
+import { countryList, countryName } from '../engine/countries.js';
 import { store } from '../core/store.js';
 import { TEMPLATES, templateOf, BILLING_HELP, billingLabel, defaultVat, checkStep, fromWizard } from '../engine/setup.js';
 import { METHODS } from '../engine/billing.js';
@@ -48,7 +49,7 @@ function draw() {
       </fieldset>
       <label>Project name <input data-w="name" value="${a.name}" autocomplete="off" placeholder="e.g. Mosestro Israel: container house installation"></label>
       <div class="grid2">
-        <label>Country <select data-w="regionId">${options(g.regions.map(r => [r.id, r.name]), a.regionId)}</select></label>
+        <label>Country <select data-w="regionId">${options(countryList(), a.regionId)}</select></label>
         <label>Currency <select data-w="currency">${options(Object.keys(g.fx.rates).map(k => [k, k]), a.currency)}</select></label>
       </div>
       <span class="muted">Projects in Ethiopia are in ETB, all others in USD. The country sets the price list; you can add a country under Settings.</span>` : ''}
@@ -66,7 +67,7 @@ function draw() {
       <dl class="facts">
         <dt>Project</dt><dd>${a.name}</dd>
         <dt>Kind</dt><dd>${t.name}</dd>
-        <dt>Country and currency</dt><dd>${g.regions.find(r => r.id === a.regionId)?.name || ''}, ${a.currency}</dd>
+        <dt>Country and currency</dt><dd>${countryName(a.regionId)}, ${a.currency}</dd>
         <dt>Client</dt><dd>${a.client}</dd>
         <dt>Contract value</dt><dd>${Number(a.contractValue).toLocaleString('en-US')} ${a.currency}, before ${a.vat}% VAT</dd>
         <dt>Billing</dt><dd>${billingLabel(a.billing)}</dd>
@@ -99,9 +100,7 @@ function bind() {
       a.template = f.value;
       if (!a.billingTouched) a.billing = templateOf(a.template).billing;
     } else if (key === 'regionId') {
-      a.regionId = f.value;
-      const region = store.global.regions.find(r => r.id === f.value);
-      if (region) { a.currency = region.currency; if (!a.vatTouched) a.vat = defaultVat(a.currency); }
+      a.regionId = f.value;   // v0.24.0: the country never changes the currency
     } else if (key === 'currency') {
       a.currency = f.value;
       if (!a.vatTouched) a.vat = defaultVat(a.currency);

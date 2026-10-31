@@ -11,8 +11,10 @@ export const TRADING_PAGES = ['trade', 'stock'];
 export const COMPANY_PAGES = ['finance', 'contracts'];
 /** Admin only, always. */
 /** The five Settings pages, in menu order. */
-export const SETTINGS_PAGES = ['apps', 'prices', 'access', 'catalog', 'company', 'links'];
-export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', ...SETTINGS_PAGES];   // notifications: v0.23.0
+export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links'];
+/** v0.24.0: Settings in two: My settings (everyone) and the Admin settings (the rest). */
+export const MY_SETTINGS = ['mine'];
+export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', ...SETTINGS_PAGES.filter(k => !MY_SETTINGS.includes(k))];   // notifications: v0.23.0
 
 /** What the Admin can grant to anyone but the Admin (Office and Site alike), in groups. 'trade' covers both trading pages. */
 export const GRANT_GROUPS = [
@@ -64,7 +66,7 @@ const key = permKey;
 /** May someone with `role` and granted `pages` open `page`? */
 export function mayOpen(role, pages, page) {
   if (page === 'directory') return role !== 'owner' && pages.includes('directory');   // the staff directory is for those without the employee records
-  if (role === 'owner' || page === 'home' || page === 'discuss') return true;   // Home and Discuss show each person only their own sections
+  if (role === 'owner' || page === 'home' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
   return pages.includes(key(page));
 }

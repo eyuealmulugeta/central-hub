@@ -9,6 +9,8 @@ import { healthOf, projectLine, needsYou, thisWeek, waitingOn } from '../engine/
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 
 let only = '';   // the project the lists are filtered to; '' = all projects
+/** v0.24.0: "All projects" chosen at the top: every project again. */
+export const showAll = () => { only = ''; };
 
 const TONE = { ok: 'ok', warn: 'warn', bad: 'high', none: '' };
 const SEV_TONE = { high: 'high', warn: 'warn', info: 'info' };

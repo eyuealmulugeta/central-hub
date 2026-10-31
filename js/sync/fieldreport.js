@@ -143,6 +143,7 @@ function manpower(crew, hoursPerDay) {
 export function newestPerDay(reports = []) {
   const best = new Map();
   const replaced = [];
+  const older = new Map();   // v0.24.0: date -> the other reports of that day, never discarded (they stay listed and openable)
   const newer = (a, b) => String(a.uploadedAt || '').localeCompare(String(b.uploadedAt || '')) || (a.version || 1) - (b.version || 1);
   for (const m of reports || []) {
     if (!m?.date) continue;
@@ -150,10 +151,15 @@ export function newestPerDay(reports = []) {
     if (!old) { best.set(m.date, m); continue; }
     const [keep, drop] = newer(m, old) > 0 ? [m, old] : [old, m];
     best.set(m.date, keep);
+    older.set(m.date, [...(older.get(m.date) || []), drop]);
     replaced.push({ date: m.date, kept: keep.reportNo || '', dropped: drop.reportNo || '' });
   }
-  return { reports: [...best.values()], replaced };
+  return { reports: [...best.values()], replaced, older };
 }
+/** What a report keeps of an older one of its day (no Drive ids: Site reads reports; those go to reportfiles). */
+const olderLine = m => ({ no: m.reportNo || '', by: m.preparedBy || m.uploadedBy || '', at: m.uploadedAt || '', version: m.version || 1, pdf: m.pdf || '' });
+/** The reportfiles id of an older report of the day. */
+export const olderId = (id, o) => `${id}~${o.no || o.pdf}`;
 
 /**
  * Where a report's PDF is in Drive. Kept in `reportfiles`, a section Site users never read (v0.22.6), so a site
@@ -196,19 +202,22 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
   // a report deleted on purpose waits in the recycle bin; Field Report must not bring it back meanwhile
   const trashed = new Set((ws.trash || []).map(t => t.record?.id).filter(Boolean));
 
-  const { reports, replaced } = newestPerDay(payload.reports);
+  const { reports, replaced, older } = newestPerDay(payload.reports);
   const droppedOn = new Map(replaced.map(x => [x.date, x.dropped]));
   for (const meta of reports) {
     const id = `fr_${meta.date}`;
     if (trashed.has(id)) continue;
     const old = ws.reports.find(r => r.id === id);
+    const others = (older.get(meta.date) || []).map(olderLine);
+    for (const o of older.get(meta.date) || []) putFile(ws, olderId(id, olderLine(o)), o.pdfId, o.folderId);
     const version = meta.version || 1;
     const sameVersion = old && !old.field?.nowork && old.field?.version === version;
     if (sameVersion && old.field.v === FIELD_SCHEMA) {
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
-      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length) {
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '' } });
+      const keepOlder = others.length ? { older: others } : {};
+      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others)) {
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', ...keepOlder } });
       }
       putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
@@ -237,6 +246,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         delayItems: meta.delayItems || [], received: meta.received || [], instructions: meta.instructions || [],
         // an older report of the same day that this one replaced (its number), shown on the report
         ...(droppedOn.has(meta.date) ? { replaced: droppedOn.get(meta.date) || '?' } : {}),
+        ...(others.length ? { older: others } : {}),   // v0.24.0: every other report of the day, listed under this one
       },
     });
     putFile(ws, id, meta.pdfId, meta.folderId);
@@ -253,6 +263,9 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       });
     });
   }
+
+  // v0.23.2: an approval the site already knows of, or one taken back, no longer needs telling
+  for (const r of ws.reports) if (r.tellSite && (r.review !== 'done' || r.field?.status !== 'submitted')) delete r.tellSite;
 
   for (const n of payload.nowork || []) {
     if (!n.date || ws.reports.some(r => r.id === `fr_${n.date}`) || trashed.has(`fr_${n.date}`)) continue;

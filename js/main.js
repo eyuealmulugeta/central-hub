@@ -58,15 +58,15 @@ import { APP_VERSION } from './version.js';
 import { describePaper, makePdf, canShareFile, shareFile, whatsappUrl, TELEGRAM_URL, downloadFile, sizeLabel } from './sync/share.js';
 import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 
-const APP = 'Amistad Prefab Central Hub';
-const VIEWS = { home, notifications, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const APP = 'Central Hub';
+const VIEWS = { home, notifications, dashboard, reports, schedule, ledger, evaluation, directory, letters, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
 const COMPANY_VIEWS = { home: 'What needs you, across all projects', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { home: 'Today', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { mine: 'My settings', home: 'Today', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Staff directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currencies', company: 'Company details', links: 'Field Report and import', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -102,6 +102,7 @@ const quickOk = q => allowed(q.view) && pagesIn(division).includes(q.view) && !(
 const ROLE_NAME = { owner: 'Admin', office: 'Office', site: 'Site' };
 const SIDE_KEY = 'sf:side';
 const NEW_PROJECT = '__new';
+const ALL_PROJECTS = '__all__';
 const TOAST_MS = 5000;
 const UNDO_MS = 60 * 1000;   // the Undo stays a minute unless used or replaced
 
@@ -219,7 +220,9 @@ function renderSidebar(name, summaries) {
   $('#division').hidden = mine.length < 2;
   $('#division').innerHTML = String(html`${mine.map(d => html`<button type="button" data-division="${d}" class="${d === division ? 'on' : ''}" aria-pressed="${d === division}">${divisionLabel(d)}</button>`)}`);
   const installation = division === 'installation';
-  const choices = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
+  // v0.24.0: one chooser, at the top centre next to the search, "All projects" first (it opens Today, across every project)
+  const all = route() === 'home';
+  const choices = String(html`<option value="${ALL_PROJECTS}" ${all ? 'selected' : ''}>All projects</option>${options(store.projects.map(x => [x.id, x.name]), all ? '' : p?.id)}
     ${store.isAdmin ? html`<option value="${NEW_PROJECT}">+ New project</option>` : ''}`);
   // the same chooser twice: under the division switch in the menu (wide screens), and in the page header (phones, narrow menu)
   $('#project-select').innerHTML = choices;
@@ -227,8 +230,9 @@ function renderSidebar(name, summaries) {
   $('#btn-new-project').hidden = !store.isAdmin || !installation;
   $('#project-pick').hidden = !installation || !(store.projects.length || store.isAdmin);
   $('#side-project').hidden = $('#project-pick').hidden;
-  $('#btn-settings').hidden = !store.isAdmin || !p;
-  $('#btn-settings').href = `#${lastTab.settings || 'prices'}`;
+  // v0.24.0: everyone has My settings; the Admin settings stay the Admin's
+  $('#btn-settings').hidden = !p;
+  $('#btn-settings').href = `#${store.isAdmin ? lastTab.settings || 'prices' : 'mine'}`;
   // deleting and settings are the Admin's: their buttons are hidden for everyone else
   document.body.classList.toggle('not-admin', !store.isAdmin);
 
@@ -637,7 +641,8 @@ const narrow = on => {
 $('#btn-collapse').addEventListener('click', () => narrow(!document.body.classList.contains('side-narrow')));
 try { if (localStorage.getItem(SIDE_KEY) === 'narrow') document.body.classList.add('side-narrow'); } catch { /* no saved choice */ }
 const pickProject = e => {
-  if (e.target.value !== NEW_PROJECT) return store.switchTo(e.target.value);
+  if (e.target.value === ALL_PROJECTS) { home.showAll(); location.hash = '#home'; return refresh(); }
+  if (e.target.value !== NEW_PROJECT) { if (route() === 'home') location.hash = '#dashboard'; return store.switchTo(e.target.value); }
   e.target.value = store.project?.id || '';
   newProject();
 };
@@ -785,11 +790,13 @@ function start() {
     const net = $('#net');
     const showNet = () => {
       const off = navigator.onLine === false, n = store.pending;
-      net.hidden = !store.cloud || (!off && !n);
-      net.className = `chip net${off ? ' off' : ''}`;
-      net.textContent = off ? (n ? `Offline · ${n} change${n === 1 ? '' : 's'} waiting` : 'Offline: changes will be sent later') : `Sending ${n} change${n === 1 ? '' : 's'}…`;
+      // v0.24.0: one blue "Working…" tag whenever a save, import or Field Report request is on its way; the page is never held
+      net.hidden = !store.cloud || (!off && !n && !working);
+      net.className = `chip net${off ? ' off' : ' work'}`;
+      net.textContent = off ? (n ? `Offline · ${n} change${n === 1 ? '' : 's'} waiting` : 'Offline: changes will be sent later') : 'Working…';
     };
     store.onNet(showNet);
+    addEventListener('hub-work', showNet);
     addEventListener('online', showNet);
     addEventListener('offline', showNet);
     showNet();
@@ -816,6 +823,7 @@ function start() {
 }
 
 /** The sign-in screen. `state` is 'signin', 'waiting', 'refused', 'sent', or a plain message. */
+let working = 0;    // v0.24.0: Field Report requests on their way (the blue "Working…" tag)
 let gateNote = '';   // a line under the sign-in form, for example why an activation link was not accepted
 function gate(state, user, canLeave = false) {
   const el = $('#gate');
@@ -826,22 +834,21 @@ function gate(state, user, canLeave = false) {
     : state === 'locked' ? `${user.email} is already signed in on another device (${describeSession(store.lockedBy)}). Only one device can be signed in at a time. Sign out there, or ask the Admin to reset your session, then click Check again. If that device is lost or broken, only the Admin can free it.`
     : state === 'unassigned' ? `${user.email} has access, but the Admin has not assigned a division yet (Installation or Trading). Nobody comes in before that. Ask the Admin to choose one under Settings, People and access, then click Check again.`
     : state === 'refused' ? `${user.email} has not been given access yet. Ask the Admin to add this address under Settings, People and access.`
-    : state === 'sent' ? "An activation email has been successfully sent. Check your spam folder if you don't get it within 3 minutes."
+    : state === 'sent' ? "We emailed you a link to set your password. Check your spam folder if you don't get it within 3 minutes."
+    : state === 'confirm' ? `We emailed ${user.email} a link to confirm the address. Open it, then click Check again. Check your spam folder if you don't get it within 3 minutes.`
     : state;
-  $('#gate-note').textContent = state === 'signin' ? gateNote
-    : state === 'sent' ? 'The link is valid for 5 minutes and must be opened in this same browser.' : '';
-  const stuck = state === 'waiting' || state === 'refused' || state === 'locked' || state === 'unassigned';
+  $('#gate-note').textContent = state === 'signin' ? gateNote : '';
+  const stuck = state === 'waiting' || state === 'refused' || state === 'locked' || state === 'unassigned' || state === 'confirm';
   $('#gate-signin').hidden = state !== 'signin';
-  $('#gate-link').hidden = state !== 'signin';
-  $('#gate-stay-row').hidden = state !== 'signin';
+  $('#gate-pass').hidden = state !== 'signin';
   // someone signed in who cannot get further must still be able to switch account
   $('#gate-signout').hidden = !stuck && !canLeave;
   $('#gate-again').hidden = !stuck && state !== 'sent';
   $('#gate-again').textContent = state === 'sent' ? 'Back to sign-in' : 'Check again';
-  $('#gate-again').dataset.do = state === 'sent' ? 'back' : 'reload';
+  $('#gate-again').dataset.do = state === 'sent' ? 'back' : state === 'confirm' ? 'confirm' : 'reload';
 }
 
-const stayChecked = () => $('#gate-stay').checked;
+// v0.23.2: no "Stay signed in" box; everyone stays signed in on their device until Sign out
 
 async function startCloud() {
   gate('Connecting…');
@@ -851,54 +858,66 @@ async function startCloud() {
     api = await connectCloud(firebaseConfig);
     // 1C: Field Report requests go through the server, which holds the key and checks who asks
     const { fieldServer } = await import('./sync/fieldreport.js');
-    fieldServer.call = body => api.call('fieldAction', { body });
+    fieldServer.call = body => { working++; dispatchEvent(new Event('hub-work')); return api.call('fieldAction', { body }).finally(() => { working--; dispatchEvent(new Event('hub-work')); }); };
   } catch (err) {
     console.warn(err);
     gate('Could not reach the server. Check the internet connection and reload.');
     return;
   }
   let signedIn = false;
-  $('#gate-signin').addEventListener('click', () => api.signIn(stayChecked()).catch(err => gate(`Sign-in did not complete (${err.code || err.message}). Try again.`)));
+  $('#gate-signin').addEventListener('click', () => api.signIn().catch(err => gate(`Sign-in did not complete (${err.code || err.message}). Try again.`)));
   $('#gate-signout').addEventListener('click', () => store.signOut());
   // another device took this person's session, or the Admin reset it: sign out here and say why
   store.onSessionEnded(reason => {
     gateNote = reason === 'reset' ? 'The Admin ended your session. Sign in again.' : 'You were signed out because this account was signed in on another device.';
     api.signOut();
   });
-  $('#gate-again').addEventListener('click', e => { if (e.target.dataset.do === 'back') { gateNote = ''; gate('signin'); } else location.reload(); });
-  $('#gate-link').addEventListener('submit', async e => {
-    e.preventDefault();
-    const email = $('#gate-email').value.trim();
-    if (!email) return;
-    gate('Sending the activation email…');
-    try {
-      await api.sendLink(email, stayChecked());
-      gate('sent');
-    } catch (err) {
-      console.warn(err);
-      gateNote = /operation-not-allowed/.test(err.code || '')
-        ? 'Activation links are not switched on yet. Until the Admin switches them on, use Sign in with Google.'
-        : `The activation email could not be sent (${err.code || err.message}).`;
-      gate('signin');
-    }
+  $('#gate-again').addEventListener('click', async e => {
+    const how = e.target.dataset.do;
+    if (how === 'back') { gateNote = ''; gate('signin'); return; }
+    if (how === 'confirm') { try { await api.refresh(); } catch { /* the reload asks again */ } }
+    location.reload();
   });
-
-  // the page may have been opened from an activation link
-  let linked = null;
-  try { linked = await api.finishLink(); } catch (err) { console.warn(err); linked = 'failed'; }
-  gateNote = linked === 'expired' ? 'That activation link is more than 5 minutes old. Ask for a new one.'
-    : linked === 'other' ? 'Open the activation link in the same browser you asked for it from, or ask for a new one.'
-    : linked === 'failed' ? 'That activation link did not work. It may have been used already. Ask for a new one.'
-    : '';
-  if (gateNote && !signedIn) gate('signin');
+  // v0.24.0: email and password in place of the activation link
+  const passFail = err => {
+    const c = String(err?.code || err?.message || '');
+    gateNote = /operation-not-allowed/.test(c) ? 'Email and password sign-in is not switched on yet. Until the Admin switches it on, use Sign in with Google.'
+      : /invalid-credential|wrong-password|user-not-found|invalid-login/.test(c) ? 'The email or password is wrong. First time here? Click "First time: create a password". Forgot it? Click "Forgot password".'
+      : /email-already-in-use/.test(c) ? 'This email already has an account. Sign in, or click "Forgot password" to set a new password.'
+      : /weak-password/.test(c) ? 'Choose a password of at least 8 characters.'
+      : /too-many-requests/.test(c) ? 'Too many tries. Wait a few minutes, or click "Forgot password".'
+      : `Sign-in did not complete (${c}).`;
+    gate('signin');
+  };
+  const typed = () => ({ email: $('#gate-email').value.trim(), password: $('#gate-password').value });
+  $('#gate-pass').addEventListener('submit', async e => {
+    e.preventDefault();
+    const { email, password } = typed();
+    if (!email || !password) return;
+    gate('Signing in…');
+    try { await api.signInPassword(email, password); } catch (err) { passFail(err); }
+  });
+  $('#gate-create').addEventListener('click', async () => {
+    const { email, password } = typed();
+    if (!email || password.length < 8) { gateNote = 'Type your email and a password of at least 8 characters, then click "First time: create a password".'; gate('signin'); return; }
+    gate('Creating your password…');
+    try { await api.createPassword(email, password); } catch (err) { passFail(err); }
+  });
+  $('#gate-forgot').addEventListener('click', async () => {
+    const { email } = typed();
+    if (!email) { gateNote = 'Type your email first, then click "Forgot password".'; gate('signin'); return; }
+    gate('Sending the email…');
+    try { await api.resetPassword(email); gate('sent'); } catch (err) { passFail(err); }
+  });
 
   api.onUser(async user => {
     signedIn = !!user;
     if (!user) { gate('signin'); return; }
     gate('Loading…');
-    // the database only accepts addresses whose owner has been confirmed; an activation link confirms one
+    // the database only accepts addresses whose owner has been confirmed: the email sent when the password was made confirms one
     if (!user.email || !user.verified) {
-      gate(`${user.email || 'This account'} is signed in, but the address has not been confirmed yet. Click "Use a different account", then type the address under "or" and use the activation link sent to it.`, null, true);
+      if (!user.email) { gate('This account has no email address. Click "Use a different account".', null, true); return; }
+      gate('confirm', user);
       return;
     }
     try {
@@ -933,6 +952,7 @@ async function startCloud() {
       flushWired = true;
       // faults kept on this device go to the Admin whenever it is online and signed in
       const sendFaults = () => diagnostics.flush(api, user.email);
+      addEventListener('hub-faults', sendFaults);   // v0.24.0: a problem reported from My settings goes at once
       sendFaults();
       addEventListener('online', sendFaults);
       setInterval(sendFaults, 5 * 60 * 1000);

@@ -8,6 +8,7 @@ import * as fieldusers from './fieldusers.js';
 import { PROJECT_TYPES } from '../core/seed.js';
 import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
+import { record as recordFault } from '../core/diagnostics.js';
 import { checkPack, packSummary, applyToWorkspace, applyToCompany, applyToProject } from '../core/pack.js';
 import { OWNER_SECTIONS } from '../core/schema.js';
 import { LEVELS, levelOf, levelLabel } from '../engine/evaluation.js';
@@ -76,14 +77,45 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // usually is: the list stays put and only the right side changes.
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
   ['catalog', 'Currencies', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links']];
+const link = ([k, label, ic]) => html`
+      <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
+// v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)
 const nav = () => html`
   <nav class="card set-nav" aria-label="Settings pages">
-    ${NAV.map(([k, label, ic]) => html`
-      <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`)}
+    <div class="set-group">My settings</div>
+    ${link(['mine', 'My settings', 'access'])}
+    ${store.isAdmin ? html`<div class="set-group">Admin settings</div>
+    ${NAV.map(link)}
     <hr>
     <button type="button" class="side-link" id="btn-backup">${icon('backup')}<span>Backup</span></button>
-    <button type="button" class="side-link" id="btn-clear-cache" title="Fixes a page that looks old or broken. Your records are kept.">${icon('backup')}<span>Clear cache</span></button>
+    <button type="button" class="side-link" id="btn-clear-cache" title="Fixes a page that looks old or broken. Your records are kept.">${icon('backup')}<span>Clear cache</span></button>` : ''}
   </nav>`;
+
+const THEMES = [['auto', 'Same as this device'], ['light', 'Light'], ['dark', 'Dark']];
+const themeNow = () => { try { return localStorage.getItem('sf:theme') || 'auto'; } catch { return 'auto'; } };
+let problemNotice = '';
+const flushNow = () => dispatchEvent(new Event('hub-faults'));
+/** v0.24.0: My settings, for everyone: theme, notifications, sign out and report a problem. */
+function minePage() {
+  const t = themeNow();
+  const notif = typeof Notification === 'undefined' ? 'none' : Notification.permission;
+  return html`<div class="side settings">
+    <div class="set-head"><h2>My settings</h2><span class="muted">${store.cloud ? store.user?.email || '' : 'Demo'}</span></div>
+    <div class="set-cols">
+      ${box('theme', 'Look', html`<div class="seg" role="group" aria-label="Theme">${THEMES.map(([k, label]) => html`<button type="button" class="${t === k ? 'on' : ''}" aria-pressed="${t === k}" data-act="setTheme" data-t="${k}">${label}</button>`)}</div>`)}
+      ${box('notify', 'Notifications', html`
+        <p class="muted">${notif === 'granted' ? 'On for this device.' : notif === 'denied' ? 'Blocked in this browser. Allow notifications for this site in the browser settings, then reload.' : notif === 'none' ? 'This browser cannot show notifications.' : 'Off for this device.'}</p>
+        ${notif === 'default' ? html`<button type="button" class="btn" data-act="askNotify">Turn on for this device</button>` : ''}`)}
+      ${box('problem', 'Report a problem', html`
+        <form data-form="reportProblem" class="entry">
+          <textarea name="what" rows="3" required placeholder="What went wrong, and on which page?" aria-label="What went wrong" class="wide"></textarea>
+          <button class="btn">Send to the Admin</button>
+        </form>
+        ${problemNotice ? html`<p class="ok">${problemNotice}</p>` : ''}`)}
+      ${store.cloud ? box('signout', 'Sign out', html`<p class="muted">Signed in as ${store.user?.email || ''} on this device.</p><button type="button" class="btn" data-act="signOutHere">Sign out</button>`) : ''}
+    </div>
+  </div>`;
+}
 
 let rulesNotice = '';
 let transferNotice = '';
@@ -377,7 +409,7 @@ function accessPage(c) {
   const demo = !store.cloud;
   if (demo) accTab = 'crew';
   const tabs = demo ? [['crew', 'Allocated Crew']]
-    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Permissions'], ['you', 'You and rules'], ['problems', 'Problems reported', store.faults.length || 0]];
+    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Permissions'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
   return html`<div class="side settings">
     <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
@@ -565,6 +597,7 @@ function appsPage(c) {
 const chipText = text => html`<span class="chip ok">${text}</span>`;
 
 export function render(c) {
+  if (section === 'mine' || !store.isAdmin) return html`${nav()}${minePage()}`;
   if (section === 'apps') return html`${nav()}${appsPage(c)}`;
   if (section === 'prices') return html`${nav()}${projectPage(c)}`;
   if (section === 'access') return html`${nav()}${accessPage(c)}`;
@@ -624,6 +657,10 @@ export const actions = {
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
+  // v0.24.0: My settings
+  setTheme(el) { try { localStorage.setItem('sf:theme', el.dataset.t); } catch { /* this visit only */ } globalThis.applyTheme?.(); },
+  async askNotify() { try { await Notification.requestPermission(); } catch { /* the browser says no */ } store.notify(); },
+  signOutHere() { store.signOut(); },
   linkTab(el) { linkTab = el.dataset.t; },
   pickUser(el) { who = el.dataset.id; },
   /** From the Permissions table: open the person on the People tab. */
@@ -901,6 +938,14 @@ export const changes = {
 };
 
 export const submits = {
+  /** v0.24.0: My settings, Report a problem: it joins the Admin's "Problems reported" (sent now, or once online). */
+  reportProblem(fd) {
+    const what = String(fd.get('what') || '').trim();
+    if (!what) return false;
+    recordFault({ message: `Reported by ${store.user?.email || 'someone'}: ${what}` }, 'reported');
+    flushNow();
+    problemNotice = 'Sent to the Admin. Thank you.';
+  },
   ...fieldprojects.submits,
   ...fieldusers.submits,
   currency(fd) {

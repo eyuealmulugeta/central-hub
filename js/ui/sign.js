@@ -174,7 +174,7 @@ function signedPage(req, st) {
         <td style="width:30%">${p.signature ? html`<img src="${p.signature.image}" alt="" style="max-height:60px;max-width:200px">` : ''}</td>
         <td>${p.signature ? `Signed electronically on ${when(p.signature.at)}` : 'Not signed'}</td>
       </tr>`)}</table>
-    <p class="muted p-notes">Signed electronically through Amistad Prefab Central Hub. Request ${req.id.slice(0, 12)}. SHA-256 of the text: ${req.hash}.</p>`;
+    <p class="muted p-notes">Signed electronically through Central Hub (Amistad Prefab). Request ${req.id.slice(0, 12)}. SHA-256 of the text: ${req.hash}.</p>`;
   return pageHtml(String(inner), req.title);
 }
 

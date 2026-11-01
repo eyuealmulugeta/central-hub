@@ -67,7 +67,7 @@ const key = permKey;
 export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'crewforms') return role === 'owner' || ranks.length > 0;   // v0.33.0: the Admin, a GM, Project Engineer or Site Engineer
   if (page === 'directory') return role !== 'owner' && pages.includes('directory');   // the staff directory is for those without the employee records
-  if (role === 'owner' || page === 'home' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
+  if (role === 'owner' || page === 'home' || page === 'quick' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
   return pages.includes(key(page));
 }

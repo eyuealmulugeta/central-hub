@@ -2,7 +2,7 @@
 // file fetched is kept; offline, the last copy kept is used. Only this site's own files and the
 // Firebase scripts are kept. Data never goes through here: Firestore keeps its own offline copy.
 
-const CACHE = 'central-hub-shell-v55';
+const CACHE = 'central-hub-shell-v56';
 const FIRST = ['./', 'index.html', 'css/app.css', 'js/theme.js', 'assets/logo.png', 'manifest.webmanifest'];
 
 self.addEventListener('install', event => {
@@ -25,8 +25,11 @@ self.addEventListener('fetch', event => {
   // the PDF tools (see js/sync/share.js), kept after first use so sharing works offline too
   const pdfTool = url.hostname === 'cdnjs.cloudflare.com' && ['/ajax/libs/html2canvas/', '/ajax/libs/jspdf/'].some(path => url.pathname.startsWith(path));
   if (!own && !firebaseScript && !pdfTool) return;   // sign-in and database traffic goes straight through
+  // v0.38.1: the app's own files always asked of the server (a quick "not changed" when nothing is new), never the
+  // browser's own 10-minute copy, which kept an update from taking and asked again and again
+  const ask = own && request.mode !== 'navigate' ? new Request(request, { cache: 'no-cache' }) : request;
   event.respondWith(
-    fetch(request).then(response => {
+    fetch(ask).then(response => {
       if (response.ok) { const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(request, copy)); }
       return response;
     }).catch(async () => {

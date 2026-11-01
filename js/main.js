@@ -121,6 +121,7 @@ $('#app-version').textContent = APP_VERSION;
 /** v0.38.0: the app's files fetched past every cache (service worker and browser), so the reload is the new version. */
 async function freshFiles() {
   try {
+    performance.setResourceTimingBufferSize?.(2000);   // every module listed, not the first 250
     for (const r of await navigator.serviceWorker.getRegistrations()) await r.update();
     for (const k of await caches.keys()) await caches.delete(k);
     const own = performance.getEntriesByType('resource').map(e => e.name).filter(u => u.startsWith(location.origin) && /\.(js|css|json|html)(\?|$)/.test(u));

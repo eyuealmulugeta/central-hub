@@ -1667,3 +1667,6 @@ body.side-narrow .side-health { display: none; }
   .side-link { min-height: 48px; font-size: 10px; }
   .side-link svg { width: 20px; height: 20px; }
 }
+
+/* v0.43.0: Allocated Crew grouped by trade */
+.crew-table tr.crew-group th { text-align: left; background: var(--surface-2, #f3f5f8); font-size: 12px; padding: 6px 8px; }

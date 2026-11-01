@@ -296,7 +296,7 @@ export const REQUEST_CATEGORIES = ['Manpower', 'Material', 'Equipment', 'Tool', 
  * and the equipment seen so far. Built from the open project; sent with sendSetup.
  */
 /** Titles of people who work in the office: they are left out of the site roll in Field Report. */
-const OFFICE_ROLE = /\b(admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|procurement|logistics|cashier|secretary|human resources|hr)\b/i;
+const OFFICE_ROLE = /\b(gm|admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|procurement|logistics|cashier|secretary|human resources|hr)\b/i;
 /** Whether a project's team member works on site: their HR department decides; without one, their role. Pure. */
 export function onSite(member, staff = []) {
   const person = member.personId ? staff.find(p => p.id === member.personId) : null;

@@ -431,7 +431,8 @@ export function crewRows(staff, users) {
 
 function crewRow(row, projects) {
   const u = row.user, name = row.person?.name || u?.name || u?.email || 'No name yet';
-  const sub = row.person?.title || u?.title || '';
+  const nat = row.person?.nationality || '';
+  const sub = [row.person?.title || u?.title || '', nat].filter(Boolean).join(' · ');   // v0.43.0: with the nationality
   const live = projects.map(p => p.id);
   return html`<tr>
     <th scope="row"><b>${name}</b>${sub ? html`<br><span class="muted">${sub}</span>` : ''}${row.person ? '' : html`<br><span class="chip warn" title="Signs in, but has no record under Crew, Employee data">Not in the directory</span>`}${row.byName ? html`<br><span class="muted small" title="Add the sign-in email in Employee data to link them for good">Sign-in matched by name</span>` : ''}</th>
@@ -445,17 +446,24 @@ function crewRow(row, projects) {
   ${u && crewApps === u.email ? html`<tr class="crew-apps"><td colspan="${projects.length + 2}"><b>Apps ${name} may open</b>${pageTicks(u)}</td></tr>` : ''}`;
 }
 
+const GM_RE = /\bgm\b|general manager/i;
+const tradeOf = x => String(x.person?.title || x.user?.title || '').trim();
+const natOf = x => String(x.person?.nationality || '');
+const nameOf = x => String(x.person?.name || x.user?.name || x.user?.email || '');
+
 function crewTab(c) {
   if (c.division === 'trading') return html`<section class="card"><p class="empty">Projects belong to Installation. Switch to Installation to allocate the crew.</p></section>`;
   const projects = store.projects;
-  const all = crewRows(c.company.staff || [], store.cloud ? store.users : []);
+  // v0.43.0: the GM is not crew; the rest by trade, then nationality, then name
+  const all = crewRows(c.company.staff || [], store.cloud ? store.users : []).filter(x => !GM_RE.test(tradeOf(x)) && !(x.user?.ranks || []).includes('general_manager'))
+    .sort((a, b) => (tradeOf(a) || '~').localeCompare(tradeOf(b) || '~') || natOf(a).localeCompare(natOf(b)) || nameOf(a).localeCompare(nameOf(b)));
   const rows = all.filter(x => !crewShow || (crewShow === 'none' ? !x.on.length : x.on.includes(crewShow)));
   return html`<section class="card" id="panel-crew">
     <div class="toolbar"><h2>Allocated Crew</h2><span class="muted">Tick to put a person on a project, untick to take them off. Their place on the team, the Field Report lists and their sign-in follow.</span></div>
     <div class="actions left"><label>Show <select data-chg="crewShow" aria-label="Who to show">${options([['', `Everybody (${all.length})`], ['none', 'On no project'], ...projects.map(p => [p.id, `On ${p.name}`])], crewShow)}</select></label></div>
     ${rows.length ? html`<div class="table-wrap"><table class="table compact crew-table">
       <thead><tr><th>Person</th>${projects.map(p => html`<th class="c">${p.name}${statusLabel(p) !== statusLabel({}) ? html`<br><span class="muted">${statusLabel(p)}</span>` : ''}</th>`)}<th>Sign-in</th></tr></thead>
-      <tbody>${rows.map(x => crewRow(x, projects))}</tbody>
+      <tbody>${rows.map((x, i) => html`${i === 0 || tradeOf(rows[i - 1]) !== tradeOf(x) ? html`<tr class="crew-group"><th colspan="${projects.length + 2}">${tradeOf(x) || 'No trade'} <span class="muted">${rows.filter(y => tradeOf(y) === tradeOf(x)).length}</span></th></tr>` : ''}${crewRow(x, projects)}`)}</tbody>
     </table></div>` : html`<p class="empty">${all.length ? 'Nobody matches.' : 'Nobody yet. People are added under Crew, Employee data.'}</p>`}
     <p class="muted">A Project Engineer or Site Engineer is on one project at a time: their other boxes are greyed out. The role and day rate on each project are set on the person's record (Crew, Employee data, Projects).</p>
   </section>`;

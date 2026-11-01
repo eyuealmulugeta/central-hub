@@ -84,6 +84,8 @@ function spotCard(c) {
       ${rows.length ? days.map(d => html`<h4 class="spot-day">${fmtDate(d)}</h4><div class="spot-grid">${rows.filter(x => String(x.at).startsWith(d)).map(card)}</div>`)
         : html`<p class="empty">No note here.</p>`}` : spot.busy ? html`<p class="muted">Asking Field Report…</p>` : ''}`}</section>`;
 }
+let shownTrades = new Set();   // v0.38.0: trades added with "Add manpower" (the others stay folded away)
+let eqRows = 0;               // v0.38.0: equipment rows added with "Add equipment"
 let docOf = null;       // id of the report shown as the Daily Site Report (v0.21.0)
 let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
 let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
@@ -312,7 +314,8 @@ export function render(c) {
   const pending = reports.filter(r => r.review === 'pending');
   const weather = cur?.weather && !WEATHER.includes(cur.weather) ? [cur.weather, ...WEATHER] : WEATHER;
   const last = reports.find(r => r.field?.hours?.start)?.field.hours || { start: '08:00', end: '17:00' };
-  const equipment = [...knownEquipment(ws), ...Array(BLANK_EQUIPMENT_ROWS).fill('')];
+  const equipment = Array(eqRows).fill('');
+  const mpShown = t => shownTrades.has(t) || Number(crew.get(t)?.count) > 0 || Number(crew.get(t)?.ot) > 0;
 
   // quantities read from the site's text, offered as starting values
   const text = cur?.field ? [...(cur.field.progress || []), ...(cur.field.extra || []).flatMap(x => x.items || [])] : [];
@@ -385,24 +388,27 @@ export function render(c) {
 
         <h3>Manpower on site</h3>
         ${trades.length ? html`<table class="table compact mp-table"><thead><tr><th>Trade</th><th class="num">People</th><th class="num">Overtime, h</th></tr></thead>
-          <tbody>${trades.map((t, i) => html`<tr><td>${t}</td>
+          <tbody>${trades.map((t, i) => html`<tr ${mpShown(t) ? '' : 'hidden'}><td>${t}</td>
             <td class="num"><input type="number" name="m_${i}" min="0" value="${crew.get(t)?.count || 0}" aria-label="${t}, people on site"></td>
             <td class="num"><input type="number" name="o_${i}" min="0" step="any" placeholder="0" value="${crew.get(t)?.ot || ''}" aria-label="${t}, overtime hours"></td></tr>`)}</tbody>
           <tfoot><tr><th>Total</th><th class="num">${trades.reduce((n, t) => n + (Number(crew.get(t)?.count) || 0), 0)}</th><th class="num">${trades.reduce((n, t) => n + (Number(crew.get(t)?.ot) || 0), 0) || ''}</th></tr></tfoot></table>` : ''}
+        ${trades.some(t => !mpShown(t)) ? html`<select data-chg="addTrade" aria-label="Add manpower"><option value="">+ Add manpower…</option>${trades.filter(t => !mpShown(t)).map(t => html`<option>${t}</option>`)}</select>` : ''}
         ${trades.length ? '' : html`<p class="muted">Add trades and their day rates under Settings, Labour day rates.</p>`}
 
         ${cur ? '' : html`
           <h3>Equipment</h3>
-          <table class="table compact">
+          <datalist id="eq-known">${knownEquipment(ws).map(n => html`<option value="${n}"></option>`)}</datalist>
+          ${equipment.length ? html`<table class="table compact">
             <thead><tr><th>Equipment</th><th class="r">Qty</th><th class="r">Hours</th><th>Status</th></tr></thead>
             <tbody>${equipment.map((name, i) => html`
               <tr>
-                <td><input name="en_${i}" value="${name}" placeholder="Equipment name" aria-label="Equipment name"></td>
+                <td><input name="en_${i}" value="${name}" list="eq-known" placeholder="Equipment name" aria-label="Equipment name"></td>
                 <td class="r"><input class="narrow" type="number" name="eq_${i}" min="0" placeholder="0" aria-label="Quantity"></td>
                 <td class="r"><input class="narrow" type="number" name="eh_${i}" min="0" step="any" placeholder="0" aria-label="Hours"></td>
                 <td><select name="es_${i}" aria-label="Status">${options(EQUIPMENT_STATUS.map(s => [s, s]), 'Active')}</select></td>
               </tr>`)}</tbody>
-          </table>
+          </table>` : ''}
+          <button class="btn small" type="button" data-act="addEquip">+ Add equipment</button>
 
           <label>Notes, one per line <textarea name="notes" rows="2"></textarea></label>
           <label>Next day schedule, one activity per line <textarea name="plan" rows="2"></textarea></label>
@@ -681,6 +687,7 @@ export const changes = {
   spotTone(el) { spot.tone = el.value; },
   spotAbout(el) { spot.about = el.value; },
   /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
+  addTrade(el) { if (el.value) shownTrades.add(el.value); },
   period(el) {
     period[el.dataset.f] = +el.value || 0;
     if (el.dataset.f === 'year') { period.month = 0; period.week = 0; }
@@ -740,7 +747,8 @@ export const actions = {
   toSection(el) { document.getElementById(`sec-${el.dataset.s}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
   goBack() { if (sentBack?.decision === 'changes') reviewing = null; sentBack = null; replyNotice = ''; },
   /** Discard what was typed: the form is redrawn with its starting values. */
-  clearForm() { notice = 'Form cleared. Nothing was saved.'; },
+  addEquip() { eqRows++; },
+  clearForm() { shownTrades = new Set(); eqRows = 0; notice = 'Form cleared. Nothing was saved.'; },
   repTab(el) { tab = el.dataset.t; },
   async spotLoad() {
     if (!store.isAdmin || spot.busy || !spot.code) return;

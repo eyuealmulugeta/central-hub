@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import {
-  KINDS, PRIORITIES, DEFAULT_UNIT, kindLabel, statusLabel, isOpen, moves, editable, overdue, nextNumber, check, titleOf, followUp, summary,
+  sent, KINDS, PRIORITIES, DEFAULT_UNIT, kindLabel, statusLabel, isOpen, moves, editable, overdue, nextNumber, check, titleOf, followUp, summary,
 } from '../engine/requests.js';
 import { uid, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
@@ -32,7 +32,7 @@ export function render(c) {
 }
 
 function list(c) {
-  const all = [...c.ws.requests].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.number.localeCompare(a.number));
+  const all = c.ws.requests.filter(sent).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.number.localeCompare(a.number));
   const s = summary(all, c.today);
   const on = filter || (approver() ? 'waiting' : 'open');
   const shown = all.filter(r => (on === 'waiting' ? r.status === 'requested' : on === 'open' ? isOpen(r) : on === 'done' ? !isOpen(r) : true));

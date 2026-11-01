@@ -14,10 +14,14 @@ export const PRIORITIES = [['normal', 'Normal'], ['urgent', 'Urgent']];
 
 export const STATUSES = [
   ['requested', 'Waiting for approval'], ['approved', 'Approved'], ['arranging', 'Being arranged'],
-  ['fulfilled', 'Delivered or on site'], ['rejected', 'Refused'], ['cancelled', 'Cancelled'],
+  ['fulfilled', 'Delivered or on site'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
+  // v0.38.0: written on a Field Report phone, not sent yet (or deleted there); Central Hub does not list them
+  ['draft', 'Draft on site'], ['deleted', 'Deleted on site'],
 ];
 export const statusLabel = id => STATUSES.find(([k]) => k === id)?.[1] || id;
-export const isOpen = r => !['fulfilled', 'rejected', 'cancelled'].includes(r.status);
+export const isOpen = r => !['fulfilled', 'rejected', 'cancelled', 'draft', 'deleted'].includes(r.status);
+/** v0.38.0: a request the office sees (a site draft is not sent yet). */
+export const sent = r => !['draft', 'deleted'].includes(r.status);
 
 /**
  * What a person may do to a request now, as [newStatus, button label] pairs.
@@ -27,7 +31,7 @@ export const isOpen = r => !['fulfilled', 'rejected', 'cancelled'].includes(r.st
 export function moves(status, approver) {
   if (!approver) return status === 'requested' ? [['cancelled', 'Withdraw this request']] : [];
   switch (status) {
-    case 'requested': return [['approved', 'Approve'], ['rejected', 'Refuse'], ['cancelled', 'Cancel']];
+    case 'requested': return [['approved', 'Approve'], ['rejected', 'Reject'], ['cancelled', 'Cancel']];
     case 'approved': return [['arranging', 'Mark as being arranged'], ['fulfilled', 'Mark as delivered'], ['cancelled', 'Cancel']];
     case 'arranging': return [['fulfilled', 'Mark as delivered'], ['cancelled', 'Cancel']];
     case 'rejected': case 'cancelled': return [['requested', 'Reopen']];
@@ -43,7 +47,7 @@ export const overdue = (r, today) => isOpen(r) && !!r.neededBy && toDay(r.needed
 
 /** REQ-001, REQ-002, ... within one project. */
 export function nextNumber(requests) {
-  const last = Math.max(0, ...requests.map(r => +String(r.number || '').match(/(\d+)$/)?.[1] || 0));
+  const last = Math.max(0, ...requests.map(r => +String(r.number || '').match(/^REQ-(\d+)$/)?.[1] || 0));   // v0.38.0: site numbers (SITE-…) do not count
   return `REQ-${String(last + 1).padStart(3, '0')}`;
 }
 

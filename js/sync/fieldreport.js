@@ -259,7 +259,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
 
     (meta.requestItems || []).forEach((r, i) => {
       const itemId = `${id}_${i}`;
-      if (!r.text || ws.items.some(x => x.id === itemId)) return;
+      if (!r.text || r.live || ws.items.some(x => x.id === itemId)) return;   // v0.38.0: a live one is already under Requests
       const urgent = r.priority === 'Urgent';
       ws.items.push({
         id: itemId, type: 'site_request', title: urgent ? `URGENT: ${r.text}` : r.text, owner: by, created: meta.date,

@@ -118,22 +118,38 @@ $('#app-version').textContent = APP_VERSION;
  * v0.36.4: never keep working on an old version. When the site has a newer one, the app clears its stored copy and
  * reloads; if the site still answers with the old files (a slow server), it says so and waits for a click.
  */
+/** v0.38.0: the app's files fetched past every cache (service worker and browser), so the reload is the new version. */
+async function freshFiles() {
+  try {
+    for (const r of await navigator.serviceWorker.getRegistrations()) await r.update();
+    for (const k of await caches.keys()) await caches.delete(k);
+    const own = performance.getEntriesByType('resource').map(e => e.name).filter(u => u.startsWith(location.origin) && /\.(js|css|json|html)(\?|$)/.test(u));
+    await Promise.all([...new Set([location.href.split('#')[0], ...own])].map(u => fetch(u, { cache: 'reload' }).catch(() => {})));
+  } catch { /* reload anyway */ }
+}
+
 async function updateCheck() {
   if (location.search.includes('local') || !navigator.onLine) return;
   let v = '';
   try { v = (/APP_VERSION = '([^']+)'/.exec(await (await fetch(`js/version.js?x=${Date.now()}`, { cache: 'no-store' })).text()) || [])[1] || ''; } catch { return; }
   if (!v || v === APP_VERSION) return;
-  const tried = sessionStorage.getItem('sf:upd') === v;
-  sessionStorage.setItem('sf:upd', v);
-  if (!tried) {
-    try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.update(); for (const k of await caches.keys()) await caches.delete(k); } catch { /* reload anyway */ }
+  // v0.38.0: one update per new version: every file fetched fresh (the browser's own copy too), then one reload.
+  // If that still did not take, the box shows once; it is never asked again for the same version.
+  let tried = '', walled = '';
+  try { tried = localStorage.getItem('sf:upd') || ''; walled = localStorage.getItem('sf:wall') || ''; } catch { /* private window */ }
+  if (walled === v) return;
+  if (tried !== v) {
+    try { localStorage.setItem('sf:upd', v); } catch { /* reload anyway */ }
+    await freshFiles();
     location.reload();
     return;
   }
+  try { localStorage.setItem('sf:wall', v); } catch { /* shown once this time */ }
+  if (document.querySelector('.update-wall')) return;
   const box = document.createElement('div');
   box.className = 'update-wall';
   box.innerHTML = `<div class="card"><h2>Update to ${v}</h2><p>Central Hub ${APP_VERSION} is out of date. Update before carrying on; nothing you saved is lost.</p><button class="btn primary" type="button">Update now</button></div>`;
-  box.querySelector('button').onclick = () => { sessionStorage.removeItem('sf:upd'); updateCheck(); };
+  box.querySelector('button').onclick = async () => { box.remove(); await freshFiles(); location.reload(); };
   document.body.append(box);
 }
 updateCheck();

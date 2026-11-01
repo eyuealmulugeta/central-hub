@@ -194,6 +194,11 @@ export function movePdfIds(ws) {
 export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = true } = {}) {
   let added = 0, updated = 0;
   movePdfIds(ws);
+  // v0.44.2: a report approved in Field Report is approved here too (no longer "Awaiting approval")
+  const approvedHere = (old, meta) => (meta.status === 'approved' && (!old || old.review !== 'done') ? {
+    review: 'done', approvedBy: meta.reviewedBy || meta.checked?.by || 'Field Report', approvedAt: meta.checked?.at || new Date().toISOString(),
+    approval: { by: meta.reviewedBy || meta.checked?.by || 'Field Report', email: '', title: '', at: meta.checked?.at || '', sig: meta.checked?.sig || '', from: 'field' },
+  } : {});
   const put = rec => {
     const i = ws.reports.findIndex(r => r.id === rec.id);
     if (i < 0) { ws.reports.push(rec); added++; } else { ws.reports[i] = { ...ws.reports[i], ...rec }; updated++; }
@@ -216,9 +221,9 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
       const keepOlder = others.length ? { older: others } : {};
-      if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
+      if (Object.keys(approvedHere(old, meta)).length || old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
         // v0.27.0: "Checked by" signed in Field Report (script 7.36.0) comes with the review
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder } });
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder }, ...approvedHere(old, meta) });
       }
       putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
@@ -230,6 +235,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       entries: old?.entries || [], issue: '', source: 'field',
       // a re-submitted report needs confirming again; a refresh of the same version keeps its state
       review: sameVersion ? old.review : 'pending',
+      ...approvedHere(old, meta),   // v0.44.2
       // every entry the Field Report app collects, kept as the site wrote it
       field: {
         v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted',

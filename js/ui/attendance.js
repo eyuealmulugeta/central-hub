@@ -4,7 +4,9 @@
 // Prints, emails as PDF and shares like any sheet.
 
 import { store } from '../core/store.js';
-import { register, groupRows, MARK_LABEL, STATES, periodFor, shiftPeriod, correction, liveFixes, waitingNote } from '../engine/attendance.js';
+import { register, groupRows, MARK_LABEL, STATES, MARK, periodFor, shiftPeriod, correction, liveFixes, waitingNote, photoDay, PHOTO_WORD, delegated, officeId, daysOf } from '../engine/attendance.js';
+import { tierOfPerson } from '../engine/manpower.js';
+import { tierOfPosition } from '../engine/positions.js';
 import { wageOf, monthlyRolesOf } from '../engine/crewpay.js';
 import { docRef } from '../engine/docref.js';
 import { onSite } from '../sync/fieldreport.js';
@@ -20,12 +22,20 @@ let at = '';            // a day inside the period on screen; '' = today
 let editing = null;     // { date, key } of the cell being corrected
 let extra = [];         // people added by name for this visit, until they get a mark
 let notice = '';
+let office = false;     // v0.50.0: the office staff's sheet (people with no project), marked here by the Admin
 
 const dayNo = d => String(+d.slice(8));
 const weekday = d => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][(((toDay(d) + 4) % 7) + 7) % 7];
 /** The Admin and the office correct the sheet; the site reads it (the site corrects through Field Report). */
 const mayEdit = () => (store.role === 'owner' || store.role === 'office') && !store.readOnly;
-const crewOf = c => [...c.ws.team.filter(m => m.active !== false && onSite(m, c.company.staff || [])), ...extra];
+// v0.50.0: everyone delegated to the project in the Manpower Directory is on its sheet; Tier 1 is on no sheet
+const tierOfRow = (m, staff) => { const p = m.personId && staff.find(x => x.id === m.personId); return (p && tierOfPerson(p)) || tierOfPosition(m.role || m.title) || 4; };
+const crewOf = c => {
+  const staff = c.company.staff || [], team = c.ws.team.filter(m => m.active !== false && onSite(m, staff) && tierOfRow(m, staff) !== 1);
+  const known = new Set(team.flatMap(m => [m.personId, String(m.name || '').trim().toLowerCase()]).filter(Boolean));
+  const more = delegated(staff, c.project.id, p => tierOfPerson(p)).filter(p => !known.has(p.personId) && !known.has(String(p.name || '').trim().toLowerCase()));
+  return [...team, ...more, ...extra];
+};
 const periodOf = c => periodFor(c.project, at || c.today);
 const nameOf = (r, key) => r.rows.find(x => x.key === key)?.name || '';
 /** Monthly or daily, for the grouping only: the sheet itself never shows money. */
@@ -110,7 +120,36 @@ function checkBar(c, p) {
     : html`<button type="button" class="btn small primary" data-act="checkDays" title="The pay of this period can then be approved">The days and hours of ${p.label} are right</button>`}</div>`;
 }
 
+/** v0.50.0: the morning crew photo of each day: its time and tag, a tap opens it, the place on the map. */
+function photoRow(c, r) {
+  const cell = d => {
+    const s = r.off.has(d) ? { state: '' } : photoDay(c.ws, d);
+    if (!s.state) return html`<td class="${r.off.has(d) ? 'att-off' : ''}"></td>`;
+    const tip = s.state === 'missing' ? 'No crew photo with the report' : `${PHOTO_WORD[s.state]} ${s.time}${s.tags.length ? ` · ${s.tags.join(', ')}` : ''}${s.geo ? ` · ${s.geo.lat}, ${s.geo.lng}` : ''}`;
+    const mark = s.state === 'missing' ? '✗' : s.state === 'late' ? 'L' : '✓';
+    const link = s.fileId ? `https://drive.google.com/file/d/${s.fileId}/view` : s.geo ? `https://maps.google.com/?q=${s.geo.lat},${s.geo.lng}` : '';
+    return html`<td class="att-photo att-ph-${s.state}${s.tags?.length ? ' att-ph-tag' : ''}" title="${tip}">${link ? html`<a href="${link}" target="_blank" rel="noopener">${mark}</a>` : mark}${s.time ? html`<br><small>${s.time}</small>` : ''}</td>`;
+  };
+  return html`<tr class="att-photos"><th class="att-name">Crew photo</th>${r.days.map(cell)}<th colspan="5"></th></tr>`;
+}
+
+/** v0.50.0: office staff (no project): a month, one row each, the Admin taps a day to mark it (P, A, S, L, blank). */
+function officeSheet(c) {
+  const month = (at || c.today).slice(0, 7), days = daysOf(month);
+  const people = (c.company.staff || []).filter(p => p.status !== 'left' && tierOfPerson(p) !== 1 && !(p.assignments || []).some(a => a.active !== false));
+  const marks = new Map((c.company.officeAttendance || []).map(m => [m.id, m]));
+  return html`<div class="toolbar no-print"><h2>Office staff attendance</h2><span class="muted">People with no project. Tap a day: Present, Absent, Sick, On leave, blank. Absent days go to Payroll as unpaid days.</span><span class="grow"></span>
+      <button class="btn small" data-act="shift" data-n="-1" aria-label="Previous month">‹</button><b class="att-period">${month}</b><button class="btn small" data-act="shift" data-n="1" aria-label="Next month">›</button>
+      <button class="btn" data-act="officeOff">← Project sheet</button></div>
+    <section class="card sheet att-sheet">${people.length ? html`<div class="att-scroll"><table class="att-grid">
+      <thead><tr><th class="att-name">Name</th>${days.map(d => html`<th><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}</tr></thead>
+      <tbody>${people.map(p => html`<tr><td class="att-name"><b>${p.name}</b><br><span class="muted">${p.title || ''}</span></td>
+        ${days.map(d => { const m = marks.get(officeId(d, p.id)), k = MARK[m?.state] || ''; return html`<td class="att-c ${k ? `att-${k}` : ''} ${d <= c.today ? 'att-edit' : ''}" ${d <= c.today ? html`data-act="officeMark" data-d="${d}" data-p="${p.id}"` : ''}>${k}</td>`; })}</tr>`)}</tbody></table></div>`
+      : html`<p class="empty">Everyone in the directory is on a project.</p>`}</section>`;
+}
+
 export function render(c) {
+  if (office && store.isAdmin) return officeSheet(c);
   const p = periodOf(c);
   const r = register(c.project, c.ws, p, crewOf(c));
   const edit = mayEdit();
@@ -140,6 +179,7 @@ export function render(c) {
       <button class="btn" data-act="email">Email as PDF</button>
       <button class="btn" data-share title="Send this sheet as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="print">Print</button>
+      ${store.isAdmin && mayEdit() ? html`<button class="btn" data-act="officeOn" title="Attendance of the staff with no project">Office staff</button>` : ''}
     </div>
     ${waitingNote(c.ws.reports, p) ? html`<p class="callout warn no-print"><b>!</b> <span>${waitingNote(c.ws.reports, p)}</span></p>` : ''}
     ${edit ? html`<p class="muted no-print att-help">Tap a day to correct it. The pay period (weekly, every two weeks or monthly) is set under Settings, This project, Calendar and rates.</p>` : ''}
@@ -151,9 +191,10 @@ export function render(c) {
       ${r.rows.length ? html`<div class="att-scroll"><table class="att-grid">
         <thead>
           <tr><th class="att-name">Name</th>${r.days.map(d => html`<th class="${r.off.has(d) ? 'att-off' : ''}"><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}<th class="att-t">P</th><th class="att-t">A</th><th class="att-t">S</th><th class="att-t">L</th><th class="att-t">OT h</th></tr>
+          ${photoRow(c, r)}
         </thead>
         ${groups.map(g => html`<tbody>
-          <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · attendance is a record; it does not change the monthly pay' : ''}</span></td></tr>
+          <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · by the month (Tiers 2, 3, 5): absent days go to Payroll as unpaid days' : ' · by the day (Tier 4): days and overtime make the crew pay'}</span></td></tr>
           ${g.rows.map(row => html`<tr>
           <td class="att-name">${pics(row)}<b>${row.name}</b>${row.role ? html`<br><span class="muted">${row.role}</span>` : ''}</td>
           ${r.days.map(d => cellFor(row, d))}
@@ -162,7 +203,7 @@ export function render(c) {
         </tbody>`)}
         <tfoot><tr><td class="att-name">Present per day</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t">${r.rows.reduce((s, x) => s + x.absent, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.sick, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.leave, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.ot, 0) || ''}</td></tr></tfoot>
       </table></div>
-      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site.</p>
+      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site. Crew photo: ✓ on time, L late, ✗ missing; the time is below, the tag and place in the tip.</p>
       ${signoff([{ label: 'Prepared by · Site engineer', name: holder(c, /site engineer/i) }, { label: 'Approved by · Project engineer', name: holder(c, /project engineer/i) }])}
       ${docFoot(footText(c, 'Attendance sheet', ref))}`
       : html`<p class="empty">Nobody is on this project's site team yet, and no attendance was reported for ${p.label}.</p>`}
@@ -195,6 +236,19 @@ export const changes = {
 };
 
 export const actions = {
+  officeOn() { office = true; editing = null; },
+  officeOff() { office = false; },
+  officeMark(el, c) {
+    const cycle = ['present', 'absent', 'sick', 'leave', ''];
+    const p = (c.company.staff || []).find(x => x.id === el.dataset.p), id = officeId(el.dataset.d, el.dataset.p);
+    if (!p) return;
+    store.updateCompany(co => {
+      const list = (co.officeAttendance ||= []), m = list.find(x => x.id === id);
+      const next = cycle[(cycle.indexOf(m?.state || '') + 1) % cycle.length];
+      if (m) { if (next) Object.assign(m, { state: next, by: store.user?.email || '', at: new Date().toISOString() }); else co.officeAttendance = list.filter(x => x.id !== id); }
+      else list.push({ id, date: el.dataset.d, personId: p.id, name: p.name, state: next, by: store.user?.email || '', at: new Date().toISOString() });
+    });
+  },
   checkDays(el, c) {
     const p = periodOf(c);
     if (!confirm(`The days and hours of ${p.label} on ${c.project.name} are right? The pay can then be approved.`)) return;

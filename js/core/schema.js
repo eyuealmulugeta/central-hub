@@ -149,6 +149,7 @@ export const emptyCompany = () => ({
   owners: [],     // the owners of the company (see engine/owners.js): kept apart from the employees, Admin only
   payroll: [],    // one run a month (see engine/payroll.js): Admin only, built from HR pay
   letters: [],    // letters of the office (see engine/letters.js): Admin only, built from HR records
+  officeAttendance: [],   // v0.50.0: office staff (no project), marked by the Admin (engine/attendance.js officeId)
   spotlight: [],   // v0.49.0: Spotlight notes (engine/spotlight.js): read by the writer, HR and the Admin
   evaluations: [], // crew evaluations and feedback notes (see engine/evaluation.js): read only by their author and the Admin
   crewlinks: [],  // v0.33.0: crew form links (see engine/crewform.js): made by the Admin, a GM, PE or SE; opened by anyone who has one

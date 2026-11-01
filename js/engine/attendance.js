@@ -223,3 +223,57 @@ export function siteFixes(ws, days = []) {
   }
   return n;
 }
+
+// ---- v0.50.0 (Phase B6): the morning crew photo beside each day, the people delegated to the project, office staff ----
+
+/**
+ * The morning crew photo of a report: { time, st: 'ontime' | 'late', tags, geo, fileId }, or null. Field Report writes
+ * "Morning crew · On time 07:55 · Taken offline" in the caption; from 2.22.0 it also sends `crew` { st, tags, geo }.
+ */
+export function crewPhotoOf(report) {
+  const p = (report?.field?.photoFiles || []).filter(x => /morning crew|^crew$/i.test(String(x.caption || '').trim()) || x.crew).sort((a, b) => String(a.time).localeCompare(String(b.time)))[0];
+  if (!p) return null;
+  const cap = String(p.caption || '');
+  const st = p.crew?.st === 'late' || /late attendance/i.test(cap) ? 'late' : 'ontime';
+  const tags = p.crew?.tags?.length ? p.crew.tags : cap.split('·').slice(2).join(',').split(',').map(x => x.trim()).filter(Boolean);
+  return { time: p.time || '', st, tags, geo: p.crew?.geo || null, fileId: p.fileId || '' };
+}
+export const PHOTO_WORD = { ontime: 'On time', late: 'Late', missing: 'Missing' };
+
+/** The crew photo state of one day: on time, late, missing (a working day with a report and no photo) or '' (nothing to say). */
+export function photoDay(ws, date) {
+  const reps = (ws.reports || []).filter(r => r.date === date && r.field && !r.field.nowork);
+  if (!reps.length) return { state: '' };
+  const ph = reps.map(crewPhotoOf).find(Boolean);
+  return ph ? { state: ph.st, ...ph } : { state: 'missing' };
+}
+
+/** Needs attention for the Project Manager and the GM: a late or missing crew photo in the last 3 days. */
+export function crewPhotoFlags(ws, today) {
+  const out = [];
+  for (let i = 0; i < 3; i++) {
+    const d = fromDay(toDay(today) - i), s = photoDay(ws, d);
+    if (s.state === 'missing') out.push({ sev: 'high', kind: 'Attendance', title: `No morning crew photo on ${d}`, detail: 'The report came without the crew photo.', link: 'attendance' });
+    else if (s.state === 'late') out.push({ sev: 'warn', kind: 'Attendance', title: `Crew photo late on ${d}`, detail: `Taken at ${s.time}${s.tags.length ? ` (${s.tags.join(', ')})` : ''}.`, link: 'attendance' });
+  }
+  return out;
+}
+
+/** The people of the Manpower Directory delegated to the project (Tier 1 is not on any sheet), as sheet rows to show. */
+export function delegated(staff, projectId, tierOf) {
+  return (staff || []).filter(p => p.status !== 'left' && (p.assignments || []).some(a => a.active !== false && a.projectId === projectId) && tierOf(p) !== 1)
+    .map(p => ({ id: '', personId: p.id, name: p.name, role: p.title || '' }));
+}
+
+/** Office staff (no project) are marked by HR or the Admin in Central Hub: company.officeAttendance [{ id, date, personId, name, state }]. */
+export const officeId = (date, personId) => `oa_${date}_${personId}`;
+/** The office marks as daily reports, so the sheet and Payroll read them the same way as the site's. */
+export function officeReports(list) {
+  const by = new Map();
+  for (const m of list || []) {
+    if (!m.state || m.state === 'none') continue;
+    if (!by.has(m.date)) by.set(m.date, { id: `office_${m.date}`, date: m.date, review: 'done', field: { attendance: [] } });
+    by.get(m.date).field.attendance.push({ id: '', name: m.name, state: m.state });
+  }
+  return [...by.values()];
+}

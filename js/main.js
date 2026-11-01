@@ -34,6 +34,7 @@ import * as payments from './ui/payments.js';
 import * as attendance from './ui/attendance.js';
 import { payFlags } from './engine/paysteps.js';
 import { spotFlags } from './engine/spotlight.js';
+import { crewPhotoFlags } from './engine/attendance.js';
 import * as employment from './ui/employment.js';
 import * as signatures from './ui/signatures.js';
 import * as setup from './ui/setup.js';
@@ -379,6 +380,8 @@ function render() {
   const hrOrAdmin = store.isAdmin || (store.ranks || []).includes('hr_assistant');
   if (hrOrAdmin) ctx.flags.auto.push(...spotFlags(store.company.spotlight, today, p.id).map(f => ({ ...f, link: store.isAdmin ? f.link : 'dashboard' })));
   if (store.isAdmin || (store.ranks || []).includes('general_manager')) for (const r of store.company.evaluations || []) if (r.salaryReview && !r.salaryDone) ctx.flags.auto.push({ sev: 'warn', kind: 'Evaluation', title: `Salary review: ${r.subjectName}`, detail: `Rated one point or more above the last evaluation (${r.period?.label || r.date}).`, link: 'evaluation' });
+  // v0.50.0: a late or missing morning crew photo, for the Project Manager and the GM (owner)
+  if ((store.ranks || []).some(k => k === 'project_manager' || k === 'general_manager')) ctx.flags.auto.push(...crewPhotoFlags(store.ws, today));
   ctx.flags.auto = ctx.flags.auto.filter(f => allowed(f.link));
   // the directory is the master: team members linked to it follow it. Only the Admin holds the directory, so only the Admin brings the team up to date.
   if (store.isAdmin && !store.readOnly && !syncingTeam && needsSync(store.ws.team, store.company.staff, p.id, store.ws.crewRates || [])) {

@@ -64,7 +64,8 @@ export function newLine(staff, month, reports = []) {
   return {
     id: `pl-${staff.id}`, staffId: staff.id, name: staff.name || '', title: staff.title || '',
     currency: a.currency || '', payPer: a.payPer || 'month', rate: num(a.pay),
-    days: att.days, ot: att.ot, unpaidDays: 0, allowances: 0, tax: 0, other: 0, notes: '',
+    days: att.days, ot: att.ot, unpaidDays: (a.payPer || 'month') === 'month' ? att.absent : 0,   // v0.50.0: absent days of the monthly sheet are unpaid (a draft: the Admin may change it)
+    allowances: 0, tax: 0, other: 0, notes: '',
     fromAttendance: att.found,
   };
 }

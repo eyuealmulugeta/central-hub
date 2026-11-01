@@ -1670,3 +1670,11 @@ body.side-narrow .side-health { display: none; }
 
 /* v0.43.0: Allocated Crew grouped by trade */
 .crew-table tr.crew-group th { text-align: left; background: var(--surface-2, #f3f5f8); font-size: 12px; padding: 6px 8px; }
+
+/* v0.50.0: the morning crew photo row of the attendance sheet */
+.att-photos th, .att-photos td { font-size: 11px; font-weight: 600; }
+.att-photo a { color: inherit; text-decoration: none; }
+.att-ph-ontime { color: #1a7f37; }
+.att-ph-late { color: #9a6700; background: #fff8c5; }
+.att-ph-missing { color: #cf222e; background: #ffebe9; }
+.att-ph-tag { box-shadow: inset 0 -2px 0 #9a6700; }

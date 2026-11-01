@@ -13,7 +13,7 @@ import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
 import { docHead, docFoot, footText, signoff } from './print.js';
 import { companyCode } from '../engine/docref.js';
-import { withFixes } from '../engine/attendance.js';
+import { withFixes, officeReports } from '../engine/attendance.js';
 import { paidOnSite } from '../engine/crewpay.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { openMail, emailIn } from './maildialog.js';
@@ -23,7 +23,8 @@ import { METHODS, methodLabel } from '../engine/crewpay.js';
 /** v0.25.0: does this run pay anyone in ETB? Then it needs its own ETB-to-USD rate. */
 const etbIn = run => (run.lines || []).some(l => l.currency === 'ETB');
 // the attendance as the office corrected it on the Attendance sheet
-const sheetReports = c => withFixes(c.ws.reports, c.ws.attendance);
+// v0.50.0: with the office staff's marks (Attendance, Office staff)
+const sheetReports = c => [...withFixes(c.ws.reports, c.ws.attendance), ...officeReports(c.company.officeAttendance)];
 // site crew of a project that pays through Payments is paid there, not here
 const onSitePay = p => paidOnSite(p, store.projects, d => SITE_DEPARTMENTS.includes(normDepartment(d)));
 

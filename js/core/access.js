@@ -91,7 +91,7 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
-  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', 'spotlight', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
+  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', 'spotlight', 'officeAttendance', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
   if (role !== 'office' && role !== 'site') return ['messages'];
   return [
     'messages', ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),

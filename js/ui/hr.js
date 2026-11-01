@@ -29,6 +29,7 @@ import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
 import { personSummary, methodLabel } from '../engine/crewpay.js';
+import { addedStamp } from '../engine/manpower.js';
 
 let selected = null;
 let tab = 'work';       // work | private | pay | papers
@@ -495,7 +496,7 @@ export const actions = {
   },
   tab(el) { tab = el.dataset.t; },
   add(el, c) {
-    const p = { id: uid('st'), name: '', title: '', department: filt.department || '', projectId: '', status: 'active', started: c.today, agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp() };
+    const p = { id: uid('st'), name: '', title: '', department: filt.department || '', projectId: '', status: 'active', started: c.today, agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp(), ...addedStamp(store.profile?.name || store.user?.name || store.user?.email, c.today) };
     store.updateCompany(co => co.staff.push(p));
     selected = p.id;
     tab = 'work';

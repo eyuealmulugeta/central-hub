@@ -5,6 +5,7 @@ import { html, options, field } from './dom.js';
 import * as fieldsetup from './fieldsetup.js';
 import * as fieldprojects from './fieldprojects.js';
 import * as fieldusers from './fieldusers.js';
+import * as directory from './directory.js';   // v0.45.0: the Manpower Directory, also a tab of People and access
 import { binPage, binActions, binChanges, purgeOld } from './bin.js';
 import { typesOf } from '../core/seed.js';
 import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
@@ -49,7 +50,7 @@ export const getSection = () => section;
 export function indexText(c) {
   const keep = { projTab, accTab, linkTab };
   const parts = [];
-  const tabs = section === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : section === 'access' ? ['accTab', ['people', 'crew', 'perms', 'you', 'problems']] : section === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
+  const tabs = section === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : section === 'access' ? ['accTab', ['manpower', 'people', 'crew', 'perms', 'you', 'problems']] : section === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
   try {
     for (const k of tabs ? tabs[1] : [null]) {
       if (tabs) ({ projTab, accTab, linkTab } = { ...keep, [tabs[0]]: k });
@@ -67,7 +68,7 @@ export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
 // v0.25.0: the calendar went to Admin settings, Company; day rates and the pay period to Payments
 const PROJ_TABS = [['basics', 'Basics'], ['site', 'Site and deployment'], ['team', 'Team']];
 let projTab = 'basics';
-let accTab = 'people';
+let accTab = 'manpower';
 let accScope = 'pos';     // v0.29.0: the Access rules tab shows a tier, a position or a person
 let accPick = '';
 let linkTab = 'field';
@@ -507,15 +508,15 @@ function accessPage(c) {
   if (store.role !== 'owner') return html`<div class="side settings"><section class="card"><p class="empty">Only the Admin manages people and access.</p></section></div>`;
   // the demo has nobody who signs in: only the crew of the directory can be allocated there
   const demo = !store.cloud;
-  if (demo && accTab !== 'perms') accTab = 'crew';
-  const tabs = demo ? [['crew', 'Allocated Crew'], ['perms', 'Access rules']]
-    : [['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
+  if (demo && !['perms', 'manpower'].includes(accTab)) accTab = 'crew';
+  const tabs = demo ? [['manpower', 'Manpower Directory'], ['crew', 'Allocated Crew'], ['perms', 'Access rules']]
+    : [['manpower', 'Manpower Directory'], ['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
   return html`<div class="side settings">
     <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
     ${tabStrip(tabs, accTab, 'accTab')}
     ${demo ? html`<p class="muted">Nobody signs in to the demo, so People is only in the signed-in version. Access rules shows sample people.</p>` : ''}
-    ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'perms' ? permsTab() : peopleTab()}
+    ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'manpower' ? directory.render(c) : accTab === 'perms' ? permsTab() : peopleTab()}
   </div>`;
 }
 
@@ -760,6 +761,7 @@ export const actions = {
   openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   ...fieldprojects.actions,
   ...fieldusers.actions,
+  mpTable: (...a) => directory.actions.mpTable(...a), mpAdd: (...a) => directory.actions.mpAdd(...a), mpEdit: (...a) => directory.actions.mpEdit(...a), mpData: (...a) => directory.actions.mpData(...a), mpRemove: (...a) => directory.actions.mpRemove(...a),
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
@@ -905,6 +907,7 @@ export const changes = {
   ...fieldsetup.changes,
   ...fieldprojects.changes,
   ...fieldusers.changes,
+  mpFilt: (...a) => directory.changes.mpFilt(...a), mpTitle: (...a) => directory.changes.mpTitle(...a), mpProject: (...a) => directory.changes.mpProject(...a),
   /** Read the chosen file and show what is in it. Nothing is saved here. */
   async pack(el) {
     const file = el.files[0];

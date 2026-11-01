@@ -41,6 +41,16 @@ service cloud.firestore {
     function isIssued(d) { return d.type == 'report' && d.status == 'issued'; }
     // A project is open to a Site user only while its status is active (a missing status counts as active).
     function projectOpen(pid) { return get(/databases/$(database)/documents/projects/$(pid)).data.get('status', 'active') == 'active'; }
+    // Phase E1: a Field Report phone signed in to Firebase. fieldAccess/<email> is the server's copy of the Field
+    // Report access list (functions/access-mirror.js); it reads its projects and their reports, nothing else.
+    function fieldDoc() { return /databases/$(database)/documents/fieldAccess/$(me()); }
+    function fieldOn(pid) {
+      return signedIn() && exists(fieldDoc()) && get(fieldDoc()).data.st == 'active' && pid in get(fieldDoc()).data.pids && projectOpen(pid);
+    }
+    // v0.37.0: a Field Report account that may make crew form links; v0.41.0: the Admin and the GM (exec) only
+    function fieldStaff() {
+      return signedIn() && exists(fieldDoc()) && get(fieldDoc()).data.st == 'active' && get(fieldDoc()).data.role in ['admin', 'exec'];
+    }
     function isSiteOn(pid) {
       return hasUser() && user().role == 'site' && pid in user().projects && projectOpen(pid);
     }
@@ -105,7 +115,23 @@ service cloud.firestore {
     }
 
     // People with access, and what each may open: the Admin only. Everyone may read their own entry.
+    // Phase E1: the server's copy of the Field Report access list. A phone reads its own; the Admin reads all.
+    match /fieldAccess/{email} {
+      allow get: if signedIn() && email == me();
+      allow read: if seesAll();
+      allow write: if false;
+    }
     // What a person marked as read, kept for them on every device (js/core/prefs.js): only they read or write it.
+    // v0.37.0: "something changed" signals of a project, written by the server only (functions/fieldnow.js)
+    match /fieldPing/{pid} {
+      allow read: if seesAll() || officeOn(pid) || fieldOn(pid);
+      allow write: if false;
+    }
+    // v0.37.0: small crew photos for Field Report, made on the Admin's computer (js/core/crewphotos.js)
+    match /fieldPhotos/{pid} {
+      allow read: if seesAll() || fieldOn(pid);
+      allow write: if isOwner();
+    }
     match /prefs/{email} {
       allow read, write: if signedIn() && email == me();
     }
@@ -206,6 +232,38 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/company/main/signs/$(request.resource.data.request)).data.status == 'sent';
     }
 
+    // v0.33.0 Crew forms. A link (crewlinks) is read by anyone who has its long random id; it is made by the Admin or
+    // anyone with a sign-in (the page is offered to a GM, Project Engineer or Site Engineer), in their own name. A form
+    // (crewforms) is left without signing in while its link is open: once for a one-person link (the form's id is the
+    // link's), any number under a crew link. Only the Admin reads, changes or deletes forms (HR is the Admin's).
+    function crewLinkOf(d) { return get(/databases/$(database)/documents/company/main/crewlinks/$(d.link)).data; }
+    function crewText(d, k, n) { return !(k in d) || (d[k] is string && d[k].size() <= n); }
+    function crewFormOk(id, d) {
+      return d.keys().hasOnly(['id', 'link', 'doc', 'name', 'gender', 'birthday', 'nationality', 'phone', 'address', 'emergency', 'emergencyPhone', 'trade',
+          'idNumber', 'fin', 'passportNumber', 'passportExpiry', 'idExpiry', 'certificate', 'photo', 'idFront', 'idBack', 'passportImage', 'at', 'status'])
+        && d.id == id && d.status == 'new' && d.link is string && d.link.size() >= 40
+        && d.name is string && d.name.size() > 1 && d.name.size() <= 120
+        && crewText(d, 'photo', 260000) && crewText(d, 'idFront', 260000) && crewText(d, 'idBack', 260000) && crewText(d, 'passportImage', 260000)
+        && crewText(d, 'address', 300) && crewText(d, 'phone', 40) && crewText(d, 'trade', 80)
+        && crewLinkOf(d).status == 'open' && crewLinkOf(d).untilMs > request.time.toMillis()
+        && ((crewLinkOf(d).kind == 'one' && id == d.link) || (crewLinkOf(d).kind in ['crew', 'site'] && id.matches(d.link + '-[0-9a-f]{8}')));
+    }
+    match /company/main/crewlinks/{id} {
+      allow get: if true;
+      allow list: if seesAll();
+      allow create: if (isOwner() || 'general_manager' in ranks() || fieldStaff()) && id.size() >= 40 && request.resource.data.id == id && request.resource.data.by == me()
+        && request.resource.data.kind in ['one', 'crew'] && request.resource.data.status == 'open'
+        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 8 * 86400000;
+      // v0.42.0: Employee data in Field Report: a 12-hour link of the device's own project, for the form filled in there
+      allow create: if request.resource.data.kind == 'site' && fieldOn(request.resource.data.projectId) && id.size() >= 40 && request.resource.data.id == id
+        && request.resource.data.by == me() && request.resource.data.status == 'open'
+        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 13 * 3600000;
+      allow update: if (isOwner() || 'general_manager' in ranks() || fieldStaff()) && resource.data.by == me() && request.resource.data.by == me() && request.resource.data.untilMs <= resource.data.untilMs;
+    }
+    match /company/main/crewforms/{id} {
+      allow create: if crewFormOk(id, request.resource.data);
+    }
+
     // Meetings. The booking page is open to anyone: it reads its settings (public/booking) and which
     // times are taken (slots, which hold no names), and leaves one booking. A slot's id is its time,
     // and a slot can only be created, never overwritten: that is what stops two people taking one time.
@@ -277,7 +335,7 @@ service cloud.firestore {
     }
 
     match /projects/{pid} {
-      allow get: if seesAll() || officeOn(pid) || isSiteOn(pid);
+      allow get: if seesAll() || officeOn(pid) || isSiteOn(pid) || fieldOn(pid);
       allow list: if seesAll();
       // project settings are the Admin's; an Office user may only refresh the sidebar figures
       // and confirm which Field Report project a code belongs to
@@ -287,6 +345,7 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
+          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance'] && fieldOn(pid))
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
@@ -297,14 +356,32 @@ service cloud.firestore {
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
           || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data))
           // a Site user may only raise a request, as one waiting for approval
-          || (isSiteOn(pid) && section == 'requests' && request.resource.data.status == 'requested');
+          || (isSiteOn(pid) && section == 'requests' && request.resource.data.status == 'requested')
+          // v0.39.0: today's attendance marks shared between a project's Field Report phones and computers
+          || (section == 'fieldDay' && fieldOn(pid))
+          // v0.42.0: a Field Report device sends an attendance correction for the office to review, in its own name
+          || (section == 'attendance' && fieldOn(pid) && record.matches('sr_.+') && request.resource.data.get('site', false) == true && request.resource.data.review == 'waiting' && request.resource.data.byEmail == me())
+          // v0.38.0: a Field Report phone writes a request of its project as a draft, in its own name
+          || (section == 'requests' && fieldOn(pid) && request.resource.data.get('site', false) == true && request.resource.data.status == 'draft' && request.resource.data.by == me());
         allow update: if isOwner()
           || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
           || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data) && !isIssued(resource.data))
           // ...and change or withdraw it only while nobody has answered it
-          || (isSiteOn(pid) && section == 'requests' && resource.data.status == 'requested' && request.resource.data.status in ['requested', 'cancelled']);
+          || (isSiteOn(pid) && section == 'requests' && resource.data.status == 'requested' && request.resource.data.status in ['requested', 'cancelled'])
+          || (section == 'fieldDay' && fieldOn(pid))   // v0.39.0
+          || (section == 'attendance' && fieldOn(pid) && record.matches('sr_.+') && request.resource.data.get('site', false) == true && request.resource.data.review == 'waiting' && request.resource.data.byEmail == me())   // v0.42.0
+          // v0.38.0: a site draft is changed, deleted or sent by any phone of the project; once sent, only its writer withdraws it
+          || (section == 'requests' && fieldOn(pid) && resource.data.get('site', false) == true && request.resource.data.get('site', false) == true && request.resource.data.by == resource.data.by
+            && ((resource.data.status == 'draft' && request.resource.data.status in ['draft', 'deleted', 'requested'])
+              || (resource.data.status == 'requested' && request.resource.data.status == 'cancelled' && resource.data.by == me()
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'log', 'editedBy', 'editedAt']))))
+          // v0.43.0: a Field Report phone asks the PM or the GM to delete a crew member (the server deletes on their confirm)
+          || (section == 'team' && fieldOn(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dropAsk', 'editedBy', 'editedAt']))
+          // v0.37.0: a Field Report phone corrects or takes off a crew member the site added (name, trade, phone only)
+          || (section == 'team' && fieldOn(pid) && resource.data.get('fromSite', null) != null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'active', 'editedBy', 'editedAt']));
         // nobody but the Admin deletes a record
         allow delete: if isOwner();
       }

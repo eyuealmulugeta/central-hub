@@ -66,7 +66,7 @@ const key = permKey;
 /** May someone with `role` and granted `pages` open `page`? */
 export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'crewforms') return role === 'owner' || ranks.includes('general_manager');   // v0.41.0: crew form links: the Admin and the GM only
-  if (page === 'directory') return role !== 'owner' && pages.includes('directory');   // the staff directory is for those without the employee records
+  if (page === 'directory') return role === 'owner' || pages.includes('directory');   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory
   if (role === 'owner' || page === 'home' || page === 'quick' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
   return pages.includes(key(page));

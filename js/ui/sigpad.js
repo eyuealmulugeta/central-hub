@@ -8,7 +8,8 @@ const MAX_W = 600, MAX_H = 220;
 
 /** The signed-in person's saved signature (a PNG data URL), or ''. */
 export const mySignature = () => { const v = prefs.get(KEY); return typeof v === 'string' && v.startsWith('data:image/png') ? v : ''; };
-export const saveSignature = png => prefs.set(KEY, png);
+// v0.44.1: with its time, so Field Report and Central Hub keep the newest on every device (FR 2.19.1)
+export const saveSignature = png => { prefs.set(`${KEY}At`, Date.now()); prefs.set(KEY, png); };
 
 /** The ink, cut to its edges and scaled to fit MAX_W x MAX_H. '' when nothing was drawn. */
 function trimmed(canvas) {

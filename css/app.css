@@ -1595,3 +1595,6 @@ body.side-narrow .side-health { display: none; }
 /* v0.36.4: an old version waits for the update */
 .update-wall { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: rgba(6, 43, 53, .55); padding: 16px; }
 .update-wall .card { max-width: 420px; text-align: center; }
+
+/* v0.38.2: a newer version is out: a red tag at the top, never a wall */
+.upd-tag { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #c62828; color: #fff; border: 0; border-radius: 999px; padding: 5px 14px; font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }

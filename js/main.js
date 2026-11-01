@@ -129,29 +129,17 @@ async function freshFiles() {
   } catch { /* reload anyway */ }
 }
 
+/** v0.38.2: a newer version is out: a red tag at the top; tapping it updates. Nothing is blocked. */
 async function updateCheck() {
   if (location.search.includes('local') || !navigator.onLine) return;
   let v = '';
   try { v = (/APP_VERSION = '([^']+)'/.exec(await (await fetch(`js/version.js?x=${Date.now()}`, { cache: 'no-store' })).text()) || [])[1] || ''; } catch { return; }
-  if (!v || v === APP_VERSION) return;
-  // v0.38.0: one update per new version: every file fetched fresh (the browser's own copy too), then one reload.
-  // If that still did not take, the box shows once; it is never asked again for the same version.
-  let tried = '', walled = '';
-  try { tried = localStorage.getItem('sf:upd') || ''; walled = localStorage.getItem('sf:wall') || ''; } catch { /* private window */ }
-  if (walled === v) return;
-  if (tried !== v) {
-    try { localStorage.setItem('sf:upd', v); } catch { /* reload anyway */ }
-    await freshFiles();
-    location.reload();
-    return;
-  }
-  try { localStorage.setItem('sf:wall', v); } catch { /* shown once this time */ }
-  if (document.querySelector('.update-wall')) return;
-  const box = document.createElement('div');
-  box.className = 'update-wall';
-  box.innerHTML = `<div class="card"><h2>Update to ${v}</h2><p>Central Hub ${APP_VERSION} is out of date. Update before carrying on; nothing you saved is lost.</p><button class="btn primary" type="button">Update now</button></div>`;
-  box.querySelector('button').onclick = async () => { box.remove(); await freshFiles(); location.reload(); };
-  document.body.append(box);
+  if (!v || v === APP_VERSION || document.querySelector('.upd-tag')) return;
+  const tag = document.createElement('button');
+  tag.type = 'button'; tag.className = 'upd-tag'; tag.textContent = `Update to ${v}`;
+  tag.title = 'Central Hub ' + APP_VERSION + ' is out of date. Tap to update; nothing you saved is lost.';
+  tag.onclick = async () => { tag.textContent = 'Updating…'; await freshFiles(); location.reload(); };
+  document.body.append(tag);
 }
 updateCheck();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCheck(); });
@@ -828,8 +816,14 @@ function start() {
     let pingAt = 0, pingSeen = '';
     store.onFieldPing(docs => {
       const key = docs.map(d => d.crew || '').sort().join();
-      if (key === pingSeen || Date.now() - pingAt < 15_000 || !store.isAdmin) { pingSeen ||= key; return; }
-      pingSeen = key; pingAt = Date.now(); fieldusers.load();
+      if (key === pingSeen || Date.now() - pingAt < 5_000 || !store.isAdmin) { pingSeen ||= key; return; }
+      pingSeen = key; pingAt = Date.now();
+      // v0.38.2: people sent from a phone: an alert with who and when
+      const before = new Set(fieldusers.crewWaiting().map(r => r.id));
+      Promise.resolve(fieldusers.load()).then(() => {
+        const fresh = fieldusers.crewWaiting().filter(r => !before.has(r.id));
+        if (fresh.length) toast(`New crew from the site: ${fresh.map(r => r.name).join(', ')} (${fresh[0].proj || ''}), sent by ${fresh[0].by || 'the site'} at ${new Date(fresh[0].at || Date.now()).toTimeString().slice(0, 5)}. Approve under Settings, Field Report users.`);
+      }).catch(() => {});
     });
     // the weekly full copy: checked a minute after start, then every 6 hours
     setTimeout(weeklyBackup, 60_000);

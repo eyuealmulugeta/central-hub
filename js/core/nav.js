@@ -25,7 +25,8 @@ export const ALIASES = {
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },
   attendance: { view: 'attendance', title: 'Attendance sheet', switch: 'reports' },
-  spotlight: { view: 'reports', title: 'Spotlight', preset: { spot: true }, switch: 'reports' },   // v0.31.0, Admin only
+  spotlight: { view: 'reports', title: 'Spotlight', preset: { spot: true }, switch: 'reports' },   // v0.31.0; v0.50.1 the Admin and HR
+  officeatt: { view: 'attendance', title: 'Office attendance', preset: { office: true } },   // v0.50.1: office staff, the Admin and HR
 };
 
 /** Old addresses (links, alerts, bookmarks) that now belong to a page of the new menu. */
@@ -51,7 +52,7 @@ export const MENUS = {
     today,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight'] },
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'payroll'] },   // crewforms: v0.33.0
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'cashflow', 'income', 'expenses', 'summary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
     ...team,

@@ -4,7 +4,7 @@
 // Prints, emails as PDF and shares like any sheet.
 
 import { store } from '../core/store.js';
-import { register, groupRows, MARK_LABEL, STATES, MARK, periodFor, shiftPeriod, correction, liveFixes, waitingNote, photoDay, PHOTO_WORD, delegated, officeId, daysOf } from '../engine/attendance.js';
+import { register, groupRows, MARK_LABEL, STATES, MARK, periodFor, shiftPeriod, correction, liveFixes, waitingNote, photoDay, PHOTO_WORD, delegated, officeId, daysOf, officeStaffOf } from '../engine/attendance.js';
 import { tierOfPerson } from '../engine/manpower.js';
 import { tierOfPosition } from '../engine/positions.js';
 import { wageOf, monthlyRolesOf } from '../engine/crewpay.js';
@@ -22,7 +22,9 @@ let at = '';            // a day inside the period on screen; '' = today
 let editing = null;     // { date, key } of the cell being corrected
 let extra = [];         // people added by name for this visit, until they get a mark
 let notice = '';
-let office = false;     // v0.50.0: the office staff's sheet (people with no project), marked here by the Admin
+let office = false;     // v0.50.0: the office staff's sheet (people with no project); v0.50.1 also HR (Office attendance)
+const isHR = () => (store.ranks || []).includes('hr_assistant');
+export function preset(p = {}) { office = !!p.office; }
 
 const dayNo = d => String(+d.slice(8));
 const weekday = d => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][(((toDay(d) + 4) % 7) + 7) % 7];
@@ -136,11 +138,12 @@ function photoRow(c, r) {
 /** v0.50.0: office staff (no project): a month, one row each, the Admin taps a day to mark it (P, A, S, L, blank). */
 function officeSheet(c) {
   const month = (at || c.today).slice(0, 7), days = daysOf(month);
-  const people = (c.company.staff || []).filter(p => p.status !== 'left' && tierOfPerson(p) !== 1 && !(p.assignments || []).some(a => a.active !== false));
+  // the Admin reads the directory; HR the names-and-positions list the Admin's app keeps (company.officeStaff)
+  const people = store.isAdmin ? officeStaffOf(c.company.staff, tierOfPerson) : (c.company.officeStaff || []);
   const marks = new Map((c.company.officeAttendance || []).map(m => [m.id, m]));
   return html`<div class="toolbar no-print"><h2>Office staff attendance</h2><span class="muted">People with no project. Tap a day: Present, Absent, Sick, On leave, blank. Absent days go to Payroll as unpaid days.</span><span class="grow"></span>
       <button class="btn small" data-act="shift" data-n="-1" aria-label="Previous month">‹</button><b class="att-period">${month}</b><button class="btn small" data-act="shift" data-n="1" aria-label="Next month">›</button>
-      <button class="btn" data-act="officeOff">← Project sheet</button></div>
+      ${store.isAdmin ? html`<button class="btn" data-act="officeOff">← Project sheet</button>` : ''}</div>
     <section class="card sheet att-sheet">${people.length ? html`<div class="att-scroll"><table class="att-grid">
       <thead><tr><th class="att-name">Name</th>${days.map(d => html`<th><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}</tr></thead>
       <tbody>${people.map(p => html`<tr><td class="att-name"><b>${p.name}</b><br><span class="muted">${p.title || ''}</span></td>
@@ -149,7 +152,7 @@ function officeSheet(c) {
 }
 
 export function render(c) {
-  if (office && store.isAdmin) return officeSheet(c);
+  if (office && (store.isAdmin || isHR())) return officeSheet(c);
   const p = periodOf(c);
   const r = register(c.project, c.ws, p, crewOf(c));
   const edit = mayEdit();
@@ -240,7 +243,7 @@ export const actions = {
   officeOff() { office = false; },
   officeMark(el, c) {
     const cycle = ['present', 'absent', 'sick', 'leave', ''];
-    const p = (c.company.staff || []).find(x => x.id === el.dataset.p), id = officeId(el.dataset.d, el.dataset.p);
+    const p = (store.isAdmin ? c.company.staff : c.company.officeStaff || []).find(x => x.id === el.dataset.p), id = officeId(el.dataset.d, el.dataset.p);
     if (!p) return;
     store.updateCompany(co => {
       const list = (co.officeAttendance ||= []), m = list.find(x => x.id === id);

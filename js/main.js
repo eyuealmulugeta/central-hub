@@ -34,7 +34,8 @@ import * as payments from './ui/payments.js';
 import * as attendance from './ui/attendance.js';
 import { payFlags } from './engine/paysteps.js';
 import { spotFlags } from './engine/spotlight.js';
-import { crewPhotoFlags } from './engine/attendance.js';
+import { crewPhotoFlags, officeStaffOf, officeStaffStale } from './engine/attendance.js';
+import { tierOfPerson } from './engine/manpower.js';
 import * as employment from './ui/employment.js';
 import * as signatures from './ui/signatures.js';
 import * as setup from './ui/setup.js';
@@ -376,9 +377,14 @@ function render() {
   // an alert that leads to a page this person cannot open, or that the project has switched off, is not shown
   // v0.48.1: pay sheets to check or approve, and the payroll steps, every day until done
   ctx.flags.auto.push(...payFlags({ ws: store.ws, company: store.company, today, admin: store.isAdmin, payrollDayOf: +store.global?.payrollDay || 0 }));
+  // v0.50.1: the names and positions of the office staff, for HR's Office attendance (the Admin holds the directory)
+  if (store.isAdmin && !store.readOnly && store.cloud) {
+    const now = officeStaffOf(store.company.staff, tierOfPerson);
+    if (officeStaffStale(store.company.officeStaff, now)) queueMicrotask(() => store.updateCompany(co => { co.officeStaff = now; }));
+  }
   // v0.49.0: project updates from Spotlight (HR and the Admin), salary reviews after an evaluation (the Admin and the GM)
   const hrOrAdmin = store.isAdmin || (store.ranks || []).includes('hr_assistant');
-  if (hrOrAdmin) ctx.flags.auto.push(...spotFlags(store.company.spotlight, today, p.id).map(f => ({ ...f, link: store.isAdmin ? f.link : 'dashboard' })));
+  if (hrOrAdmin) ctx.flags.auto.push(...spotFlags(store.company.spotlight, today, p.id));
   if (store.isAdmin || (store.ranks || []).includes('general_manager')) for (const r of store.company.evaluations || []) if (r.salaryReview && !r.salaryDone) ctx.flags.auto.push({ sev: 'warn', kind: 'Evaluation', title: `Salary review: ${r.subjectName}`, detail: `Rated one point or more above the last evaluation (${r.period?.label || r.date}).`, link: 'evaluation' });
   // v0.50.0: a late or missing morning crew photo, for the Project Manager and the GM (owner)
   if ((store.ranks || []).some(k => k === 'project_manager' || k === 'general_manager')) ctx.flags.auto.push(...crewPhotoFlags(store.ws, today));

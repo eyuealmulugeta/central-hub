@@ -312,7 +312,7 @@ let spotPage = false;
 export function preset(p = {}) { spotPage = !!p.spot; }
 
 export function render(c) {
-  if (spotPage) return store.isAdmin ? html`<div class="side">${spotCard(c)}</div>` : '';
+  if (spotPage) return store.isAdmin || (store.ranks || []).includes('hr_assistant') ? html`<div class="side">${spotCard(c)}</div>` : '';   // v0.50.1: and HR
   const { ws, project } = c;
   const cur = underReview(ws);
   const tasks = reportable(c);
@@ -763,7 +763,7 @@ export const actions = {
   clearForm() { shownTrades = new Set(); eqRows = 0; notice = 'Form cleared. Nothing was saved.'; },
   repTab(el) { tab = el.dataset.t; },
   async spotLoad() {
-    if (!store.isAdmin || spot.busy || !spot.code) return;
+    if (!(store.isAdmin || (store.ranks || []).includes('hr_assistant')) || spot.busy || !spot.code) return;
     spot.busy = true; spot.err = ''; store.notify();
     try { spot.list = await fieldSpotlight(spot.code); } catch (e) { spot.err = `Could not get the notes: ${e.message || e}`; }
     finally { spot.busy = false; store.notify(); }

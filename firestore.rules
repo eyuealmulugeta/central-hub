@@ -306,6 +306,15 @@ service cloud.firestore {
     }
     // v0.49.0: Spotlight notes. About a person: written by who may rate them; a project update: by anyone signed in.
     // Read by the writer, HR and the Admin, never by the person. Changed by the writer (24 hours in the app); deleted by the Admin.
+    // v0.50.1: HR marks the office staff's attendance from the names-and-positions list the Admin's app keeps
+    function isHR() { return hasUser() && 'hr_assistant' in ranks(); }
+    match /company/main/officeAttendance/{id} {
+      allow read, delete: if isHR();
+      allow create, update: if isHR() && request.resource.data.id == id && request.resource.data.by == me();
+    }
+    match /company/main/officeStaff/{id} {
+      allow read: if isHR();
+    }
     match /company/main/spotlight/{id} {
       allow read: if seesAll() || (hasUser() && ('hr_assistant' in ranks() || resource.data.by == me()));
       allow create: if hasUser() && request.resource.data.by == me() && request.resource.data.id == id

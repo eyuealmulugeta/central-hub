@@ -277,3 +277,9 @@ export function officeReports(list) {
   }
   return [...by.values()];
 }
+
+/** v0.50.1: the office staff: not left, not Tier 1, on no project. Names and positions only, for HR's list. */
+export const officeStaffOf = (staff, tierOf) => (staff || []).filter(p => p.status !== 'left' && tierOf(p) !== 1 && !(p.assignments || []).some(a => a.active !== false))
+  .map(p => ({ id: p.id, name: p.name || '', title: p.title || '' })).sort((a, b) => a.name.localeCompare(b.name));
+/** Is the kept list behind the directory? */
+export const officeStaffStale = (kept, now) => JSON.stringify((kept || []).map(({ id, name, title }) => ({ id, name, title })).sort((a, b) => a.name.localeCompare(b.name))) !== JSON.stringify(now);

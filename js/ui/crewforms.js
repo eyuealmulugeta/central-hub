@@ -49,7 +49,7 @@ function links(c) {
 
 function linkRow(l) {
   const why = linkState(l);
-  return html`<li class="cf-link"><div><b>${l.kind === 'crew' ? 'Crew link' : l.name || 'One person'}</b> <span class="muted">${l.projectName || 'no project'} · by ${l.byName || l.by || ''} · ${when(l.at)} · until ${when(l.untilMs)}</span>
+  return html`<li class="cf-link"><div><b>${l.kind === 'site' ? 'Site form (Field Report)' : l.kind === 'crew' ? 'Crew link' : l.name || 'One person'}</b> <span class="muted">${l.projectName || 'no project'} · by ${l.byName || l.by || ''} · ${when(l.at)} · until ${when(l.untilMs)}</span>
       ${why ? chip(l.status === 'open' ? 'Run out' : 'Closed', 'warn') : chip('Open', 'ok')}<br><code class="cf-url">${urlOf(l)}</code></div>
     ${why ? '' : html`<div class="actions left"><button class="btn small" type="button" data-act="cfCopy" data-id="${l.id}">Copy</button>
       <button class="btn small" type="button" data-act="cfShare" data-id="${l.id}" title="WhatsApp, Telegram or another app">Share</button>
@@ -66,7 +66,7 @@ function review(c, forms) {
     const ed = editing === f.id;
     const facts = (ed ? EDIT_FIELDS(f) : EDIT_FIELDS(f).filter(([, k]) => f[k])).map(([t, k, type]) => [t, ed ? html`<input type="${type || 'text'}" data-chg="cfEdit" data-id="${f.id}" data-f="${k}" value="${f[k] || ''}">` : f[k]]);
     return html`<li class="cf-form"><div class="cf-pics">${img(f.photo, 'Photo', 'face')}${img(f.idFront, 'Fayda ID, front')}${img(f.idBack, 'Fayda ID, back')}${img(f.passportImage, 'Passport')}</div>
-      <div>${ed ? html`<label>Name <input data-chg="cfEdit" data-id="${f.id}" data-f="name" value="${f.name}"></label>` : html`<b>${f.name}</b>`} <span class="muted">${f.doc === 'passport' ? 'Passport' : 'Fayda ID'} · sent ${when(f.at)} · ${l ? `${l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
+      <div>${ed ? html`<label>Name <input data-chg="cfEdit" data-id="${f.id}" data-f="name" value="${f.name}"></label>` : html`<b>${f.name}</b>`} <span class="muted">${f.doc === 'passport' ? 'Passport' : 'Fayda ID'} · sent ${when(f.at)} · ${l ? `${l.kind === 'site' ? 'site form' : l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
         ${same ? html`<p class="callout warn small"><b>!</b> <span>${same.name} is already in Employee data: Accept fills in only what that record lacks.</span></p>` : ''}
         <table class="table compact"><tbody>${facts.map(([k, v]) => html`<tr><th>${k}</th><td>${v}</td></tr>`)}</tbody></table>
         <div class="actions left"><button class="btn small primary" type="button" data-act="cfAccept" data-id="${f.id}">Accept${l?.projectName ? ` and put on ${l.projectName}` : ''}</button>

@@ -56,7 +56,9 @@ export const keyOf = a => a.id || `name:${String(a.name || '').trim().toLowerCas
 export const fixId = (date, key) => `af_${date}_${key.replace(/[^a-z0-9]+/gi, '-')}`.slice(0, 120);
 
 /** The corrections that count (an undone one keeps its record but no longer applies). */
-export const liveFixes = fixes => (fixes || []).filter(f => !f.undone);
+// v0.42.0: a correction sent from site (Field Report, Crew attendance; it has `review`) counts only once accepted,
+// as the office's own correction of that cell
+export const liveFixes = fixes => (fixes || []).filter(f => !f.undone && !f.review);
 
 /**
  * Reports that count for attendance, pay and labour cost (v0.20.0): a Field Report report counts once it is approved

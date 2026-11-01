@@ -63,6 +63,45 @@ function fixList(c) {
   </section>`;
 }
 
+/** v0.42.0: corrections sent from site (Field Report, Crew attendance): they count once accepted here. */
+function siteList(c) {
+  const list = (c.ws.attendance || []).filter(f => f.review === 'waiting').sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  if (!list.length) return '';
+  const word = s => (s === 'none' ? 'no mark' : MARK_LABEL[{ present: 'P', absent: 'A', sick: 'S', leave: 'L' }[s]] || s);
+  return html`<section class="card no-print" id="att-site">
+    <h3>From site · ${list.length} waiting for your review <span class="muted">sent from Field Report; a correction counts once accepted</span>
+      <button type="button" class="btn small primary" data-act="acceptAll">Accept all</button></h3>
+    <table class="table compact"><thead><tr><th>Day</th><th>Person</th><th>Was</th><th>Asked</th><th>By</th><th>When</th><th></th></tr></thead>
+      <tbody>${list.map(f => html`<tr>
+        <td class="nowrap">${fmtFull(f.date)}</td><td>${f.name}</td>
+        <td>${f.was ? `${word(f.was.state)}${f.was.ot ? `, ${f.was.ot} h` : ''}` : html`<span class="muted">not reported</span>`}</td>
+        <td><b>${word(f.state)}${f.ot ? `, ${f.ot} h` : ''}</b></td>
+        <td>${String(f.by || '').replace(/^Site: /, '')}</td><td class="nowrap">${String(f.at || '').slice(0, 16).replace('T', ' ')}</td>
+        <td class="nowrap"><button type="button" class="btn small primary" data-act="acceptFix" data-id="${f.id}">Accept</button> <button type="button" class="btn small ghost" data-act="rejectFix" data-id="${f.id}">Reject</button></td>
+      </tr>`)}</tbody></table>
+  </section>`;
+}
+
+/** v0.42.0: a site correction accepted (it becomes the office's correction of that cell) or rejected, with who and when. */
+function decide(ids, review) {
+  const by = store.user?.email || 'this computer', at = new Date().toISOString();
+  let n = 0;
+  store.update(ws => {
+    for (const id of ids) {
+      const f = (ws.attendance || []).find(x => x.id === id && x.review === 'waiting');
+      if (!f) continue;
+      if (review === 'accepted') {
+        const rec = correction(ws, { date: f.date, key: f.key, personId: f.personId || '', name: f.name, state: f.state, ot: f.ot }, `${f.by || 'Site'}, accepted by ${by}`, at);
+        const i = ws.attendance.findIndex(x => x.id === rec.id);
+        if (i >= 0) ws.attendance[i] = rec; else ws.attendance.push(rec);
+      }
+      Object.assign(f, { review, reviewBy: by, reviewAt: at });
+      n++;
+    }
+  });
+  tell(`${n} ${n === 1 ? 'correction' : 'corrections'} from site ${review}.`);
+}
+
 export function render(c) {
   const p = periodOf(c);
   const r = register(c.project, c.ws, p, crewOf(c));
@@ -96,6 +135,7 @@ export function render(c) {
     </div>
     ${waitingNote(c.ws.reports, p) ? html`<p class="callout warn no-print"><b>!</b> <span>${waitingNote(c.ws.reports, p)}</span></p>` : ''}
     ${edit ? html`<p class="muted no-print att-help">Tap a day to correct it. The pay period (weekly, every two weeks or monthly) is set under Settings, This project, Calendar and rates.</p>` : ''}
+    ${edit ? siteList(c) : ''}
     ${editor(c, r)}
     <section class="card sheet att-sheet"><div class="paper att dsr land" data-foot="${footText(c, 'Attendance sheet', ref)}">
       ${docHead(c, { title: 'Attendance sheet', sub: p.label, ref, facts: [['Project', c.project.name], ['Period', p.label], ['Days reported', `${r.reportedDays} of ${working} working days`], ['People', String(r.rows.length)]] })}
@@ -156,6 +196,9 @@ export const actions = {
     save(c, { state: el.dataset.s, ...(el.dataset.s === 'none' ? { ot: 0 } : {}) });
     tell(`✓ ${nameOf(register(c.project, c.ws, periodOf(c), crewOf(c)), editing.key)}, ${fmtFull(editing.date)}: ${el.dataset.s === 'none' ? 'cleared' : STATES.find(([k]) => k === el.dataset.s)[1]}.`);
   },
+  acceptFix(el) { decide([el.dataset.id], 'accepted'); },
+  rejectFix(el) { decide([el.dataset.id], 'rejected'); },
+  acceptAll(el, c) { decide((c.ws.attendance || []).filter(f => f.review === 'waiting').map(f => f.id), 'accepted'); },
   undoFix(el) { store.update(ws => { const f = (ws.attendance || []).find(x => x.id === el.dataset.id); if (f) f.undone = true; }); },
   email(el, c) {
     const p = periodOf(c);

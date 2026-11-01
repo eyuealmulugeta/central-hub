@@ -61,15 +61,28 @@ function spotCard(c) {
   const media = x => html`<div class="spot-media">${(x.media || []).map(m => /^video/.test(m.type)
     ? html`<iframe src="https://drive.google.com/file/d/${m.fileId}/preview" title="Video from the site" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>`
     : html`<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener"><img src="https://drive.google.com/thumbnail?id=${m.fileId}&sz=w800" alt="Photo from the site" loading="lazy"></a>`)}</div>`;
-  return html`<section class="card"><div class="card-head"><h2>Spotlight</h2><span class="muted">From the site, for Central Hub only. Not in the report.</span></div>
+  // v0.34.0: a modern page: figures on top, filter chips, the notes as cards grouped by day
+  const people = new Set((spot.list || []).map(x => x.about).filter(a => a && !/project/i.test(a))).size;
+  const initials = n => String(n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const days = [...new Set(rows.map(x => String(x.at).slice(0, 10)))];
+  const card = x => html`<article class="spot-card ${x.tone === 'pos' ? 'pos' : 'neg'}">
+      <header><span class="spot-av" aria-hidden="true">${initials(x.byName || x.by)}</span>
+        <div><b>${x.byName || x.by}</b><span class="muted">${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.slice(11, 16)} on the phone` : ''}</span></div>
+        <span class="spot-tone">${TONE[x.tone]?.[0] || ''}</span></header>
+      <div class="spot-tags"><span>${x.cat}</span><span>${x.about}</span></div>
+      ${x.note ? html`<p class="spot-note">${x.note}</p>` : ''}${x.media?.length ? media(x) : ''}</article>`;
+  const chipBtn = (v, label, n) => html`<button type="button" class="spot-chip ${spot.tone === v ? 'on' : ''} ${v}" data-act="spotToneSet" data-v="${v}" aria-pressed="${spot.tone === v}">${label}<span>${n}</span></button>`;
+  return html`<section class="card spot-page"><div class="card-head"><h2>Spotlight</h2><span class="muted">Notes from the site, for Central Hub only. Not in the report.</span><span class="grow"></span>
+      ${code ? html`<button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? '↻ Check again' : 'Show the notes'}</button>` : ''}</div>
     ${!code ? html`<p class="muted">This project has no Field Report code.</p>` : html`
-    <div class="row"><button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? 'Check again' : 'Show the notes'}</button>
-      ${spot.list ? html`<select data-chg="spotTone" aria-label="Positive or negative"><option value="">Positive and negative (${pos} · ${neg})</option>${options([['pos', 'Positive'], ['neg', 'Negative']], spot.tone)}</select>
-      <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select>` : ''}</div>
     ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
-    ${spot.list ? (rows.length ? html`<ul class="plain">${rows.map(x => html`<li><span class="pill ${TONE[x.tone]?.[1] || ''}">${TONE[x.tone]?.[0] || ''}</span> <b>${x.cat} · ${x.about}</b>
-      <span class="muted">${fmtDate(String(x.at).slice(0, 10))} ${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.replace('T', ' ')} on the phone` : ''} · by ${x.byName || x.by}</span>${x.note ? html`<div>${x.note}</div>` : ''}${x.media?.length ? media(x) : ''}</li>`)}</ul>`
-      : html`<p class="muted">No note here.</p>`) : ''}`}</section>`;
+    ${spot.list ? html`<div class="spot-kpis">
+        <div><b>${spot.list.length}</b><span>Notes</span></div><div class="pos"><b>${pos}</b><span>Positive</span></div>
+        <div class="neg"><b>${neg}</b><span>Negative</span></div><div><b>${people}</b><span>People named</span></div></div>
+      <div class="spot-filter">${chipBtn('', 'All', spot.list.length)}${chipBtn('pos', 'Positive', pos)}${chipBtn('neg', 'Negative', neg)}
+        <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select></div>
+      ${rows.length ? days.map(d => html`<h4 class="spot-day">${fmtDate(d)}</h4><div class="spot-grid">${rows.filter(x => String(x.at).startsWith(d)).map(card)}</div>`)
+        : html`<p class="empty">No note here.</p>`}` : spot.busy ? html`<p class="muted">Asking Field Report…</p>` : ''}`}</section>`;
 }
 let docOf = null;       // id of the report shown as the Daily Site Report (v0.21.0)
 let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
@@ -665,6 +678,7 @@ export const changes = {
 };
 
 export const actions = {
+  spotToneSet(el) { spot.tone = el.dataset.v || ''; },   // v0.34.0: the filter chips on Spotlight
   async sigDraw() { await openPad('Checked by: your signature'); store.notify(); },
   remove(el, c) {
     const r = c.ws.reports.find(x => x.id === el.dataset.id);

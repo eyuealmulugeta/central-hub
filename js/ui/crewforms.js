@@ -15,7 +15,7 @@ import { sendMail, mailReady, mailtoLink } from '../sync/mail.js';
 let tab = 'links';
 let draft = { kind: 'one', name: '', email: '', projectId: '' };
 let made = [];          // the links made on this computer this session (people who are not the Admin do not load the list)
-let poolNat = '', poolFree = false, open = '';
+let poolNat = '', poolFree = false, open = '', editing = '';
 const when = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
 const base = () => (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? `${location.origin}/` : 'https://hub.amistadprefab.com/');
 const urlOf = l => `${linkUrl(l.id, base())}${store.cloud ? '' : '&local'}`;
@@ -63,15 +63,23 @@ function review(c, forms) {
   const linkOf = f => (c.company.crewlinks || []).find(l => l.id === f.link);
   return html`<ul class="list">${forms.map(f => {
     const l = linkOf(f), same = sameStaff(c.company.staff || [], f);
-    const facts = [['Trade', f.trade], ['Phone', f.phone], ['Gender', f.gender], ['Date of birth', f.birthday], ['Nationality', f.nationality], [f.doc === 'passport' ? 'Passport No.' : 'Fayda No. (FAN)', f.doc === 'passport' ? f.passportNumber : f.idNumber], ['FIN', f.fin], ['Expiry', f.passportExpiry || f.idExpiry], ['Address', f.address], ['Emergency', [f.emergency, f.emergencyPhone].filter(Boolean).join(', ')], ['Certificate', f.certificate]].filter(([, v]) => v);
+    const ed = editing === f.id;
+    const facts = (ed ? EDIT_FIELDS(f) : EDIT_FIELDS(f).filter(([, k]) => f[k])).map(([t, k, type]) => [t, ed ? html`<input type="${type || 'text'}" data-chg="cfEdit" data-id="${f.id}" data-f="${k}" value="${f[k] || ''}">` : f[k]]);
     return html`<li class="cf-form"><div class="cf-pics">${img(f.photo, 'Photo', 'face')}${img(f.idFront, 'Fayda ID, front')}${img(f.idBack, 'Fayda ID, back')}${img(f.passportImage, 'Passport')}</div>
-      <div><b>${f.name}</b> <span class="muted">${f.doc === 'passport' ? 'Passport' : 'Fayda ID'} · sent ${when(f.at)} · ${l ? `${l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
+      <div>${ed ? html`<label>Name <input data-chg="cfEdit" data-id="${f.id}" data-f="name" value="${f.name}"></label>` : html`<b>${f.name}</b>`} <span class="muted">${f.doc === 'passport' ? 'Passport' : 'Fayda ID'} · sent ${when(f.at)} · ${l ? `${l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
         ${same ? html`<p class="callout warn small"><b>!</b> <span>${same.name} is already in Employee data: Accept fills in only what that record lacks.</span></p>` : ''}
         <table class="table compact"><tbody>${facts.map(([k, v]) => html`<tr><th>${k}</th><td>${v}</td></tr>`)}</tbody></table>
         <div class="actions left"><button class="btn small primary" type="button" data-act="cfAccept" data-id="${f.id}">Accept${l?.projectName ? ` and put on ${l.projectName}` : ''}</button>
+          ${l?.projectName ? html`<button class="btn small" type="button" data-act="cfAccept" data-id="${f.id}" data-pool="1" title="Into Employee data and the crew pool, on no project">Add to pool</button>` : ''}
+          <button class="btn small" type="button" data-act="cfEditOn" data-id="${f.id}">${ed ? 'Done editing' : 'Edit'}</button>
           <button class="btn small ghost" type="button" data-act="cfReject" data-id="${f.id}">Reject</button></div></div></li>`;
   })}</ul>`;
 }
+
+/** v0.34.0: the details the Admin may correct before accepting: [label, field, input type]. */
+const EDIT_FIELDS = f => [['Trade', 'trade'], ['Phone', 'phone', 'tel'], ['Gender', 'gender'], ['Date of birth', 'birthday', 'date'], ['Nationality', 'nationality'],
+  ...(f.doc === 'passport' ? [['Passport No.', 'passportNumber'], ['Expiry', 'passportExpiry', 'date']] : [['Fayda No. (FAN)', 'idNumber'], ['FIN', 'fin'], ['Expiry', 'idExpiry', 'date']]),
+  ['Address', 'address'], ['Emergency contact', 'emergency'], ['Emergency phone', 'emergencyPhone', 'tel'], ['Certificate', 'certificate']];
 
 function pool(c) {
   const groups = crewPool(c.company.staff || [], store.projects);
@@ -93,10 +101,12 @@ const message = l => `Hello${l.name ? ` ${l.name}` : ''},\n\nPlease fill in your
 export const changes = {
   cfSet(el) { draft[el.dataset.f] = el.value; store.notify(); },
   cfPool(el) { if (el.dataset.f === 'nat') poolNat = el.value; else poolFree = el.checked; store.notify(); },
+  cfEdit(el) { store.updateCompany(co => { const f = (co.crewforms || []).find(x => x.id === el.dataset.id); if (f) f[el.dataset.f] = el.value.trim().slice(0, 300); }); },
 };
 
 export const actions = {
   cfTab(el) { tab = el.dataset.t; },
+  cfEditOn(el) { editing = editing === el.dataset.id ? '' : el.dataset.id; },
   async cfMake(el, c) {
     const pid = draft.projectId || c.project?.id || '';
     const project = store.projects.find(p => p.id === pid);
@@ -142,7 +152,7 @@ export const actions = {
     const f = (c.company.crewforms || []).find(x => x.id === el.dataset.id);
     if (!f) return;
     const l = (c.company.crewlinks || []).find(x => x.id === f.link) || null;
-    const project = l?.projectId ? store.projects.find(p => p.id === l.projectId && !p.binned) : null;
+    const project = l?.projectId && !el.dataset.pool ? store.projects.find(p => p.id === l.projectId && !p.binned) : null;   // Add to pool: on no project
     let person = null, a = null;
     store.updateCompany(co => {
       const old = sameStaff(co.staff, f);
@@ -154,7 +164,8 @@ export const actions = {
       if (old) Object.assign(old, person); else co.staff.push(person);
       co.crewforms = (co.crewforms || []).filter(x => x.id !== f.id);   // the pictures now live on the employee record
     });
-    if (!project) return tell(`✓ ${person.name} is in Employee data.`);
+    if (editing === f.id) editing = '';
+    if (!project) return tell(`✓ ${person.name} is in Employee data${el.dataset.pool ? ' and the crew pool' : ''}.`);
     try {
       const ws = await store.updateOther(project.id, w => { assign(w, person, a); });
       const ok = await (await import('./reports.js')).sendListsFor(project, ws);

@@ -152,7 +152,7 @@ const ADMIN_ONLY = {
   // billing terms are settings of the contract
   docs: new Set(['client', 'billing', 'contract', 'vat', 'stage', 'measure', 'billRate', 'copyMeasure']),
   reports: new Set(['clearField']),
-  crewforms: new Set(['cfClose', 'cfAccept', 'cfReject']),   // v0.33.0: reviewing forms is HR, the Admin's
+  crewforms: new Set(['cfClose', 'cfAccept', 'cfReject', 'cfEditOn', 'cfEdit']),   // v0.34.0: edit and Add to pool too   // v0.33.0: reviewing forms is HR, the Admin's
 };
 /** True when `name` (a data-act, data-chg or data-form value on `page`) is reserved for the Admin. */
 /** v0.26.0: is this handler a delete? Then what it takes away goes to the recycle bin. */

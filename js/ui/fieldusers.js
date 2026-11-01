@@ -22,6 +22,8 @@ let busy = false;
 let said = null;        // { ok, text }
 let edits = {};         // email -> { full, pos, role, projects, act } changed on screen, not saved yet
 let openAccess = '';    // the email whose project list is unfolded
+let crewEdits = {};     // v0.37.0: id -> { name, trade } corrected here before approving
+let crewEditing = '';   // the waiting person whose name and trade are open
 
 const say = (ok, text) => { said = { ok, text }; tell(`${ok ? '✓' : '✗'} ${text}`); store.notify(); };
 
@@ -130,14 +132,16 @@ function crewCard() {
   return html`<h4>Crew from the site <span class="chip high">${all.length} waiting</span></h4>
     <p class="muted small">Names, trades and daily wages the site sent from Field Report. Approve puts the person on the crew of that project only, with the daily wage. A wage that is not the trade's daily wage is kept but flagged "Wage to review" on Payments until you clear it.</p>
     ${[...by].map(([code, list]) => { const pj = projectOf(code); return html`<h5>${code} · ${pj ? pj.name : 'no project in Central Hub has this Field Report code'}</h5>
-      <ul class="list fu-devs">${list.map(r => html`<li class="fu-dev"><div><b>${r.name}</b> <span class="muted">${r.trade || 'No trade'} · ${r.wage || r.tradeWage || 0} a day</span>
+      <ul class="list fu-devs">${list.map(r0 => { const r = { ...r0, ...(crewEdits[r0.id] || {}) }; return html`<li class="fu-dev"><div>${crewEditing === r.id ? html`<input value="${r.name}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="name" aria-label="Name"> <input value="${r.trade || ''}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="trade" aria-label="Trade" placeholder="Trade">` : html`<b>${r.name}</b>`} <span class="muted">${crewEditing === r.id ? '' : r.trade || 'No trade'} · ${r.wage || r.tradeWage || 0} a day</span>${crewEdits[r.id] ? html` ${chip('Corrected here', 'info')}` : ''}
         ${wageDiffers(r) ? chip(`Not the trade wage (${r.tradeWage})`, 'warn') : ''} <span class="muted note">sent by ${r.by || 'the site'} · ${when(r.at)}</span></div>
         <div class="entry"><button class="btn small primary" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="approve" ${busy || !pj ? 'disabled' : ''}>Approve</button>
-          <button class="btn small ghost" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button></div></li>`)}</ul>
+          <button class="btn small ghost" type="button" data-act="fuCrewOpen" data-id="${r.id}">${crewEditing === r.id ? 'Done' : 'Edit'}</button>
+          <button class="btn small ghost" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button></div></li>`; })}</ul>
       ${list.length > 1 && pj ? html`<div class="actions left"><button class="btn small" type="button" data-act="fuCrew" data-p="${code}" data-v="approve" ${busy ? 'disabled' : ''}>Approve all ${list.length}</button></div>` : ''}`; })}`;
 }
 async function crewDecide(code, yes, list, quiet = false) {
   if (!list.length || busy) return;
+  list = list.map(r => ({ ...r, ...(crewEdits[r.id] || {}) }));   // v0.37.0: the name and trade as corrected here
   const pj = projectOf(code), who = list.length === 1 ? list[0].name : `${list.length} people`;
   if (yes && !pj) return say(false, `No project in Central Hub has the Field Report code ${code}.`);
   if (!yes && !confirm(`Reject ${who} for ${code}? They are not added to the crew.`)) return;
@@ -290,6 +294,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
     finally { busy = false; store.notify(); }
   },
   fuCrew(el) { return crewDecide(el.dataset.p, el.dataset.v === 'approve', crewWaiting().filter(r => r.proj === el.dataset.p && (!el.dataset.id || r.id === el.dataset.id))); },
+  fuCrewOpen(el) { crewEditing = crewEditing === el.dataset.id ? '' : el.dataset.id; },
   fuOpen(el) { openAccess = openAccess === el.dataset.e ? '' : el.dataset.e; },
   fuDecide(el) { return decide(el.dataset.e, el.dataset.dev, el.dataset.v); },
   /** Save a row: projects and role, then name and position (confirmed), then the chosen action. */
@@ -318,6 +323,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
 
 export const changes = {
   fuRoute(el) { store.setFieldRoute(el.value); },
+  fuCrewEdit(el) { const v = el.value.trim(); if (v || el.dataset.f === 'trade') crewEdits[el.dataset.id] = { ...(crewEdits[el.dataset.id] || {}), [el.dataset.f]: v }; },
   fuEdit(el) { edit(el.dataset.e, { [el.dataset.f]: el.value }); },
   fuAll(el) {
     const p = person(el.dataset.e);

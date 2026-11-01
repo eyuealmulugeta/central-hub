@@ -89,6 +89,17 @@ let brief = false;      // the client brief (one page) instead of the office's D
 let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
 const period = { year: 0, month: 0, week: 0 };   // the reports shown: 0 is any
 
+/** v0.37.0: "1 Nov, 09:12", the time of every step of a report. */
+const stamp = at => (at && !Number.isNaN(Date.parse(at)) ? new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+const STEP_WORD = { submit: 'Sent', approve: 'Approved', changes: 'Sent back', reopen: 'Reopened', comment: 'Comment', reply: 'Reply', return: 'Returned' };
+/** What happened to a field report, newest first: the script's history, Central Hub's own approval, the replies. */
+export function stepsOf(r) {
+  const f = r.field || {}, list = [...(f.history || [])];
+  if (!list.length) list.push(...(f.comments || []).map(x => ({ ...x, kind: x.kind || 'comment' })));
+  if (f.receivedAt || f.pressedAt) list.push({ at: f.receivedAt || f.pressedAt, by: r.by || '', kind: 'submit' });
+  if (r.approval?.at) list.push({ at: r.approval.at, by: `${r.approval.by} (Central Hub)`, kind: 'approve' });
+  return list.filter(x => x.at).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
 const FIELD_STATUS = { submitted: ['Submitted by site', 'info'], approved: ['Approved', 'ok'], changes: ['Changes requested', 'warn'] };
 const REPLY_DONE = {
   approve: 'Approved. The site is notified and the report is locked in Field Report.',
@@ -274,7 +285,7 @@ function replyBox(r, c) {
   const send = (decision, text, primary) => html`<button class="btn small ${primary ? 'primary' : ''}" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${sending.has(r.id) ? 'disabled' : ''}>${text}</button>`;
   return html`<div class="reply">
     <span><span class="muted">In Field Report</span> ${chip(label, cls)}${f.reviewedBy ? html` <span class="muted">by ${f.reviewedBy}</span>` : ''}</span>
-    ${(f.comments || []).length ? html`<ul class="plain">${f.comments.map(x => html`<li><b>${x.by}</b> <span class="muted">${String(x.at || '').slice(0, 10)}</span> ${x.text}</li>`)}</ul>` : ''}
+    ${stepsOf(r).length ? html`<ul class="plain report-steps">${stepsOf(r).slice(0, 12).map(x => html`<li><b>${STEP_WORD[x.kind] || x.kind}</b> <span class="muted">${stamp(x.at)}${x.by ? ` · ${x.by}` : ''}</span>${x.text ? html` ${x.text}` : ''}</li>`)}</ul>` : ''}
     ${c.role === 'site' ? '' : html`
       <textarea rows="2" placeholder="Message to ${r.by}: what to correct, or a comment" aria-label="Message to the person who prepared the report"></textarea>
       <div class="actions left">
@@ -615,7 +626,7 @@ export const submits = {
       sending.add(id);
       reviewFieldReport({ name: cur.field.pdf, decision: 'approve', text: pinsMessage(cur.pins, (fd.get('msg') || '').trim()) })
         .then(view => {
-          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) { rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' }; delete rec.tellSite; } });
+          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) { rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '', history: view.history || rec.field.history || [] }; delete rec.tellSite; } });
           replyNotice = `${done} The site is notified and the report is locked in Field Report.`;
         })
         .catch(err => { replyNotice = `${done} The site was not told yet (${err.message}). Central Hub tries again every 2 minutes, or press Approve under the report.`; })
@@ -788,7 +799,7 @@ export const actions = {
         store.update(ws => {
           const rec = ws.reports.find(r => r.id === id);
           if (!rec) return;
-          rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '' };
+          rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '', history: view.history || rec.field.history || [] };
           delete rec.tellSite;
         });
       }

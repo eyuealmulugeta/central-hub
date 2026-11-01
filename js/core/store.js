@@ -25,6 +25,7 @@ import { lostBetween, restore } from '../engine/undo.js';
 import { binEntry, projectEntry, restoreEntry, binExpired, binDays } from '../engine/bin.js';
 import { isLimited, isActive } from '../engine/deployment.js';
 import { claim, sessionPath, newDeviceId, deviceName, isEnded, HEARTBEAT_MS } from '../engine/session.js';
+import { syncCrewPhotos } from './crewphotos.js';
 
 const K = { meta: 'sf:meta', global: 'sf:global', company: 'sf:company', ws: id => `sf:ws:${id}`, active: 'sf:active' };
 const COMPANY_PATH = 'company/main';
@@ -44,6 +45,7 @@ let meta = { projects: [], activeId: null };
 let global = null;
 let company = emptyCompany();   // company-wide records (shipments, ...), not tied to one project
 export const ROUTES = ['script', 'read'];
+const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Report's "something changed")
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
@@ -301,6 +303,12 @@ export const store = {
     }
     shared.push(api.watchDoc('global/main', data => { if (data) { global = data; emit(); } }, fail));
     if (role === 'owner') shared.push(api.watchDoc('public/fieldRoute', data => { fieldRoute = data; emit(); }, () => {}));
+    if (role === 'owner') shared.push(api.watchCol('fieldPing', docs => { pingFns.forEach(f => { try { f(docs); } catch { /* a listener's own problem */ } }); }, () => {}));
+    // v0.37.0: the crew photos Field Report shows, made here from HR (only the Admin reads HR)
+    if (role === 'owner' && primary) {
+      const photos = () => syncCrewPhotos(api, live(), company.staff || []).catch(err => console.warn('Crew photos for Field Report:', err.message));
+      setTimeout(photos, 20_000).unref?.(); setInterval(photos, 30 * 60e3).unref?.();   // unref: tests end without waiting
+    }
     if (role === 'owner' || pages.includes('meetings')) shared.push(api.watchDoc('public/booking', data => { booking = data; emit(); }, () => {}));
     if (role === 'owner') {
       shared.push(api.watchCol('users', docs => { users = docs; emit(); }, fail));
@@ -479,6 +487,8 @@ export const store = {
   },
   /** Phase E1: Field Report's data route, 'script' (the default) or 'read' (the phones read live from the database). */
   get fieldRoute() { return fieldRoute?.route || 'script'; },
+  /** v0.37.0: called with the fieldPing records whenever Field Report signals a change. Returns the way to stop. */
+  onFieldPing(fn) { pingFns.add(fn); return () => pingFns.delete(fn); },
   /** Admin only: one switch; moving it back is the rollback. */
   setFieldRoute(route) {
     if (viewOnly() || !ROUTES.includes(route)) return;

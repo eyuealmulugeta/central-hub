@@ -218,7 +218,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       const keepOlder = others.length ? { older: others } : {};
       if (old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
         // v0.27.0: "Checked by" signed in Field Report (script 7.36.0) comes with the review
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder } });
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder } });
       }
       putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
@@ -234,6 +234,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       field: {
         v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted',
         pdf: meta.pdf || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '', ...(meta.checked ? { checked: meta.checked } : {}),
+        history: meta.history || [],   // v0.37.0: every step with its time (script history)
         position: meta.position || '', location: meta.location || '', activities: meta.activities || [],
         hours: meta.hours || null, tempC: meta.weather?.tempC ?? null, ground: meta.weather?.ground || '',
         delays: meta.delays || [],

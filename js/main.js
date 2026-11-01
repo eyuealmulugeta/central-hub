@@ -807,6 +807,13 @@ function start() {
     setTimeout(async () => { if (store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { try { await store.movePay(); } catch { /* tried again next start */ } } }, 35_000);
     // v0.29.0: crew approved on a phone joins its team, and Field Report gets the access rules, soon after the Admin opens Central Hub
     setTimeout(() => { if (store.cloud && store.isPrimary && store.isAdmin && !store.readOnly && !store.loading) { fieldusers.load(); sendRules(); } }, 25_000);
+    // v0.37.0: crew sent or taken back on a phone: the Field Report list here reloads at once (at most every 15 s)
+    let pingAt = 0, pingSeen = '';
+    store.onFieldPing(docs => {
+      const key = docs.map(d => d.crew || '').sort().join();
+      if (key === pingSeen || Date.now() - pingAt < 15_000 || !store.isAdmin) { pingSeen ||= key; return; }
+      pingSeen = key; pingAt = Date.now(); fieldusers.load();
+    });
     // the weekly full copy: checked a minute after start, then every 6 hours
     setTimeout(weeklyBackup, 60_000);
     setInterval(weeklyBackup, 6 * 3600_000);

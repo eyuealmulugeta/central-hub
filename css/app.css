@@ -1598,3 +1598,72 @@ body.side-narrow .side-health { display: none; }
 
 /* v0.38.2: a newer version is out: a red tag at the top, never a wall */
 .upd-tag { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 9999; background: #c62828; color: #fff; border: 0; border-radius: 999px; padding: 5px 14px; font-size: 12px; font-weight: 700; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); cursor: pointer; }
+
+/* ---- v0.40.0: phones (320–600 px): compact, dense, nothing wider than the screen ----
+   Type 11–14 px (titles 15–16), spacing on a 4/8 px grid, light bordered cards instead of big gaps.
+   Buttons look small but keep a 36–44 px tap area (padding, or an invisible ::after). */
+@media (max-width: 600px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body { font-size: 13px; line-height: 1.4; }
+  img, svg, video, canvas { max-width: 100%; }
+
+  /* top bar and section tabs */
+  .top { padding: 6px 8px; gap: 6px; }
+  .top h1 { font-size: 16px; }
+  .tabs { padding: 0 8px 4px; gap: 0; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { min-height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
+  .tab em { min-width: 16px; line-height: 16px; font-size: 10px; }
+  .tab-note { font-size: 11px; }
+
+  /* page, cards, headings */
+  .view, .view[class] { gap: 8px; padding: 0 8px 8px; }
+  .card { padding: 10px; border-radius: 10px; box-shadow: none; border: 1px solid var(--line); }
+  .card.flush { padding: 0; }
+  h2 { font-size: 15px; margin: 0 0 6px; }
+  h3 { font-size: 11px; margin: 10px 0 4px; }
+  .toolbar { gap: 6px; margin-bottom: 6px; }
+  .side { gap: 8px; }
+
+  /* buttons: compact look, full tap area */
+  .btn { min-height: 36px; padding: 0 12px; font-size: 13px; gap: 4px; }
+  .btn.small { position: relative; min-height: 30px; padding: 0 10px; font-size: 12px; }
+  .btn.small::after { content: ''; position: absolute; inset: -4px -2px; }
+  .chip { padding: 0 7px; font-size: 11px; line-height: 18px; }
+
+  /* lists and tables */
+  .row { gap: 8px; padding: 6px 2px; }
+  .row.pick { padding: 6px; min-height: 40px; }
+  .table td { padding: 6px; font-size: 12px; }
+  .table.compact td { padding: 4px 6px; }
+  .table th { padding: 6px; font-size: 11px; }
+  .table .note { font-size: 11px; }
+
+  /* figures: two per row */
+  .kpis, .tiles, .grid3, .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .kpi { padding: 8px 10px; border-radius: 10px; box-shadow: none; border: 1px solid var(--line); }
+  .kpi strong { font-size: 18px; }
+  .kpi-label { font-size: 11px; }
+  .tile { padding: 8px 10px; gap: 2px; border-radius: 10px; box-shadow: none; border-color: var(--line); }
+  .tile-head { gap: 6px; font-size: 12px; }
+
+  /* Home: four apps a row */
+  .launcher { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 4px; padding: 4px 0 8px; }
+  .launcher .app { gap: 4px; font-size: 11px; font-weight: 600; }
+  .app-ic { width: 52px; height: 52px; border-radius: 14px; }
+  .app-ic svg { width: 26px; height: 26px; }
+  .app-ic em { top: -5px; right: -6px; min-width: 18px; height: 18px; font-size: 10px; }
+
+  /* Today's list: one line a row (icon colour shows Note, Watch or Act; Open stays at the right) */
+  .trow { flex-wrap: nowrap; gap: 8px; padding: 6px 0; }
+  .trow .tt { flex: 1 1 0; }
+  .trow .tt b { font-size: 13px; } .trow .tt .muted { font-size: 11px; }
+  .trow > .tag { display: none; }
+  .trow > .btn, .trow > .tag + .btn { margin-left: 0; }
+  .tic { width: 30px; height: 30px; border-radius: 8px; }
+  .tic svg { width: 16px; height: 16px; }
+
+  /* bottom bar */
+  .side-link { min-height: 48px; font-size: 10px; }
+  .side-link svg { width: 20px; height: 20px; }
+}

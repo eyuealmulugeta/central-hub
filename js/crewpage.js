@@ -56,6 +56,7 @@ function draw() {
   const trades = [...TRADES, ...(form.trade && !TRADES.includes(form.trade) ? [form.trade] : [])];
   app.innerHTML = `<div class="card">
     <h1>Crew form</h1>
+    ${link.note ? `<p class="bad"><b>The office asks for changes:</b> ${esc(link.note)}</p>` : ''}
     <p class="muted">For ${esc(link.projectName || 'Amistad Prefab')}${link.byName ? `, from ${esc(link.byName)}` : ''}. ${link.kind !== 'one' ? 'Fill in one form per person; after sending, the form is empty for the next one.' : 'One form, for you.'}${sent ? ` <b class="ok">${sent} sent from this phone.</b>` : ''}</p>
   </div>
   <div class="card">

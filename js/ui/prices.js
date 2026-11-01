@@ -761,7 +761,7 @@ export const actions = {
   openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   ...fieldprojects.actions,
   ...fieldusers.actions,
-  mpTable: (...a) => directory.actions.mpTable(...a), mpAdd: (...a) => directory.actions.mpAdd(...a), mpEdit: (...a) => directory.actions.mpEdit(...a), mpData: (...a) => directory.actions.mpData(...a), mpRemove: (...a) => directory.actions.mpRemove(...a),
+  mpTable: (...a) => directory.actions.mpTable(...a), mpAdd: (...a) => directory.actions.mpAdd(...a), mpEdit: (...a) => directory.actions.mpEdit(...a), mpData: (...a) => directory.actions.mpData(...a), mpRemove: (...a) => directory.actions.mpRemove(...a), mpForms: (...a) => directory.actions.mpForms(...a), mpFromTeam: (...a) => directory.actions.mpFromTeam(...a),
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },

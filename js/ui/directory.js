@@ -16,9 +16,14 @@ import { syncPages, sendRules } from './prices.js';
 import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
 import { tell } from '../core/image.js';
+import { makeLink, linkUrl } from '../engine/crewform.js';
+import { unlinked } from '../engine/people.js';
+import * as fieldusers from './fieldusers.js';
+import * as crewforms from './crewforms.js';
+import { actions as hrActions } from './hr.js';
 
 let search = '';
-let table = 'staff';      // staff | crew
+let table = 'staff';      // staff | crew | new (v0.46.0: New crew for approval)
 const filt = { search: '', position: '', tier: '', project: '', status: 'active' };
 
 /** The active members of a project's team, as the directory shows them. Pure. */
@@ -86,8 +91,9 @@ function manpower(c) {
     <div class="toolbar"><h2>Manpower Directory</h2><span class="muted">The only place a person is added. Each person has an employee-data record.</span>
       <span class="grow"></span>${edit ? html`<button type="button" class="btn primary" data-act="mpAdd">+ Add a person</button>` : ''}</div>
     <div class="emp-tabs set-tabs" role="tablist">
-      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${count(k)}</span></button>`)}
+      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : count(k)}</span></button>`)}
     </div>
+    ${table === 'new' ? newCrew(c) : html`
     <div class="toolbar wrap">
       <input class="search" type="search" data-chg="mpFilt" data-f="search" data-fk="mp-search" value="${filt.search}" placeholder="Search name, position, phone, email" aria-label="Search the directory">
       ${sel('position', 'Position', [['', 'Every position'], ...positions.map(x => [x, x])])}
@@ -100,8 +106,36 @@ function manpower(c) {
       <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${table === 'crew' ? 'Wage' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
       <tbody>${rows.map((p, i) => row(p, i, c, edit))}</tbody>
     </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
-    <p class="muted">Changing a position or a project asks first. Wages and salaries are set in Employee data (Pay); they are never shown to Site users.</p>
+    <p class="muted">Changing a position or a project asks first. Wages and salaries are set in Employee data (Pay); they are never shown to Site users.</p>`}
   </section>`;
+}
+
+// ---- v0.46.0: New crew for approval: every name the directory does not know yet, in one place ----
+
+let asked = 0;
+const formsWaiting = c => (c.company.crewforms || []).filter(f => f.status === 'new');
+const looseTeam = c => (c.ws?.team ? unlinked(c.ws.team).filter(m => m.active !== false && String(m.name || '').trim()) : []);
+const newCount = c => formsWaiting(c).length + fieldusers.crewWaiting().length + looseTeam(c).length;
+
+function newCrew(c) {
+  // the site crew comes with the Field Report feed: asked at most once a minute from here, even when it fails
+  if (store.cloud && Date.now() - asked > 60e3) { asked = Date.now(); fieldusers.load(); }
+  const forms = formsWaiting(c), site = fieldusers.crewWaiting(), loose = looseTeam(c), edit = store.isAdmin;
+  const when = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleDateString([], { day: 'numeric', month: 'short' }); };
+  const rows = [
+    ...forms.map(f => ({ name: f.name, trade: f.trade, from: 'Crew form', project: (c.company.crewlinks || []).find(l => l.id === f.link)?.projectName || '', at: f.at,
+      act: html`<button type="button" class="btn small primary" data-act="mpForms">Review the form</button>` })),
+    ...site.map(r => ({ name: r.name, trade: r.trade, from: `Field Report${r.by ? `, ${r.by}` : ''}`, project: r.proj, at: r.at,
+      act: html`<button type="button" class="btn small primary" data-act="fuCrew" data-p="${r.proj}" data-id="${r.id}" data-v="approve">Approve</button> <button type="button" class="btn small ghost" data-act="fuCrew" data-p="${r.proj}" data-id="${r.id}" data-v="reject">Reject</button>` })),
+    ...loose.map(m => ({ name: m.name, trade: m.role, from: 'Project team list', project: c.project.name, at: '', act: '' })),
+  ];
+  return html`<p class="muted">Names typed in Field Report or Central Hub, and forms people filled in, that are not in the directory yet. Approving adds the person to the directory and to the project.</p>
+    ${rows.length ? html`<div class="table-wrap"><table class="table compact">
+      <thead><tr><th>Name</th><th>Trade</th><th>From</th><th>Project</th><th>Sent</th><th></th></tr></thead>
+      <tbody>${rows.map(r => html`<tr><td><b>${r.name}</b></td><td>${r.trade || html`<span class="muted">—</span>`}</td><td>${r.from}</td><td>${r.project || html`<span class="muted">—</span>`}</td><td class="nowrap">${when(r.at)}</td><td class="nowrap">${edit ? r.act : ''}</td></tr>`)}</tbody>
+    </table></div>` : html`<p class="empty">Nobody is waiting.</p>`}
+    ${loose.length && edit ? html`<div class="actions left"><button type="button" class="btn small" data-act="mpFromTeam">Add the ${loose.length} from ${c.project.name}'s team list to the directory</button></div>` : ''}
+    ${store.cloud && fieldusers.isBusy() ? html`<p class="muted">Asking Field Report for the crew sent from site…</p>` : ''}`;
 }
 
 const find = (c, id) => (c.company.staff || []).find(p => p.id === id);
@@ -126,8 +160,16 @@ export const actions = {
     const p = { id: uid('st'), name: name.trim(), title: table === 'crew' ? 'Labourer' : '', department: '', projectId: '', status: 'active', started: c.today,
       agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp(), ...addedStamp(store.profile?.name || store.user?.name || store.user?.email, c.today) };
     store.updateCompany(co => co.staff.push(p));
-    tell(`✓ ${p.name} added. Choose the position and project in the row.`);
+    // v0.46.0: the person may fill in their own details (Fayda ID or passport, photo) with a 7-day link
+    if (!confirm(`${p.name} is added. Send them a link to fill in their own details (photo, Fayda ID or passport)?`)) return tell(`✓ ${p.name} added. Choose the position and project in the row.`);
+    const l = makeLink({ kind: 'one', name: p.name, by: store.user?.email || 'local', byName: store.signature || store.user?.name || '' });
+    store.updateCompany(co => { (co.crewlinks ||= []).push(l); });
+    const url = `${linkUrl(l.id, location.hostname === 'localhost' ? `${location.origin}/` : 'https://hub.amistadprefab.com/')}${store.cloud ? '' : '&local'}`;
+    Promise.resolve(navigator.clipboard?.writeText(url)).then(() => tell(`✓ ${p.name} added. Their link is copied: paste it in WhatsApp, Telegram or an email. It works 7 days; the form comes back under New crew for approval.`), () => tell(`✓ ${p.name} added. Their link: ${url}`));
   },
+  mpForms() { crewforms.openReview(); location.hash = '#crewforms'; },
+  mpFromTeam: (...a) => hrActions.fromTeam(...a),
+  fuCrew: (...a) => fieldusers.actions.fuCrew(...a),
   mpEdit(el) { focusOn(el.dataset.id, 'work'); location.hash = '#hr'; },
   mpData(el) { focusOn(el.dataset.id, 'private'); location.hash = '#hr'; },
   mpRemove(el, c) {

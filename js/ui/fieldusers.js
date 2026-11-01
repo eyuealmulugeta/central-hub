@@ -12,7 +12,8 @@ import { html, options, chip } from './dom.js';
 import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
 import { uid } from '../core/util.js';
 import { compareReports, clean } from '../engine/compare.js';
-import { personByEmail } from '../engine/manpower.js';
+import { personByEmail, addedStamp } from '../engine/manpower.js';
+import { fromTeam } from '../engine/people.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
@@ -150,7 +151,14 @@ async function crewDecide(code, yes, list, quiet = false) {
   busy = true; store.notify();
   try {
     let ws = null;
-    if (yes) ws = await store.updateOther(pj.id, w => { approveCrew(w, list, () => uid('m'), new Date().toISOString()); });
+    let into = null;
+    if (yes) ws = await store.updateOther(pj.id, w => { approveCrew(w, list, () => uid('m'), new Date().toISOString()); into = fromTeam(w, store.company?.staff || [], pj.id, () => uid('st')); });
+    // v0.46.0: approved crew is in the Manpower Directory too: linked to the person of the same name, else new
+    if (into && (into.created.length || into.updated.length)) store.updateCompany(co => {
+      const by = addedStamp(`${list[0].by || 'Site'} (Field Report)`, new Date().toISOString().slice(0, 10));
+      for (const p of into.created) co.staff.push({ ...p, ...by });
+      for (const u of into.updated) { const i = co.staff.findIndex(x => x.id === u.id); if (i >= 0) co.staff[i] = u; }
+    });
     await apply('crewDecide', { proj: code, ids: list.map(r => r.id) });
     const sent = yes && ws ? await (await import('./reports.js')).sendListsFor(pj, ws) : false;   // loaded here: reports.js needs this file first   // v0.32.1: they join the Office attendance list on the phone
     say(true, yes ? `${who} added to the crew of ${pj.name}${quiet ? `, approved in Field Report by ${list[0].ok?.by || 'the Project engineer'}` : ''}.${list.some(wageDiffers) ? ' A wage to review is flagged on Payments.' : ''}${yes ? (sent === true ? ' Field Report has the new crew.' : ' Use Send lists to tell Field Report.') : ''}` : `Rejected: ${who}.`);

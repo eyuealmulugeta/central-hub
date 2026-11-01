@@ -33,6 +33,9 @@ export function makeLink({ kind = 'one', name = '', email = '', projectId = '', 
   const k = kind === 'crew' ? 'crew' : 'one';
   return { id, kind: k, name: String(name).trim(), email: String(email).trim().toLowerCase(), projectId, projectName, by, byName, at: new Date(now).toISOString(), untilMs: now + LINK_DAYS[k] * 864e5, status: 'open' };
 }
+/** v0.46.0: Ask for changes: the link opens again for 7 days with the office's note, shown on the form. Pure. */
+export const reopenLink = (link, note, now = Date.now()) => ({ ...link, status: 'open', untilMs: now + LINK_DAYS.one * 864e5, note: String(note || '').trim().slice(0, 300), noteAt: new Date(now).toISOString() });
+
 /** Why a link cannot take a form now ('' when it can). */
 export function linkState(link, now = Date.now()) {
   if (!link) return 'This link is not known. Ask for a new one.';

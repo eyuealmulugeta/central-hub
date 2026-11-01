@@ -9,7 +9,10 @@ import { uid } from '../core/util.js';
 import { stamp } from '../core/division.js';
 import { tell } from '../core/image.js';
 import { assign } from '../engine/people.js';
-import { makeLink, linkUrl, linkState, staffFromForm, sameStaff, crewPool } from '../engine/crewform.js';
+import { makeLink, linkUrl, linkState, staffFromForm, sameStaff, crewPool, reopenLink } from '../engine/crewform.js';
+
+/** v0.46.0: open this page on Forms to review (from the Manpower Directory). */
+export const openReview = () => { tab = 'review'; };
 import { sendMail, mailReady, mailtoLink } from '../sync/mail.js';
 
 let tab = 'links';
@@ -72,6 +75,7 @@ function review(c, forms) {
         <div class="actions left"><button class="btn small primary" type="button" data-act="cfAccept" data-id="${f.id}">Accept${l?.projectName ? ` and put on ${l.projectName}` : ''}</button>
           ${l?.projectName ? html`<button class="btn small" type="button" data-act="cfAccept" data-id="${f.id}" data-pool="1" title="Into Employee data and the crew pool, on no project">Add to pool</button>` : ''}
           <button class="btn small" type="button" data-act="cfEditOn" data-id="${f.id}">${ed ? 'Done editing' : 'Edit'}</button>
+          ${l ? html`<button class="btn small" type="button" data-act="cfChanges" data-id="${f.id}" title="The link opens again for 7 days with your note; the person sends the form again">Ask for changes</button>` : ''}
           <button class="btn small ghost" type="button" data-act="cfReject" data-id="${f.id}">Reject</button></div></div></li>`;
   })}</ul>`;
 }
@@ -141,6 +145,19 @@ export const actions = {
   cfClose(el) {
     if (!confirm('Close this link? Nobody can send a form with it after that.')) return;
     store.updateCompany(co => { const l = (co.crewlinks || []).find(x => x.id === el.dataset.id); if (l) l.status = 'closed'; });
+  },
+  /** v0.46.0: the person is asked to send the form again, with a note; this form is set aside. */
+  cfChanges(el, c) {
+    const f = (c.company.crewforms || []).find(x => x.id === el.dataset.id);
+    const l = f && (c.company.crewlinks || []).find(x => x.id === f.link);
+    if (!f || !l) return;
+    const note = (typeof prompt === 'function' ? prompt(`What should ${f.name} change? This note is shown on their form.`) : '') || '';
+    if (!note.trim()) return;
+    store.updateCompany(co => {
+      co.crewlinks = (co.crewlinks || []).map(x => (x.id === l.id ? reopenLink(x, note) : x));
+      co.crewforms = (co.crewforms || []).filter(x => x.id !== f.id);
+    });
+    tell(`✓ The link of ${f.name} is open again for 7 days with your note. Send it to them again.`);
   },
   cfReject(el, c) {
     const f = (c.company.crewforms || []).find(x => x.id === el.dataset.id);

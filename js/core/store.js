@@ -43,6 +43,8 @@ const clean = v => JSON.parse(JSON.stringify(v));
 let meta = { projects: [], activeId: null };
 let global = null;
 let company = emptyCompany();   // company-wide records (shipments, ...), not tied to one project
+export const ROUTES = ['script', 'read'];
+let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
 const subscribers = new Set();
@@ -298,6 +300,7 @@ export const store = {
       if (role === 'owner' && primary) await api.set('global/main', global);   // a co-owner never writes
     }
     shared.push(api.watchDoc('global/main', data => { if (data) { global = data; emit(); } }, fail));
+    if (role === 'owner') shared.push(api.watchDoc('public/fieldRoute', data => { fieldRoute = data; emit(); }, () => {}));
     if (role === 'owner' || pages.includes('meetings')) shared.push(api.watchDoc('public/booking', data => { booking = data; emit(); }, () => {}));
     if (role === 'owner') {
       shared.push(api.watchCol('users', docs => { users = docs; emit(); }, fail));
@@ -472,6 +475,15 @@ export const store = {
       if (ops.length) send(api.batch(ops));
     }
     offerUndo(before, company, COMPANY_SECTIONS.filter(s => s !== 'messages'), apply => this.updateCompany(apply));
+    emit();
+  },
+  /** Phase E1: Field Report's data route, 'script' (the default) or 'read' (the phones read live from the database). */
+  get fieldRoute() { return fieldRoute?.route || 'script'; },
+  /** Admin only: one switch; moving it back is the rollback. */
+  setFieldRoute(route) {
+    if (viewOnly() || !ROUTES.includes(route)) return;
+    fieldRoute = { route, at: new Date().toISOString() };
+    if (api) send(api.set('public/fieldRoute', fieldRoute)); else write('sf:fieldRoute', fieldRoute);
     emit();
   },
   /** Settings of the public booking page. Null until the Admin changes something: the page then uses its defaults. */

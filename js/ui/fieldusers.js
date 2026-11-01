@@ -205,10 +205,23 @@ function personRow(p, catalog, waits) {
   </tr>`;
 }
 
+export const ROUTE_WORDS = [['script', 'Script (as before)'], ['read', 'Live reads (phones read from the database, still send through the script)']];
+
+/** Phase E1: the data route switch (docs/plan-one-database.md). Back to Script is the rollback. */
+function routeCard() {
+  if (store.role !== 'owner') return '';
+  const r = store.fieldRoute;
+  return html`<section class="card set-box"><h3>Data route <span class="muted">Phase E, one database</span></h3>
+    <p class="muted">How Field Report phones get their data. With Live reads, a phone signed in to the database sees approvals, comments and project changes at once; reports are still sent through the script. Back to Script undoes it at once.</p>
+    <div class="actions left"><select data-chg="fuRoute" aria-label="Field Report data route">${options(ROUTE_WORDS, r)}</select>
+    <span class="chip ${r === 'script' ? '' : 'ok'}">${r === 'script' ? 'Script' : 'Live reads on'}</span></div></section>`;
+}
+
 export function body() {
   if (!feed && !busy) load();
   const people = feed?.people || [], catalog = feed?.catalog || [], waits = waiting();
   return html`
+    ${routeCard()}
     <section class="card set-box">
       <h3>Field Report users <span class="muted">who may sign in to Field Report</span></h3>
       <p class="muted">Each person's name and position as they typed them in the Field Report app. Check them, correct them and press Confirm: from then on Field Report puts this name and position on every report the person sends, and the person can no longer change them. Suspend stops someone signing in for now (you get an alert if they try); Block stops them for good, without alerts; Remove takes away their access.</p>
@@ -304,6 +317,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
 };
 
 export const changes = {
+  fuRoute(el) { store.setFieldRoute(el.value); },
   fuEdit(el) { edit(el.dataset.e, { [el.dataset.f]: el.value }); },
   fuAll(el) {
     const p = person(el.dataset.e);

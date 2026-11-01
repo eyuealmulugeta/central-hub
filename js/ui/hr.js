@@ -227,17 +227,17 @@ function projectsPane(p, c) {
   const free = store.projects.filter(x => !mine.some(a => a.projectId === x.id));
   const named = id => store.projects.find(x => x.id === id);
   return html`
-    <p class="muted">Putting a person on a project adds them to its team, and links their email to it when they have sign-in access. The role and the day rate are set here, once.</p>
+    <p class="muted">The projects and the role come from the Manpower Directory (v0.45.1): put a person on a project there. The day rate is set here. <button type="button" class="btn ghost small" data-act="mpGo" title="Positions and projects are set only in the Manpower Directory">Change in the Manpower Directory</button></p>
     ${mine.length ? html`<table class="table compact">
       <thead><tr><th>Project</th><th>Role on the project</th><th class="r">Day rate</th><th>On site</th><th></th></tr></thead>
       <tbody>${mine.map(a => html`<tr>
         <td>${named(a.projectId)?.name || 'A project that was removed'}</td>
-        <td><select data-chg="assign" data-pid="${a.projectId}" data-f="role" data-what="role" data-fk="as-r-${a.projectId}" aria-label="Role on the project">${chooseGroups(positionGroups(a.role), a.role || '', p.title ? `Same as job: ${p.title}` : 'Role…')}</select></td>
+        <td>${a.role || p.title || html`<span class="muted">No role</span>`}</td>
         <td class="r nowrap"><input class="price" type="number" min="0" step="any" data-chg="assign" data-pid="${a.projectId}" data-f="dayRate" data-fk="as-d-${a.projectId}" value="${a.dayRate || ''}" aria-label="Day rate"> <span class="muted">${named(a.projectId)?.currency || ''}</span></td>
-        <td><input type="checkbox" data-chg="assign" data-pid="${a.projectId}" data-f="active" ${a.active === false ? '' : 'checked'} aria-label="On site"></td>
-        <td class="r"><button class="btn ghost small" data-act="unassign" data-pid="${a.projectId}">Take off</button></td></tr>`)}</tbody>
+        <td>${a.active === false ? 'No' : 'Yes'}</td>
+        <td></td></tr>`)}</tbody>
     </table>` : html`<p class="muted">Not on any project yet.</p>`}
-    ${free.length ? html`<form data-form="assign" class="entry">
+    ${false && free.length ? html`<form data-form="assign" class="entry">
       <select name="projectId" aria-label="Project">${options(free.map(x => [x.id, x.name]), null)}</select>
       <select name="role" aria-label="Role on the project"><option value="">${p.title ? `Role: same as job (${p.title})` : 'Role on the project…'}</option>${groupOptions(positionGroups(), null)}</select>
       <input name="dayRate" type="number" min="0" step="any" class="amount" placeholder="Day rate" aria-label="Day rate">
@@ -259,8 +259,8 @@ function accessPane(p) {
         <div class="grid2">
           <label>Level <select data-chg="accessRole">${options([['site', 'Site'], ['office', 'Office']], u.role)}</select></label>
         </div>
-        <label>Title <select data-chg="accessTitle">
-          <option value="" ${titleOf(u) ? '' : 'selected'}>Choose a title…</option>${GROUPS.map(g => html`<optgroup label="${g}">${options(TITLES.filter(t => t[2] === g).map(([k, label]) => [k, label]), titleOf(u) || null)}</optgroup>`)}</select></label>
+        <label>Title <span class="readonly">${u.title || 'No title'}</span></label>
+        <p class="muted small">The title follows the position in the Manpower Directory.</p>
         <label>Department <select data-chg="accessDivision">${divisionsOf(u).length ? '' : html`<option value="">Not assigned: cannot sign in</option>`}${options(DIVISIONS, divisionsOf(u)[0] || null)}</select></label>
         <p class="muted">${projects.length ? `Linked to: ${projects.map(x => x.name).join(', ')}.` : 'Not linked to a project yet: put the person on one under Projects.'} What they may see and do is set under Settings, People and access, Access rules.</p>
         <div class="actions left"><button class="btn danger small" data-act="removeAccess">Remove access</button></div>`
@@ -290,7 +290,7 @@ function form({ p, alerts, monthly }, c) {
         ${text('Work mobile', 'phone', 'hr-phone')}
         ${text('Work email', 'email', 'hr-email')}
         <label>Department <select data-chg="pick" data-f="department" data-what="department" data-fk="hr-dept-f">${chooseOptions(departmentChoices({ staff: c.company.staff, current: p.department }), normDepartment(p.department))}</select></label>
-        <label>Job position <select data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title">${chooseGroups(positionGroups(p.title), p.title)}</select></label>
+        <label>Job position <span class="readonly">${p.title || 'No position'} <button type="button" class="btn ghost small" data-act="mpGo" title="Positions and projects are set only in the Manpower Directory">Change in the Manpower Directory</button></span></label>
         <label>Evaluation tier <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person: the tier above">${options(LEVELS, levelOf(p))}</select></label>
         <label>Manager <select data-chg="set" data-f="managerId" data-fk="hr-manager"><option value="">None</option>${options(others, p.managerId || null)}</select></label>
         <label>Division <select data-chg="division" data-fk="hr-division">${options([[INSTALLATION, 'Installation'], [TRADING, 'Trading']], divOf(p))}</select></label>
@@ -419,7 +419,7 @@ function form({ p, alerts, monthly }, c) {
         </div>
         <div class="emp-id">
           <input class="emp-name" data-chg="set" data-f="name" data-fk="hr-name" value="${p.name || ''}" placeholder="Employee's name" aria-label="Full name">
-          <select class="emp-job" data-chg="pick" data-f="title" data-what="job position" data-fk="hr-title-h" aria-label="Job position">${chooseGroups(positionGroups(p.title), p.title, 'Job position…')}</select>
+          <span class="emp-job">${p.title || 'No position'}</span>
           <label class="emp-line"><span>Email</span><input type="email" data-chg="set" data-f="email" data-fk="hr-email-h" value="${p.email || ''}" placeholder="Work email" aria-label="Work email"></label>
           <label class="emp-line"><span>Phone</span><input type="tel" data-chg="set" data-f="phone" data-fk="hr-phone-h" value="${p.phone || ''}" placeholder="Work phone" aria-label="Work phone"></label>
           <span class="emp-tags">${p.status === 'left' ? chip('Left') : chip('Working', 'ok')} ${chip(agreementLabel(a.type), a.type ? 'info' : 'warn')}
@@ -495,6 +495,7 @@ export const actions = {
     });
   },
   tab(el) { tab = el.dataset.t; },
+  mpGo() { location.hash = '#directory'; },
   add(el, c) {
     const p = { id: uid('st'), name: '', title: '', department: filt.department || '', projectId: '', status: 'active', started: c.today, agreement: {}, documents: [], notes: '', level: 'crew', accountEmail: '', assignments: [], ...stamp(), ...addedStamp(store.profile?.name || store.user?.name || store.user?.email, c.today) };
     store.updateCompany(co => co.staff.push(p));

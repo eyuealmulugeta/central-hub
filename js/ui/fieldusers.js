@@ -12,6 +12,7 @@ import { html, options, chip } from './dom.js';
 import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
 import { uid } from '../core/util.js';
 import { compareReports, clean } from '../engine/compare.js';
+import { personByEmail } from '../engine/manpower.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
@@ -176,7 +177,8 @@ export const deviceRow = d => html`<li class="fu-dev">
 /** The row as it will be saved: what is on screen over what Field Report holds. */
 const rowOf = p => {
   const e = edits[p.email] || {};
-  return { full: e.full ?? (p.full || p.uName || ''), pos: e.pos ?? (p.pos || p.uPos || ''), role: e.role ?? p.role, projects: e.projects ?? p.projects ?? [], act: e.act || '' };
+  const dir = personByEmail(store.company?.staff, p.email)?.title;   // v0.45.1: the directory's position wins
+  return { full: e.full ?? (p.full || p.uName || ''), pos: dir || e.pos || p.pos || p.uPos || '', inDir: !!dir, role: e.role ?? p.role, projects: e.projects ?? p.projects ?? [], act: e.act || '' };
 };
 const changed = p => {
   const r = rowOf(p);
@@ -201,7 +203,7 @@ function personRow(p, catalog, waits) {
     <td><input data-chg="fuEdit" data-e="${p.email}" data-f="full" value="${r.full}" aria-label="Name of ${p.email}" placeholder="Full name" class="fu-name">
       ${typed && !p.ok ? html`<br><span class="muted small">Typed in the app: ${typed}</span>` : ''}</td>
     <td class="small">${p.email}${waits ? html` <span class="chip high">New</span>` : ''}</td>
-    <td><select data-chg="fuEdit" data-e="${p.email}" data-f="pos" aria-label="Position of ${p.email}">${options([['', 'Choose…']], r.pos)}${groupOptions(positionGroups(r.pos), r.pos)}</select></td>
+    <td>${r.pos || html`<span class="muted">No position</span>`}${r.inDir ? '' : html`<br><span class="chip warn small" title="Add this email to the person in the Manpower Directory (Employee data)">Not in the directory</span>`}</td>
     <td>${accessCell(p, r, catalog)}</td>
     <td><select data-chg="fuEdit" data-e="${p.email}" data-f="role" aria-label="Field Report role of ${p.email}">${options(ROLE_WORDS, r.role)}</select></td>
     <td><span class="chip ${stTone}">${stWord}</span><br>${p.ok ? html`<span class="ok small" title="${p.okBy ? `By ${p.okBy}` : ''}${p.okAt ? `, ${when(p.okAt)}` : ''}">✓ Confirmed</span>` : html`<span class="warn small">Not confirmed</span>`}</td>

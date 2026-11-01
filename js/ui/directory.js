@@ -11,7 +11,8 @@ import { positionGroups, ROLES, normRole } from '../engine/positions.js';
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
 import { ratingOf } from '../engine/hr.js';
-import { tierOfTitle, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, TIER_WORDS } from '../engine/manpower.js';
+import { tierOfTitle, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
+import { syncPages, sendRules } from './prices.js';
 import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
 import { tell } from '../core/image.js';
@@ -154,6 +155,9 @@ export const changes = {
       x.assignments = (x.assignments || []).map(y => (y.active !== false ? { ...y, role: value } : y));
       a = x.assignments;
     });
+    // v0.45.1: the sign-in follows the position: its title (rank), and so its pages and access rules
+    const u = accountOf(p) && store.users.find(x => x.email === accountOf(p));
+    if (u) { const patch = rankPatchFor(value); store.setUser(u.email, patch); syncPages([{ ...u, ...patch }]); sendRules(); }
     const live = a.filter(y => y.active !== false);
     for (const y of live) store.updateOther(y.projectId, ws => assign(ws, { ...p, title: value }, y));
     if (tableOf({ title: value }) !== table) tell(`✓ ${p.name} is now in the ${table === 'crew' ? 'Staff' : 'Crew'} table.`);

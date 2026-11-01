@@ -236,7 +236,7 @@ function personDetail(u) {
         <span class="who-avatar big">${initialsOf(u.name || u.email)}</span>
         <div class="person-id">
           <input class="emp-name" data-chg="userField" data-id="${u.email}" data-f="name" data-fk="un-${u.email}" value="${u.name || ''}" placeholder="Full name" aria-label="Name of ${u.email}">
-          ${titleSelect(u)}
+          <span class="emp-job" title="Set by the position in the Manpower Directory">${u.title || 'No title'}</span>
           <span class="muted">${u.email}</span>
         </div>
         <button class="btn ghost small" data-act="removeUser" data-id="${u.email}">Remove access</button>

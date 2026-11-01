@@ -3,7 +3,8 @@
 // owner's Excel positions sheet (the Shared prompt's <tiers>). Pure functions over the staff records.
 
 import { normRole } from './positions.js';
-import { activeProjects } from './people.js';
+import { activeProjects, accountOf } from './people.js';
+import { TITLES, titlePatch } from './titles.js';
 
 const TIER_LIST = [
   [1, ['Owner', 'General Manager', 'CEO', 'Board member']],
@@ -59,6 +60,19 @@ export function moveTo(person, projectId) {
   const list = (person.assignments || []).map(a => ({ ...a, active: a.projectId === projectId }));
   if (projectId && !list.some(a => a.projectId === projectId)) list.push({ projectId, role: person.title || '', dayRate: 0, active: true });
   return { assignments: list, on: projectId && !before.includes(projectId) ? [projectId] : [], off: before.filter(id => id !== projectId) };
+}
+
+/** v0.45.1: the directory person behind a sign-in email (their account email, else their work email); null if none. */
+export function personByEmail(staff, email) {
+  const m = String(email || '').trim().toLowerCase();
+  if (!m) return null;
+  return (staff || []).find(p => accountOf(p) === m) || (staff || []).find(p => String(p.email || '').trim().toLowerCase() === m) || null;
+}
+
+/** v0.45.1: what a directory position sets on the person's sign-in: the matching title (its rank), else the words only. */
+export function rankPatchFor(position) {
+  const key = TITLES.find(t => t[1] === normRole(position))?.[0];
+  return key ? titlePatch(key) : { ranks: [], title: normRole(position) };
 }
 
 /** Who added a person and when, for the directory's "Added by" column. */

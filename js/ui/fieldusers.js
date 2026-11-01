@@ -11,6 +11,7 @@ import { tell } from '../core/image.js';
 import { html, options, chip } from './dom.js';
 import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
 import { uid } from '../core/util.js';
+import { compareReports, clean } from '../engine/compare.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
@@ -209,7 +210,8 @@ function personRow(p, catalog, waits) {
   </tr>`;
 }
 
-export const ROUTE_WORDS = [['script', 'Script (as before)'], ['read', 'Live reads (phones read from the database, still send through the script)']];
+export const ROUTE_WORDS = [['script', 'Script (as before)'], ['read', 'Live reads (phones read from the database, still send through the script)'], ['both', 'Both (phones also write each report to the database: check Compare)']];
+let cmp = null, cmpBusy = false;   // v0.44.0: Compare
 
 /** Phase E1: the data route switch (docs/plan-one-database.md). Back to Script is the rollback. */
 function routeCard() {
@@ -218,7 +220,32 @@ function routeCard() {
   return html`<section class="card set-box"><h3>Data route <span class="muted">Phase E, one database</span></h3>
     <p class="muted">How Field Report phones get their data. With Live reads, a phone signed in to the database sees approvals, comments and project changes at once; reports are still sent through the script. Back to Script undoes it at once.</p>
     <div class="actions left"><select data-chg="fuRoute" aria-label="Field Report data route">${options(ROUTE_WORDS, r)}</select>
-    <span class="chip ${r === 'script' ? '' : 'ok'}">${r === 'script' ? 'Script' : 'Live reads on'}</span></div></section>`;
+    <span class="chip ${r === 'script' ? '' : 'ok'}">${r === 'script' ? 'Script' : r === 'both' ? 'Both' : 'Live reads on'}</span></div>${r === 'both' ? compareBox() : ''}</section>`;
+}
+
+/** v0.44.0: Compare: per project, the reports from the script beside the reports written to the database. */
+function compareBox() {
+  const day = d => (d ? d.slice(5).split('-').reverse().join('/') : '–');
+  return html`<h4>Compare <span class="muted">a week with nothing in the last column means the database can take over</span></h4>
+    <div class="actions left"><button class="btn small" type="button" data-act="fuCompare" ${cmpBusy ? 'disabled' : ''}>${cmpBusy ? 'Reading…' : cmp ? 'Compare again' : 'Compare'}</button>${cmp ? html`<span class="muted small">Read ${when(cmp.at)}</span>` : ''}</div>
+    ${cmp ? html`<div class="table-wrap"><table class="table compact"><thead><tr><th>Project</th><th>Since</th><th>Script</th><th>Database</th><th>Differences</th></tr></thead><tbody>
+      ${cmp.rows.map(({ p, c }) => html`<tr><td>${p.name}</td><td>${day(c.from)}</td><td>${c.script.n} · last ${day(c.script.last)}</td><td>${c.db.n} · last ${day(c.db.last)}</td>
+        <td>${!c.from ? html`<span class="muted">No report in the database yet</span>` : clean(c) ? html`<span class="chip ok">None</span>` : html`<span class="bad small">${[
+          c.onlyScript.length ? `Only in the script: ${c.onlyScript.map(day).join(', ')}` : '',
+          c.onlyDb.length ? `Only in the database: ${c.onlyDb.map(day).join(', ')}` : '',
+          ...c.numbers.map(n => `${day(n.date)}: No. ${n.script} in the script, ${n.db} in the database`)].filter(Boolean).join(' · ')}</span>`}</td></tr>`)}
+    </tbody></table></div>` : ''}`;
+}
+
+async function compareLoad() {
+  cmpBusy = true; store.notify();
+  try {
+    const ps = store.projects.filter(p => p.fieldCode);
+    const rows = [];
+    for (const p of ps) rows.push({ p, c: compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`)) });
+    cmp = { at: Date.now(), rows };
+  } catch (e) { tell(`Compare did not load: ${e.message}`); }
+  cmpBusy = false; store.notify();
 }
 
 export function body() {
@@ -323,6 +350,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
 
 export const changes = {
   fuRoute(el) { store.setFieldRoute(el.value); },
+  fuCompare() { compareLoad(); },
   fuCrewEdit(el) { const v = el.value.trim(); if (v || el.dataset.f === 'trade') crewEdits[el.dataset.id] = { ...(crewEdits[el.dataset.id] || {}), [el.dataset.f]: v }; },
   fuEdit(el) { edit(el.dataset.e, { [el.dataset.f]: el.value }); },
   fuAll(el) {

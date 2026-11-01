@@ -44,7 +44,7 @@ const clean = v => JSON.parse(JSON.stringify(v));
 let meta = { projects: [], activeId: null };
 let global = null;
 let company = emptyCompany();   // company-wide records (shipments, ...), not tied to one project
-export const ROUTES = ['script', 'read'];
+export const ROUTES = ['script', 'read', 'both'];   // v0.44.0: Both (E3a)
 const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Report's "something changed")
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
@@ -487,6 +487,8 @@ export const store = {
   },
   /** Phase E1: Field Report's data route, 'script' (the default) or 'read' (the phones read live from the database). */
   get fieldRoute() { return fieldRoute?.route || 'script'; },
+  /** v0.44.0: one collection, read once (Compare). */
+  async listCol(path) { return api ? api.list(path) : []; },
   /** v0.37.0: called with the fieldPing records whenever Field Report signals a change. Returns the way to stop. */
   onFieldPing(fn) { pingFns.add(fn); return () => pingFns.delete(fn); },
   /** Admin only: one switch; moving it back is the rollback. */

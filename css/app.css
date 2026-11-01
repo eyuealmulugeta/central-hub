@@ -1591,3 +1591,7 @@ body.side-narrow .side-health { display: none; }
 .q-opt b { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 12px; }
 .q-opt.on { border-color: var(--accent, #0a3440); } .q-opt.on b { background: var(--accent, #0a3440); color: #fff; }
 @media (max-width: 720px) { .q-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .q-tile { min-height: 96px; font-size: 12.5px; } .q-tile small { display: none; } }
+
+/* v0.36.4: an old version waits for the update */
+.update-wall { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: rgba(6, 43, 53, .55); padding: 16px; }
+.update-wall .card { max-width: 420px; text-align: center; }

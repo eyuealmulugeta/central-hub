@@ -113,6 +113,32 @@ const UNDO_MS = 60 * 1000;   // the Undo stays a minute unless used or replaced
 const $ = sel => document.querySelector(sel);
 const root = $('#view');
 $('#app-version').textContent = APP_VERSION;
+
+/**
+ * v0.36.4: never keep working on an old version. When the site has a newer one, the app clears its stored copy and
+ * reloads; if the site still answers with the old files (a slow server), it says so and waits for a click.
+ */
+async function updateCheck() {
+  if (location.search.includes('local') || !navigator.onLine) return;
+  let v = '';
+  try { v = (/APP_VERSION = '([^']+)'/.exec(await (await fetch(`js/version.js?x=${Date.now()}`, { cache: 'no-store' })).text()) || [])[1] || ''; } catch { return; }
+  if (!v || v === APP_VERSION) return;
+  const tried = sessionStorage.getItem('sf:upd') === v;
+  sessionStorage.setItem('sf:upd', v);
+  if (!tried) {
+    try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.update(); for (const k of await caches.keys()) await caches.delete(k); } catch { /* reload anyway */ }
+    location.reload();
+    return;
+  }
+  const box = document.createElement('div');
+  box.className = 'update-wall';
+  box.innerHTML = `<div class="card"><h2>Update to ${v}</h2><p>Central Hub ${APP_VERSION} is out of date. Update before carrying on; nothing you saved is lost.</p><button class="btn primary" type="button">Update now</button></div>`;
+  box.querySelector('button').onclick = () => { sessionStorage.removeItem('sf:upd'); updateCheck(); };
+  document.body.append(box);
+}
+updateCheck();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateCheck(); });
+setInterval(updateCheck, 30 * 60e3);
 diagnostics.install();
 addEventListener('hub-toast', e => toast(e.detail));   // short messages from code that has no page of its own (see core/image.js)   // anything nobody handled is logged quietly and sent to the Admin later
 let ctx, queued = false, lastKey = '';

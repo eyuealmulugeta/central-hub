@@ -404,11 +404,24 @@ function permsTab() {
 let crewShow = '';        // '' everybody, 'none' on no project, or a project id
 let crewApps = null;      // the email whose app ticks are open under their row
 
+const nameKey = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+/**
+ * v0.36.4: the sign-in of a directory person: by the account email, else (no email in Employee data) by the same
+ * name, when no other directory person has that sign-in as their account. One person, one row.
+ */
+export function userOf(p, staff, users) {
+  const mail = accountOf(p);
+  if (mail) return users.find(u => u.email === mail) || null;
+  const taken = new Set(staff.map(accountOf).filter(Boolean));
+  const same = users.filter(u => !taken.has(u.email) && nameKey(u.name) && nameKey(u.name) === nameKey(p.name));
+  return same.length === 1 ? same[0] : null;
+}
+
 /** The rows: the directory's people still working (Installation), then sign-ins that have no directory record. */
 export function crewRows(staff, users) {
   const rows = staff.filter(p => p.status !== 'left' && p.division !== 'trading').map(p => {
-    const mail = accountOf(p);
-    return { key: p.id, person: p, user: (mail && users.find(u => u.email === mail)) || null, on: activeProjects(p) };
+    const user = userOf(p, staff, users);
+    return { key: p.id, person: p, user, byName: !!user && !accountOf(p), on: activeProjects(p) };
   });
   const known = new Set(rows.map(x => x.user?.email).filter(Boolean));
   const loose = users.filter(u => !known.has(u.email) && (divisionsOf(u)[0] || 'installation') === 'installation')
@@ -421,7 +434,7 @@ function crewRow(row, projects) {
   const sub = row.person?.title || u?.title || '';
   const live = projects.map(p => p.id);
   return html`<tr>
-    <th scope="row"><b>${name}</b>${sub ? html`<br><span class="muted">${sub}</span>` : ''}${row.person ? '' : html`<br><span class="chip warn" title="Signs in, but has no record under Crew, Employee data">Not in the directory</span>`}</th>
+    <th scope="row"><b>${name}</b>${sub ? html`<br><span class="muted">${sub}</span>` : ''}${row.person ? '' : html`<br><span class="chip warn" title="Signs in, but has no record under Crew, Employee data">Not in the directory</span>`}${row.byName ? html`<br><span class="muted small" title="Add the sign-in email in Employee data to link them for good">Sign-in matched by name</span>` : ''}</th>
     ${projects.map(p => {
       const on = row.on.includes(p.id);
       const may = !on && u ? mayJoin(u, p.id, live) : { ok: true };
@@ -1001,8 +1014,7 @@ export const changes = {
     const pid = el.dataset.p, on = el.checked;
     const project = store.projects.find(p => p.id === pid);
     const person = (c.company.staff || []).find(p => p.id === el.dataset.k);
-    const mail = person ? accountOf(person) : el.dataset.k;
-    const u = mail && store.users.find(x => x.email === mail);
+    const u = person ? userOf(person, c.company.staff || [], store.users) : store.users.find(x => x.email === el.dataset.k);
     if (on && u) {
       const may = mayJoin(u, pid, store.projects.map(x => x.id));
       if (!may.ok) { tell(`✗ ${may.reason}`); store.notify(); return; }

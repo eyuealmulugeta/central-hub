@@ -6,6 +6,7 @@ import { uid, money, fmtDay, fmtDate } from '../core/util.js';
 import { html, meter, chip } from './dom.js';
 import { unseenAlerts, markSeen, flagKey, itemKey } from './seen.js';
 import { itemsOf } from './setup.js';
+import { projectForm, submits as spotSubmits } from './spotnotes.js';
 
 const SEV_LABEL = { high: 'Urgent', warn: 'Watch', info: 'Note' };
 const REMIND_EVERY_DAYS = 3;
@@ -39,6 +40,7 @@ export function render(c) {
     <section class="card">
       ${setupBanner(c)}
       <h2>Needs attention</h2>
+      ${store.readOnly ? '' : projectForm()}
       ${flags.auto.length ? html`<ul class="list">${flags.auto.map(f => html`
         <li><a href="#${f.link}" class="row ${unseen.has(flagKey(f)) ? 'unread' : ''}" data-act="seen" data-key="${flagKey(f)}">
           ${chip(SEV_LABEL[f.sev], f.sev)}
@@ -71,6 +73,7 @@ export function render(c) {
 }
 
 export const submits = {
+  ...spotSubmits,
   item(fd, c) {
     store.update(ws => ws.items.push({
       id: uid('i'), type: 'other', title: fd.get('title').trim(), owner: fd.get('owner').trim(),

@@ -91,7 +91,7 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
-  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
+  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'messages', 'evaluations', 'spotlight', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
   if (role !== 'office' && role !== 'site') return ['messages'];
   return [
     'messages', ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
@@ -116,7 +116,7 @@ export const APPS = [
     { page: 'reports', name: 'Daily report', does: 'Site reports from Field Report or typed here, confirmed by the office' },
     { page: 'schedule', name: 'Schedule', does: 'Tasks, dependencies and a plan that moves with the daily reports' },
     { page: 'requests', name: 'Requests', does: 'Material, manpower and equipment asked for by the site, approved by the office, with a follow-up when approved' },
-    { page: 'evaluation', name: 'Evaluation', does: 'Each rank rates the one below it, 1 to 5, and writes feedback on the day. Seen only by who wrote it and the Admin' },
+    { page: 'evaluation', name: 'Evaluation', does: 'Tiers 1, 2 and 3 rate the tier below on the Excel form, 1 to 5, and write Spotlight notes. Seen only by who wrote it and the Admin' },
   ] },
   { group: 'Trading', about: 'Buying, shipping and selling goods', apps: [
     { page: 'trade', name: 'Shipments', does: 'Orders on the way, freight and duties, landed cost per unit' },

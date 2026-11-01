@@ -7,7 +7,12 @@ import { store } from '../core/store.js';
 import {
   SCALE, PILLARS, CATEGORIES, rankLabel, levelOf, ratableLevels, raterRank, raterTier, scaleLabel,
   checkEvaluation, checkFeedback, averages, summarise,
+  criteriaFor, ENGAGEMENT, ENGAGE_WORDS, evalPeriod, checkForm, lastOverall, salaryFlag, engagementAvg, factsOf, oldRows,
 } from '../engine/evaluation.js';
+import { toCSV, downloadText } from '../core/util.js';
+import { personForm, savePerson } from './spotnotes.js';
+import { spotNotes } from './reports.js';
+import { catLabel } from '../engine/spotlight.js';
 import { uid, fmtFull } from '../core/util.js';
 import { html, options, chip } from './dom.js';
 import { docHead, docSec, footText, signoff } from './print.js';
@@ -18,6 +23,7 @@ let mode = 'rate';        // rate | note | view (history only)
 let notice = '';
 let problems = [];
 let paper = null;         // the evaluation open as a page to print
+let oldOpen = false;      // v0.49.0: the old evaluations as one page to print (the Admin's PDF copy)
 const filters = { search: '', project: '', by: '', kind: '' };   // the table of every evaluation
 
 const stars = n => '★'.repeat(Math.round(n || 0)) + '☆'.repeat(5 - Math.round(n || 0));
@@ -48,7 +54,9 @@ export function render(c) {
     return html`<section class="card"><h2>Evaluation</h2>
       <p class="empty">Your title does not rate anybody yet. The Admin sets it under Settings, People and access.</p></section>`;
   }
+  if (store.profile?.evaluate === false && !store.isAdmin) return html`<section class="card"><h2>Evaluation</h2><p class="empty">The Admin has not allowed you to evaluate.</p></section>`;
   const all = c.company.evaluations;
+  if (oldOpen && store.isAdmin) return oldPage(c);
   const open = paper && all.find(r => r.id === paper);
   if (open) return html`<div class="toolbar no-print"><button class="btn ghost" data-act="paperOff">← Evaluation</button>
       <span class="muted">Confidential: the person rated sees it only when you hand it over</span><span class="grow"></span>
@@ -58,8 +66,9 @@ export function render(c) {
   const person = list.find(m => m.id === selected) || null;
   const tiers = ratableLevels(ranks).map(tierName).join(', ');
   return html`
+    ${store.isAdmin ? adminBox(c) : ''}
     <section class="card">
-      <div class="toolbar"><h2>Evaluation</h2><span class="muted">You are tier ${raterTier(ranks)} (${ranks.map(rankLabel).join(', ')}). You rate ${tiers}.</span></div>
+      <div class="toolbar"><h2>Evaluation</h2><span class="muted">Period ${evalPeriod(c.today, store.global?.evalMonths).label}. You are tier ${raterTier(ranks)} (${ranks.map(rankLabel).join(', ')}). You rate ${tiers}.</span></div>
       <p class="muted">${store.isAdmin ? 'As Admin you see every evaluation written. ' : 'You see only the evaluations you wrote. '}The person you rate never sees them.</p>
       ${notice ? html`<p class="ok">${notice}</p>` : ''}
       ${list.length ? html`<table class="table">
@@ -73,13 +82,13 @@ export function render(c) {
             <td class="r nowrap">${s.stars == null ? html`<span class="muted">—</span>` : html`<span title="${s.notes.length} notes">${stars(s.stars)}</span>`}</td>
             <td class="r nowrap">
               <button class="btn small primary" data-act="rate" data-id="${m.id}">Evaluate</button>
-              <button class="btn small" data-act="note" data-id="${m.id}">Write feedback</button>
+              <button class="btn small" data-act="note" data-id="${m.id}" title="A note for the day: evidence in the evaluation">Spotlight note</button>
               <button class="btn ghost small" data-act="view" data-id="${m.id}">History</button>
             </td></tr>`;
         })}</tbody>
       </table>` : html`<p class="empty">Nobody on this project's team is in the tier you rate. Add people under Settings, This project, Team, and set their tier.</p>`}
     </section>
-    ${person && mode === 'rate' ? rateForm(person) : ''}${person && mode === 'note' ? noteForm(person, c) : ''}
+    ${person && mode === 'rate' ? rateForm(person, c) : ''}${person && mode === 'note' ? personForm(person, c.project) : ''}
     ${person ? history(person, all) : ''}
     ${everything(all)}`;
 }
@@ -88,36 +97,61 @@ function problemList() {
   return problems.length ? html`<ul class="plain bad">${problems.map(p => html`<li>${p}</li>`)}</ul>` : '';
 }
 
-function rateForm(m) {
+/** v0.49.0: Field Report's notes (once loaded on the Spotlight page) and Central Hub's, for the facts. */
+const spotAll = c => [...(c.company.spotlight || []), ...spotNotes(c.project.name)];
+const periodNow = c => evalPeriod(c.today, store.global?.evalMonths);
+
+/** v0.49.0: the facts of the period beside the form, and the person's notes as evidence. */
+function factsBox(m, c) {
+  const period = periodNow(c);
+  const f = factsOf({ reports: c.ws.reports, spotlight: spotAll(c), person: m, period });
+  return html`<aside class="field-note"><div><b>Facts for ${period.label}</b>
+    <span>Attendance ${f.attendance == null ? '—' : `${f.attendance}%`} (${f.present} present, ${f.absent} absent) · Late days ${f.late} · Reports sent by 17:30: ${f.onTime} of ${f.reports} · Spotlight ${f.positive} positive, ${f.negative} negative · Safety notes ${f.safety}</span>
+    ${f.notes.length ? html`<ul class="plain small">${f.notes.slice(0, 12).map(n => html`<li class="${n.tone === 'positive' ? 'ok' : 'bad'}">${n.date} · ${catLabel(n.category)} · ${n.note}</li>`)}</ul>` : ''}</div></aside>`;
+}
+
+function rateForm(m, c) {
+  const period = periodNow(c);
+  const eng = engagementAvg(c.ws.reports, { name: m.name, email: emailOf(m) }, period, c.project.crewStart);
+  const list = criteriaFor(levelOf(m));
   return html`<section class="card">
-    <div class="toolbar"><h2>Evaluate ${m.name}</h2><button class="btn ghost small" data-act="close">Close</button></div>
+    <div class="toolbar"><h2>Evaluate ${m.name} · ${period.label}</h2><button class="btn ghost small" data-act="close">Close</button></div>
+    ${factsBox(m, c)}
     <details class="setup"><summary>The scale</summary>
       <ul class="plain">${SCALE.map(([n, name, text]) => html`<li><b>${n} ${name}</b>: ${text}</li>`)}</ul></details>
     ${problemList()}
     <form data-form="evaluate" class="star-form">
-      ${PILLARS.map(p => html`<h3>${p.name}</h3>${p.criteria.map(([k, label]) => starInput(`s-${k}`, label))}`)}
+      <h3>${tierName(levelOf(m))}: 10 criteria</h3>
+      ${list.map(k => html`${starInput(`s-${k.id}`, k.label)}<input name="r-${k.id}" class="wide small" placeholder="Reason (needed for a 1 or a 5)" aria-label="Reason for ${k.label}">`)}
+      ${eng ? html`<p><b>11. ${ENGAGEMENT.label}: ${eng.v} of 5</b> <span class="muted">from ${eng.reports} report${eng.reports === 1 ? '' : 's'}; 1 point each: ${Object.values(ENGAGE_WORDS).join(', ')}.</span></p>` : ''}
       <label>Comment (optional) <textarea name="comment" rows="3" placeholder="What to keep doing, what to improve"></textarea></label>
       <div class="actions left"><button class="btn primary">Save evaluation</button></div>
     </form>
   </section>`;
 }
 
-function noteForm(m, c) {
-  return html`<section class="card">
-    <div class="toolbar"><h2>Feedback about ${m.name}</h2><button class="btn ghost small" data-act="close">Close</button></div>
-    ${problemList()}
-    <form data-form="feedback" class="star-form">
-      <div class="grid2">
-        <label>Date and time of the occasion <input type="datetime-local" name="at" value="${nowLocal()}" required></label>
-        <label>Project <input value="${c.project.name}" disabled></label>
-        <label>Occasion <select name="category" required>${options([['', 'Choose…'], ...CATEGORIES.map(x => [x, x])], '')}</select></label>
-      </div>
-      ${starInput('stars', 'Stars')}
-      <label>Feedback <textarea name="notes" rows="4" required placeholder="What happened, and what was done well or wrong"></textarea></label>
-      <p class="muted">Written by ${me().name}, ${store.ranks.map(rankLabel).join(' / ')}.</p>
-      <div class="actions left"><button class="btn primary">Save feedback</button></div>
-    </form>
+/** v0.49.0: the Admin's settings: the period, who may evaluate, salary reviews, and the old evaluations. */
+function adminBox(c) {
+  const all = c.company.evaluations, old = all.filter(r => r.form !== 2);
+  const raters = (store.users || []).filter(u => [1, 2, 3].includes(raterTier(u.ranks)));
+  const reviews = all.filter(r => r.salaryReview && !r.salaryDone);
+  return html`<section class="card"><h2>Evaluation settings</h2>
+    <div class="grid2"><label>Evaluation period <select data-chg="evMonths">${options([['6', 'Every 6 months (Jan–Jun, Jul–Dec)'], ['3', 'Every 3 months (quarters)']], String(store.global?.evalMonths || 6))}</select></label></div>
+    <details class="setup"><summary>Who may evaluate (Tiers 1, 2 and 3): ${raters.filter(u => u.evaluate !== false).length} of ${raters.length}</summary>
+      ${raters.length ? html`<ul class="plain">${raters.map(u => html`<li><label><input type="checkbox" data-chg="evMay" data-id="${u.email}" ${u.evaluate === false ? '' : 'checked'}> ${u.name || u.email} <span class="muted">${(u.ranks || []).map(rankLabel).join(', ')}</span></label></li>`)}</ul>` : html`<p class="muted">Nobody with a Tier 1, 2 or 3 title has a sign-in yet.</p>`}</details>
+    ${reviews.length ? html`<h3>Salary reviews for the General Manager</h3><ul class="plain">${reviews.map(r => html`<li><b>${r.subjectName}</b>: ${score(r.prevOverall)} → ${score(averages(r.scores).overall)} (${r.period?.label || r.date}) <button type="button" class="btn small" data-act="salaryDone" data-id="${r.id}">Reviewed</button></li>`)}</ul>` : ''}
+    ${old.length ? html`<h3>Old evaluations: ${old.length}</h3><p class="muted">The old form (four pillars) is replaced. Export them once: it is the only copy. Then remove them from the app.</p>
+      <div class="actions left"><button type="button" class="btn" data-act="oldCsv">Export CSV</button> <button type="button" class="btn" data-act="oldPdf">Export PDF (print page)</button>
+      ${store.global?.oldEvalsExported ? html`<button type="button" class="btn danger" data-act="oldRemove">Remove the old evaluations</button>` : html`<span class="muted">Remove becomes possible after the export.</span>`}</div>` : ''}
   </section>`;
+}
+
+/** v0.49.0: every old evaluation and note on one page, to print or save as PDF. */
+function oldPage(c) {
+  const rows = oldRows(c.company.evaluations);
+  return html`<div class="toolbar no-print"><button class="btn ghost" data-act="oldOff">← Evaluation</button><span class="grow"></span><button class="btn primary" data-act="printPaper">Print or save as PDF</button></div>
+    <section class="card sheet"><div class="paper dsr doc-paper">${docHead(c, { title: 'Old evaluations', sub: `The only copy · exported ${fmtFull(c.today)}`, facts: [['Records', rows.length - 1]] })}
+      <table class="dsr-t small"><thead><tr>${rows[0].map(h => html`<th>${h}</th>`)}</tr></thead><tbody>${rows.slice(1).map(r => html`<tr>${r.map(x => html`<td>${x}</td>`)}</tr>`)}</tbody></table></div></section>`;
 }
 
 /** One line per evaluation or feedback note, newest first. */
@@ -174,17 +208,22 @@ function everything(records) {
   </section>`;
 }
 
+/** v0.49.0: the criteria of the Excel form, with the reasons written for a 1 or a 5. */
+const newCriteria = r => docSec(1, 'Criteria', html`<table class="dsr-t"><thead><tr><th>Criterion</th><th>Rating</th><th class="r">Score</th></tr></thead>
+  <tbody>${[...criteriaFor(r.level), ...(r.scores?.engagement != null ? [ENGAGEMENT] : [])].map((k, i) => html`<tr><td>${i + 1}. ${k.label}${r.reasons?.[k.id] ? html`<br><span class="muted small">Reason: ${r.reasons[k.id]}</span>` : ''}</td>
+    <td>${r.scores[k.id] != null ? html`${stars(r.scores[k.id])} <span class="muted">${scaleLabel(r.scores[k.id])}</span>` : html`<span class="muted">Not rated</span>`}</td><td class="r">${r.scores[k.id] ?? '—'}</td></tr>`)}</tbody></table>`);
+
 /** One evaluation as a page (v0.22.4): the score of every criterion by pillar, the comment, and both signatures. */
 function evalPaper(r, c) {
   const a = averages(r.scores);
   const ref = docRef({ company: c.global.company, project: { name: r.projectName }, type: 'EV', key: `${r.date}-${String(r.id).slice(-4).toUpperCase()}` });
   return html`<div class="paper dsr doc-paper" data-foot="${footText(c, 'Evaluation', ref, { project: false, note: 'confidential' })}">
     ${docHead(c, { title: 'Performance evaluation', sub: `${r.subjectName} · confidential`, ref, status: `${score(a.overall)} · ${scaleLabel(a.overall)}`, tone: a.overall >= 3 ? 'ok' : 'warn',
-      facts: [['Employee', r.subjectName], ['Tier', tierName(r.level)], ['Project', r.projectName || ''], ['Date', fmtFull(r.date)], ['Evaluator', `${r.byName || r.by}${r.byRank ? `, ${rankLabel(r.byRank)}` : ''}`]] })}
-    ${PILLARS.map((p, i) => docSec(i + 1, p.name, html`<table class="dsr-t"><thead><tr><th>Criterion</th><th>Rating</th><th class="r">Score</th></tr></thead>
+      facts: [['Employee', r.subjectName], ['Tier', tierName(r.level)], ...(r.period ? [['Period', r.period.label]] : []), ['Project', r.projectName || ''], ['Date', fmtFull(r.date)], ['Evaluator', `${r.byName || r.by}${r.byRank ? `, ${rankLabel(r.byRank)}` : ''}`]] })}
+    ${r.form === 2 ? newCriteria(r) : PILLARS.map((p, i) => docSec(i + 1, p.name, html`<table class="dsr-t"><thead><tr><th>Criterion</th><th>Rating</th><th class="r">Score</th></tr></thead>
       <tbody>${p.criteria.map(([k, label]) => html`<tr><td>${label}</td><td>${r.scores[k] ? html`${stars(r.scores[k])} <span class="muted">${scaleLabel(r.scores[k])}</span>` : html`<span class="muted">Not rated</span>`}</td><td class="r">${r.scores[k] ?? '—'}</td></tr>`)}</tbody>
       <tfoot><tr><td colspan="2">${p.name}, average</td><td class="r">${score(a.pillars[i].value)}</td></tr></tfoot></table>`))}
-    ${docSec(PILLARS.length + 1, 'Overall and comments', html`<p><b>${score(a.overall)} of 5</b> · ${scaleLabel(a.overall)}</p>${r.comment ? html`<p class="pre">${r.comment}</p>` : html`<p class="muted">No comment.</p>`}
+    ${docSec(r.form === 2 ? 2 : PILLARS.length + 1, 'Overall and comments', html`<p><b>${score(a.overall)} of 5</b> · ${scaleLabel(a.overall)}</p>${r.comment ? html`<p class="pre">${r.comment}</p>` : html`<p class="muted">No comment.</p>`}
       <p class="muted small">Scale: ${SCALE.map(([n, name]) => `${n} ${name}`).join(' · ')}</p>`)}
     ${signoff([{ label: 'Evaluator', name: r.byName || r.by }, { label: 'Employee: seen and discussed', name: r.subjectName }, { label: 'Approved by' }])}
   </div>`;
@@ -193,6 +232,16 @@ function evalPaper(r, c) {
 export const actions = {
   paperOn(el) { paper = el.dataset.id; },
   paperOff() { paper = null; },
+  oldOff() { oldOpen = false; },
+  oldCsv(el, c) { downloadText(`Old evaluations ${c.today}.csv`, toCSV(oldRows(c.company.evaluations))); store.updateGlobal(g => { g.oldEvalsExported = c.today; }); },
+  oldPdf(el, c) { oldOpen = true; store.updateGlobal(g => { g.oldEvalsExported = c.today; }); },
+  oldRemove(el, c) {
+    const n = c.company.evaluations.filter(r => r.form !== 2).length;
+    if (!confirm(`Remove the ${n} old evaluations and notes from the app? Keep the exported CSV or PDF: it will be the only copy.`) || !confirm('Sure? This cannot be undone.')) return;
+    store.updateCompany(co => { co.evaluations = co.evaluations.filter(r => r.form === 2); });
+    notice = `${n} old evaluations removed.`;
+  },
+  salaryDone(el, c) { store.updateCompany(co => { const r = co.evaluations.find(x => x.id === el.dataset.id); if (r) { r.salaryDone = c.today; r.salaryBy = me().email; } }); },
   printPaper() { print(); },
   rate(el) { selected = el.dataset.id; mode = 'rate'; notice = ''; problems = []; },
   note(el) { selected = el.dataset.id; mode = 'note'; notice = ''; problems = []; },
@@ -202,22 +251,37 @@ export const actions = {
 
 export const changes = {
   filter(el) { filters[el.dataset.f] = el.value; },
+  evMonths(el) { store.updateGlobal(g => { g.evalMonths = +el.value === 3 ? 3 : 6; }); },
+  evMay(el) { store.setUser(el.dataset.id, { evaluate: el.checked }); },
 };
 
 export const submits = {
   evaluate(fd, c) {
     const m = people(c).find(x => x.id === selected);
     if (!m) return false;
-    const scores = {};
-    for (const [k, v] of fd.entries()) if (k.startsWith('s-')) scores[k.slice(2)] = +v;
+    const scores = {}, reasons = {}, period = periodNow(c);
+    for (const [k, v] of fd.entries()) {
+      if (k.startsWith('s-')) scores[k.slice(2)] = +v;
+      if (k.startsWith('r-') && String(v).trim()) reasons[k.slice(2)] = String(v).trim();
+    }
+    const eng = engagementAvg(c.ws.reports, { name: m.name, email: emailOf(m) }, period, c.project.crewStart);
+    if (eng) scores.engagement = eng.v;   // the 11th score: worked out, never typed
     const rec = {
-      id: uid('ev'), type: 'evaluation', projectId: c.project.id, projectName: c.project.name, subjectPersonId: m.personId || '', subjectId: m.id, subjectName: m.name, subjectEmail: emailOf(m), level: levelOf(m),
+      id: uid('ev'), type: 'evaluation', form: 2, period: { from: period.from, to: period.to, label: period.label }, reasons, projectId: c.project.id, projectName: c.project.name, subjectPersonId: m.personId || '', subjectId: m.id, subjectName: m.name, subjectEmail: emailOf(m), level: levelOf(m),
       by: me().email, byName: me().name, byRank: raterRank(store.ranks, levelOf(m)), date: c.today, scores, comment: String(fd.get('comment') || '').trim(),
     };
-    problems = checkEvaluation(rec, me());
+    problems = checkForm(rec, me(), c.company.evaluations);
     if (problems.length) return false;
+    const prev = lastOverall(c.company.evaluations, rec), now = averages(scores).overall;
+    if (salaryFlag(prev, now)) Object.assign(rec, { salaryReview: true, prevOverall: prev });   // one point higher: the GM reviews the salary
     store.updateCompany(co => co.evaluations.push(rec));
-    notice = `Evaluation of ${m.name} saved: ${score(averages(scores).overall)} (${scaleLabel(averages(scores).overall)}).`;
+    notice = `Evaluation of ${m.name} saved: ${score(now)} (${scaleLabel(now)}).${rec.salaryReview ? ' One point higher than last time: the General Manager is asked to review the salary.' : ''}`;
+    mode = 'view';
+  },
+  spotPerson(fd, c) {
+    const m = people(c).find(x => x.id === selected);
+    if (!m || savePerson(fd, c, m, levelOf(m), emailOf(m)) === false) return false;
+    notice = `Spotlight note about ${m.name} saved.`;
     mode = 'view';
   },
   feedback(fd, c) {

@@ -99,13 +99,15 @@ service cloud.firestore {
         : ranks().hasAny(['technician']) ? 4 : 9;
     }
     function mayRate(level) {
-      return (level in ['t2', 't3', 't4', 't5'] && myTier() == 1)
-        || (level == 't3' && myTier() == 2) || (level == 't4' && myTier() == 3) || (level == 't5' && myTier() == 4)
+      // v0.49.0: only Tiers 1, 2 and 3 rate (Tier 3 rates the crew and Security), unless the Admin switched them off
+      return user().get('evaluate', true) != false && ((level in ['t2', 't3', 't4', 't5'] && myTier() == 1)
+        || (level == 't3' && myTier() == 2) || (level in ['t4', 't5'] && myTier() == 3))
         // records written before the tiers
         || (level == 'crew' && 'site_engineer' in ranks())
         || (level == 'site_engineer' && 'project_manager' in ranks())
         || (level == 'project_manager' && 'general_manager' in ranks());
     }
+    function salaryOnly() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['salaryDone', 'salaryBy']); }
 
     // Created once, by the first person to sign in. Afterwards only the Admin can change it,
     // and only to hand the role to another address.
@@ -294,10 +296,22 @@ service cloud.firestore {
     // Evaluations and feedback notes: read only by the person who wrote them and by the Admin, never by the
     // person they are about. A list query has to say where by == the signed-in address. Only the author edits.
     match /company/main/evaluations/{id} {
-      allow read: if seesAll() || (hasUser() && resource.data.by == me());
+      allow read: if seesAll() || (hasUser() && resource.data.by == me())
+        || (hasUser() && 'general_manager' in ranks() && resource.data.get('salaryReview', false) == true);
       allow create: if request.resource.data.by == me()
         && (isOwner() || (hasUser() && mayRate(request.resource.data.level)));
-      allow update: if resource.data.by == me() && request.resource.data.by == me();
+      allow update: if (resource.data.by == me() && request.resource.data.by == me())
+        || ((isOwner() || (hasUser() && 'general_manager' in ranks())) && salaryOnly());
+      allow delete: if isOwner();
+    }
+    // v0.49.0: Spotlight notes. About a person: written by who may rate them; a project update: by anyone signed in.
+    // Read by the writer, HR and the Admin, never by the person. Changed by the writer (24 hours in the app); deleted by the Admin.
+    match /company/main/spotlight/{id} {
+      allow read: if seesAll() || (hasUser() && ('hr_assistant' in ranks() || resource.data.by == me()));
+      allow create: if hasUser() && request.resource.data.by == me() && request.resource.data.id == id
+        && (request.resource.data.kind == 'project' || isOwner() || mayRate(request.resource.data.level));
+      allow update: if hasUser() && ((resource.data.by == me() && request.resource.data.by == me())
+        || (isOwner() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenAt'])));
       allow delete: if isOwner();
     }
 

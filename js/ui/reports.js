@@ -24,6 +24,12 @@ import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
 import { fieldSpotlight } from '../sync/fieldreport.js';
+import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';
+import { fromField } from '../engine/spotlight.js';
+import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
+
+/** v0.49.0: the report's engagement (5 points), for the office only: never on the client's copy. */
+const engChip = (r, c) => { const e = r.source === 'field' && engagementOf(r, c?.project?.crewStart); return e ? html`<span class="chip ${e.v >= 4 ? 'ok' : e.v >= 2 ? 'warn' : 'high'}" title="${Object.entries(ENGAGE_WORDS).map(([k, w]) => `${e.parts[k] ? '✓' : '✗'} ${w}`).join(' · ')}">Engagement ${e.v}/5</span>` : ''; };
 
 const WEATHER = ['Clear', 'Cloudy', 'Rain', 'Wind', 'Heat'];
 const GROUND = ['Dry', 'Wet', 'Muddy'];
@@ -49,6 +55,8 @@ let tab = '';           // 'list' (the reports) or 'enter' (the Daily report for
 // v0.30.0: Spotlight, the notes the site sends from Field Report for Central Hub only (the Admin reads them here)
 const spot = { list: null, code: '', busy: false, err: '', tone: '', about: '' };
 const TONE = { pos: ['Positive', 'ok'], neg: ['Negative', 'bad'] };
+/** v0.49.0: Field Report's Spotlight notes once loaded, in Central Hub's shape (for the evaluation facts). */
+export const spotNotes = projectName => fromField(spot.list, projectName);
 export function spotRows(list, { tone = '', about = '' } = {}) {
   return (list || []).filter(x => (!tone || x.tone === tone) && (!about || x.about === about));
 }
@@ -73,7 +81,7 @@ function spotCard(c) {
       <div class="spot-tags"><span>${x.cat}</span><span>${x.about}</span></div>
       ${x.note ? html`<p class="spot-note">${x.note}</p>` : ''}${x.media?.length ? media(x) : ''}</article>`;
   const chipBtn = (v, label, n) => html`<button type="button" class="spot-chip ${spot.tone === v ? 'on' : ''} ${v}" data-act="spotToneSet" data-v="${v}" aria-pressed="${spot.tone === v}">${label}<span>${n}</span></button>`;
-  return html`<section class="card spot-page"><div class="card-head"><h2>Spotlight</h2><span class="muted">Notes from the site, for Central Hub only. Not in the report.</span><span class="grow"></span>
+  return html`${hubNotes(c)}<section class="card spot-page"><div class="card-head"><h2>Spotlight from Field Report</h2><span class="muted">Notes from the site, for Central Hub only. Not in the report.</span><span class="grow"></span>
       ${code ? html`<button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? '↻ Check again' : 'Show the notes'}</button>` : ''}</div>
     ${!code ? html`<p class="muted">This project has no Field Report code.</p>` : html`
     ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
@@ -460,7 +468,7 @@ export function render(c) {
         <li class="stack">
           <div class="row top">
             <span class="row-main">
-              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${r.review === 'pending' ? chip('To approve', 'warn') : ''}</span>
+              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${engChip(r, c)} ${r.review === 'pending' ? chip('To approve', 'warn') : ''}</span>
               <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}`
                 : `${r.by}${r.weather ? `, ${r.weather}` : ''}, ${sum(r.manpower || [], m => m.count)} on site, ${r.entries?.length || 0} task${r.entries?.length === 1 ? '' : 's'} updated`}</span>
             </span>
@@ -544,7 +552,7 @@ function olderList(r, c) {
 /** A report that needs no confirming, read in full. */
 function readCard(r, c) {
   return html`<section class="card">
-    <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
+    <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${engChip(r, c)}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
       ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin">Delete</button></div>
     ${offlineSent(r.field) ? html`<p class="notice warn no-print">${offlineSent(r.field)}</p>` : ''}${approvalLine(r)}
@@ -583,6 +591,7 @@ export function onEnter() {
 }
 
 export const submits = {
+  ...spotSubmits,
   report(fd, c) {
     const cur = underReview(c.ws);
     if (cur && !iMay('fr_approve')) { notice = 'Approving is not yours to do. Ask the Admin under Access rules.'; return false; }
@@ -684,6 +693,7 @@ export const submits = {
 };
 
 export const changes = {
+  ...spotChanges,
   withAtt(el) { withAtt = el.checked; },
   spotTone(el) { spot.tone = el.value; },
   spotAbout(el) { spot.about = el.value; },
@@ -697,6 +707,7 @@ export const changes = {
 };
 
 export const actions = {
+  ...spotActions,
   spotToneSet(el) { spot.tone = el.dataset.v || ''; },   // v0.34.0: the filter chips on Spotlight
   async sigDraw() { await openPad('Checked by: your signature'); store.notify(); },
   remove(el, c) {

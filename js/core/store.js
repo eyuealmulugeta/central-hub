@@ -332,6 +332,10 @@ export const store = {
     if (role !== 'owner' && ranks.length) {
       shared.push(api.watchCol(`${COMPANY_PATH}/evaluations`, docs => { company.evaluations = sectionFromDocs('evaluations', docs); emit(); }, () => {}, ['by', '==', me.email]));
     }
+    // v0.49.0: Spotlight notes: HR reads them all, everyone else their own (the Admin has them with the company sections)
+    if (role !== 'owner') {
+      shared.push(api.watchCol(`${COMPANY_PATH}/spotlight`, docs => { company.spotlight = sectionFromDocs('spotlight', docs); emit(); }, () => {}, ranks.includes('hr_assistant') ? undefined : ['by', '==', me.email]));
+    }
 
     await new Promise(resolve => {
       if (!limited) {

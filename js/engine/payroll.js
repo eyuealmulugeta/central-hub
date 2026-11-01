@@ -11,10 +11,11 @@
 // Money is never added across currencies: totals come out one line per currency.
 
 import { toDay, fromDay } from '../core/util.js';
+import { STEPS, bandTax, payOn } from './paysteps.js';
 
 export const DEFAULT_SETTINGS = { hoursPerDay: 10, otMultiplier: 1.5, monthDays: 30, pensionEmployee: 0, pensionEmployer: 0 };
 
-export const STATUSES = [['draft', 'Draft'], ['approved', 'Approved'], ['paid', 'Paid']];
+export const STATUSES = STEPS;   // v0.48.0: Draft, Checked, Approved, Paid, Payslips shared
 export const statusLabel = id => STATUSES.find(([k]) => k === id)?.[1] || id;
 
 const money2 = n => Math.round((+n || 0) * 100) / 100;
@@ -58,7 +59,7 @@ export function attendanceFor(reports, month, staff) {
 
 /** One empty line for a person: how they are paid, and the figures typed or filled in for the month. */
 export function newLine(staff, month, reports = []) {
-  const a = staff.agreement || {};
+  const a = payOn(staff, monthEnd(month));   // v0.48.0: the pay in force that month (pay history), never today's for an old month
   const att = attendanceFor(reports, month, staff);
   return {
     id: `pl-${staff.id}`, staffId: staff.id, name: staff.name || '', title: staff.title || '',
@@ -87,10 +88,11 @@ export function compute(line, s = DEFAULT_SETTINGS) {
   const gross = basic + overtime + num(line.allowances);
   const pensionEmployee = basic * num(set.pensionEmployee) / 100;
   const pensionEmployer = basic * num(set.pensionEmployer) / 100;
-  const deductions = pensionEmployee + num(line.tax) + num(line.other);
+  const tax = set.bands?.length ? bandTax(gross, set.bands) : num(line.tax);   // v0.48.0: by the month's tax bands when entered
+  const deductions = pensionEmployee + tax + num(line.other);
   return {
     basic: money2(basic), overtime: money2(overtime), allowances: money2(line.allowances), gross: money2(gross),
-    pensionEmployee: money2(pensionEmployee), pensionEmployer: money2(pensionEmployer), tax: money2(line.tax), other: money2(line.other),
+    pensionEmployee: money2(pensionEmployee), pensionEmployer: money2(pensionEmployer), tax: money2(tax), other: money2(line.other),
     deductions: money2(deductions), net: money2(gross - deductions), cost: money2(gross + pensionEmployer),
   };
 }

@@ -32,6 +32,7 @@ import * as payroll from './ui/payroll.js';
 import * as cashflow from './ui/cashflow.js';
 import * as payments from './ui/payments.js';
 import * as attendance from './ui/attendance.js';
+import { payFlags } from './engine/paysteps.js';
 import * as employment from './ui/employment.js';
 import * as signatures from './ui/signatures.js';
 import * as setup from './ui/setup.js';
@@ -371,6 +372,8 @@ function render() {
 
   ctx = { ...derive(p, store.ws, store.global, today), role: store.role, company: scoped(), division, admin: store.isAdmin, money: store.seesMoney };
   // an alert that leads to a page this person cannot open, or that the project has switched off, is not shown
+  // v0.48.1: pay sheets to check or approve, and the payroll steps, every day until done
+  ctx.flags.auto.push(...payFlags({ ws: store.ws, company: store.company, today, admin: store.isAdmin, payrollDayOf: +store.global?.payrollDay || 0 }));
   ctx.flags.auto = ctx.flags.auto.filter(f => allowed(f.link));
   // the directory is the master: team members linked to it follow it. Only the Admin holds the directory, so only the Admin brings the team up to date.
   if (store.isAdmin && !store.readOnly && !syncingTeam && needsSync(store.ws.team, store.company.staff, p.id, store.ws.crewRates || [])) {

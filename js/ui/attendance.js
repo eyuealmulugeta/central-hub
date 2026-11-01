@@ -12,6 +12,7 @@ import { toDay, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html } from './dom.js';
 import { docHead, docFoot, footText, signoff } from './print.js';
+import { checkOf, checkRecord, checkId } from '../engine/paysteps.js';
 import { openMail } from './maildialog.js';
 import { tell } from '../core/image.js';
 
@@ -102,6 +103,13 @@ function decide(ids, review) {
   tell(`${n} ${n === 1 ? 'correction' : 'corrections'} from site ${review}.`);
 }
 
+/** v0.48.0: the pay period's days and hours, checked by the Site Engineer (or anyone who keeps this sheet) before pay is approved. */
+function checkBar(c, p) {
+  const ck = checkOf(c.ws, p.from);
+  return html`<div class="actions left no-print">${ck ? html`<span class="chip ok">✓ Days and hours checked by ${ck.byName || ck.by}, ${String(ck.at).slice(0, 10)}</span> <button type="button" class="btn ghost small" data-act="uncheck">Undo</button>`
+    : html`<button type="button" class="btn small primary" data-act="checkDays" title="The pay of this period can then be approved">The days and hours of ${p.label} are right</button>`}</div>`;
+}
+
 export function render(c) {
   const p = periodOf(c);
   const r = register(c.project, c.ws, p, crewOf(c));
@@ -138,6 +146,7 @@ export function render(c) {
     ${edit ? siteList(c) : ''}
     ${editor(c, r)}
     <section class="card sheet att-sheet"><div class="paper att dsr land" data-foot="${footText(c, 'Attendance sheet', ref)}">
+      ${checkBar(c, p)}
       ${docHead(c, { title: 'Attendance sheet', sub: p.label, ref, facts: [['Project', c.project.name], ['Period', p.label], ['Days reported', `${r.reportedDays} of ${working} working days`], ['People', String(r.rows.length)]] })}
       ${r.rows.length ? html`<div class="att-scroll"><table class="att-grid">
         <thead>
@@ -186,6 +195,12 @@ export const changes = {
 };
 
 export const actions = {
+  checkDays(el, c) {
+    const p = periodOf(c);
+    if (!confirm(`The days and hours of ${p.label} on ${c.project.name} are right? The pay can then be approved.`)) return;
+    store.update(ws => { ws.attendance = [...(ws.attendance || []).filter(r => r.id !== checkId(p.from)), checkRecord(p, { by: store.user?.email || 'local', byName: store.signature || store.user?.name || '', at: new Date().toISOString() })]; });
+  },
+  uncheck(el, c) { const p = periodOf(c); store.update(ws => { ws.attendance = (ws.attendance || []).filter(r => r.id !== checkId(p.from)); }); },
   print() { print(); },
   shift(el, c) { at = shiftPeriod(c.project, periodOf(c), +el.dataset.n).from; editing = null; notice = ''; },
   today() { at = ''; editing = null; },

@@ -30,6 +30,7 @@ import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
 import { personSummary, methodLabel } from '../engine/crewpay.js';
 import { addedStamp, needsAgreement } from '../engine/manpower.js';
+import { withPayChange } from '../engine/paysteps.js';
 
 let selected = null;
 let tab = 'work';       // work | private | pay | papers
@@ -338,6 +339,7 @@ function form({ p, alerts, monthly }, c) {
       <div class="grid2">
         ${needsAgreement(p) ? html`<label>Agreement type <select data-chg="agreement" data-f="type" data-fk="ag-type"><option value="">None recorded</option>${options(AGREEMENT_TYPES, a.type || null)}</select></label>` : html`<p class="muted">Tier 4: paid by the day, no agreement.</p>`}
         ${agree('Signed on', 'signedOn', 'ag-signed', 'date')}
+        ${(p.payHistory || []).length ? html`<div class="wide"><b>Pay history</b><ul class="plain small">${[...p.payHistory].reverse().map(h => html`<li>From ${h.from}: ${h.pay} ${h.currency || ''} ${h.payPer === 'day' ? 'per day' : h.payPer === 'hour' ? 'per hour' : 'per month'}</li>`)}</ul></div>` : ''}
         ${agree('Starts', 'start', 'ag-start', 'date')}
         ${agree('Ends (leave empty if open-ended)', 'end', 'ag-end', 'date')}
         ${agree('Probation ends', 'probationEnd', 'ag-prob', 'date')}
@@ -610,10 +612,23 @@ Press OK to apply, Cancel to leave it as it is.`)) { store.notify(); return; }  
     notice = `${p.name || 'The person'} moved to ${to === TRADING ? 'Trading' : 'Installation'}. Find them under Crew in that division.`;
     selected = null;
   },
-  agreement(el) {
+  agreement(el, c) {
     const f = el.dataset.f;
     const value = el.type === 'number' ? Math.max(0, field(el)) : el.value.trim();
-    store.updateCompany(co => { const p = find(co); if (p) p.agreement = { ...p.agreement, [f]: value }; });
+    // v0.48.0: a change of pay is kept with the date it applies from; runs already made keep their figures
+    let from = '';
+    if (['pay', 'payPer', 'currency'].includes(f) && +(find(c.company)?.agreement?.pay) > 0) {
+      from = (typeof prompt === 'function' ? prompt('From which date does the new pay apply? (YYYY-MM-DD)', c.today) : c.today) || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) { store.notify(); return; }
+    }
+    store.updateCompany(co => {
+      const p = find(co);
+      if (!p) return;
+      const old = p.agreement || {};
+      if (from && !(p.payHistory || []).length) p.payHistory = withPayChange([], { from: old.start || p.started || '2000-01-01', pay: old.pay, payPer: old.payPer, currency: old.currency });
+      p.agreement = { ...old, [f]: value };
+      if (from) p.payHistory = withPayChange(p.payHistory, { from, pay: p.agreement.pay, payPer: p.agreement.payPer, currency: p.agreement.currency, by: store.user?.email || '' });
+    });
   },
   doc(el) {
     store.updateCompany(co => { const d = find(co)?.documents.find(x => x.id === el.dataset.id); if (d) d[el.dataset.f] = el.value.trim(); });

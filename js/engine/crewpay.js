@@ -7,6 +7,7 @@
 import { register, daysBetween, keyOf } from './attendance.js';
 import { billingOf } from './billing.js';
 import { dayRateOf } from './people.js';
+import { isMonthly } from './paysteps.js';
 
 export const METHODS = [['cash', 'Cash'], ['bank', 'Bank transfer'], ['mobile', 'Mobile money']];
 export const methodLabel = k => METHODS.find(([m]) => m === k)?.[1] || k || '';
@@ -17,7 +18,6 @@ const daysInMonth = iso => { const [y, m] = iso.split('-').map(Number); return n
 /** The positions paid by the month unless their HR agreement says otherwise (Settings, Company). Everyone else is paid per day. */
 export const MONTHLY_ROLES = ['Project Engineer', 'Site Engineer'];
 export const monthlyRolesOf = g => (Array.isArray(g?.monthlyRoles) ? g.monthlyRoles : MONTHLY_ROLES);
-const norm = v => String(v || '').trim().toLowerCase();
 
 /**
  * How a person on the sheet is paid: { per: 'day'|'month', wage, currency, from } where `from` says where the wage
@@ -32,8 +32,8 @@ export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_RO
   const payCur = project.payCurrency || project.currency;   // v0.25.0: the currency of this project's day rates
   const currency = a.currency || payCur;
   if (a.payPer === 'month' && +a.pay > 0) return { per: 'month', wage: +a.pay, currency, from: 'agreement' };
-  const role = norm(member?.role || row.role || person?.title);
-  if (a.payPer !== 'day' && role && monthlyRoles.some(r => norm(r) === role)) {
+  // v0.48.0: the tier decides (Tiers 1, 2, 3 and 5 monthly, Tier 4 by the day); the old position list is no longer used
+  if (a.payPer !== 'day' && isMonthly(person, member?.role || row.role)) {
     return +a.pay > 0 && !a.payPer ? { per: 'month', wage: +a.pay, currency, from: 'agreement' } : { per: 'month', wage: 0, currency, from: 'missing' };
   }
   const day = member ? dayRateOf(ws, member.id) : 0;
@@ -111,7 +111,8 @@ export function payLines(ctx, period) {
       review: ws.team.find(m => m.id === row.id)?.wageReview || null,
     };
   // v0.28.0: the salary sheet has everyone with at least one day present; people absent all period are left off
-  }).filter(l => l.present > 0 || l.ot > 0 || l.earned || l.brought || l.paid || l.adjust)
+  // v0.48.0: monthly-paid people (Tiers 1, 2, 3, 5) are paid in Payroll; they stay here only for what was owed or paid before
+  }).filter(l => (l.per !== 'month' || l.brought || l.paid) && (l.present > 0 || l.ot > 0 || l.earned || l.brought || l.paid || l.adjust))
     .sort((a, b) => a.name.localeCompare(b.name));
   const total = f => r2(lines.reduce((s, l) => s + l[f], 0));
   return { run, lines, totals: { earned: total('earned'), adjust: total('adjust'), brought: total('brought'), due: total('due'), paid: total('paid'), outstanding: total('outstanding') } };
@@ -129,7 +130,7 @@ export function lockLines(run, lines) {
 
 /** A run is paid when it is approved and nobody is owed anything for it. */
 export const runStatus = (run, lines) => (!run ? 'draft' : run.status === 'draft' ? 'draft' : lines.every(l => l.outstanding <= 0.004) ? 'paid' : 'approved');
-export const STATUS_LABEL = { draft: 'Draft', approved: 'Approved', paid: 'Paid' };
+export const STATUS_LABEL = { draft: 'Draft', checked: 'Checked', approved: 'Approved', paid: 'Paid' };
 
 /** The payment record and the labour expense in Costs that goes with it. */
 export function paymentFor(line, { amount, date, method, ref, period, by, at, id, usdRate = 0 }) {
@@ -152,6 +153,7 @@ export function paymentFor(line, { amount, date, method, ref, period, by, at, id
  * has chosen its pay period, unless their HR department is an office one.
  */
 export function paidOnSite(person, projects, isSiteDepartment) {
+  if (isMonthly(person)) return false;   // v0.48.0: Tiers 1, 2, 3 and 5 are in Payroll wherever they work
   if (person.department && !isSiteDepartment(person.department)) return false;
   const using = new Set((projects || []).filter(p => p.payPeriod).map(p => p.id));
   return (person.assignments || []).some(a => a.active !== false && using.has(a.projectId));

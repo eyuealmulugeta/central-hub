@@ -17,6 +17,9 @@ import { withFixes } from '../engine/attendance.js';
 import { paidOnSite } from '../engine/crewpay.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { openMail, emailIn } from './maildialog.js';
+import { ratesFor, parseBands, bandsText, mayApprove, stepTone, payrollDay, payrollReport, reportList } from '../engine/paysteps.js';
+import { sendPayReport } from './payreport.js';
+import { METHODS, methodLabel } from '../engine/crewpay.js';
 /** v0.25.0: does this run pay anyone in ETB? Then it needs its own ETB-to-USD rate. */
 const etbIn = run => (run.lines || []).some(l => l.currency === 'ETB');
 // the attendance as the office corrected it on the Attendance sheet
@@ -63,8 +66,9 @@ function list(c) {
         <div class="actions left"><button class="btn primary">Start the run</button>
           <span class="muted">${n} ${n === 1 ? 'person' : 'people'} on the staff list. Days and overtime are filled from the daily reports of <b>${c.project.name}</b> (the open project); for people on other projects, type them in.</span></div>
       </form>
-      <p class="muted">Income tax is typed per person on the run, from your accountant's table. It is never guessed. Leave the pension at 0 until you have the rates.</p>
+      <p class="muted">A new run takes the pension and the income tax bands of its month from the rates below. With no tax bands, income tax is typed per person on the run.</p>
     </section>
+    ${ratesBox(c)}
     <section class="card">
       <h2>Payroll runs</h2>
       ${runs.length ? html`<table class="table">
@@ -72,7 +76,7 @@ function list(c) {
         <tbody>${runs.map(r => html`<tr class="click" data-act="open" data-id="${r.id}">
           <td><button class="link" type="button">${monthLabel(r.month)}</button></td><td class="r">${r.lines.length}</td>
           <td class="r nowrap">${totals(r.lines, r.settings).map(t => m(t.net, t.currency)).join(' · ') || '—'}</td>
-          <td>${chip(statusLabel(r.status), r.status === 'paid' ? 'ok' : r.status === 'approved' ? 'info' : 'warn')}</td></tr>`)}</tbody>
+          <td>${chip(statusLabel(r.status), stepTone(r.status))}</td></tr>`)}</tbody>
       </table>` : html`<p class="empty">No payroll runs yet.</p>`}
     </section>
     <p class="muted">Only you, the Admin, can open this page.</p>`;
@@ -91,12 +95,15 @@ function detail(run, c) {
   return html`
     <div class="toolbar no-print">
       <button class="btn ghost" data-act="back">← Payroll</button>
-      <b>${monthLabel(run.month)}</b> ${chip(statusLabel(run.status), run.status === 'paid' ? 'ok' : run.status === 'approved' ? 'info' : 'warn')}
-      <span class="muted">${run.approvedBy ? `Approved by ${run.approvedBy}, ${fmtFull(run.approvedOn)}. ` : ''}${run.paidOn ? `Paid on ${fmtFull(run.paidOn)}.` : ''} ${notice}</span>
+      <b>${monthLabel(run.month)}</b> ${chip(statusLabel(run.status), stepTone(run.status))}
+      <span class="muted">${run.checkedBy ? `Checked by ${run.checkedBy}. ` : ''}${run.approvedBy ? `Approved by ${run.approvedBy}, ${fmtFull(run.approvedOn)}${run.selfApproved ? ' (also the checker)' : ''}. ` : ''}${run.paidOn ? `Paid on ${fmtFull(run.paidOn)}${run.paidMethod ? `, ${methodLabel(run.paidMethod)}` : ''}${run.paidRef ? `, ref. ${run.paidRef}` : ''}. ` : ''}${run.sharedOn ? `Payslips shared ${fmtFull(run.sharedOn)}.` : ''} ${notice}</span>
       <span class="grow"></span>
-      ${draft ? html`<button class="btn" data-act="refill" title="Reads days and overtime again from the daily reports of the open project">Refill attendance</button><button class="btn primary" data-act="approve">Approve</button>` : ''}
-      ${run.status === 'approved' ? html`<button class="btn" data-act="reopen">Reopen</button><button class="btn primary" data-act="markPaid">Mark as paid</button>` : ''}
+      ${draft ? html`<button class="btn" data-act="refill" title="Reads days and overtime again from the daily reports of the open project">Refill attendance</button><button class="btn primary" data-act="check" title="The days, hours and figures are right">Checked</button>` : ''}
+      ${run.status === 'checked' ? html`<button class="btn" data-act="reopen">Back to draft</button><button class="btn primary" data-act="approve">Approve</button>` : ''}
+      ${run.status === 'approved' ? html`<button class="btn" data-act="reopen">Reopen</button>` : ''}
+      ${run.status === 'paid' ? html`<button class="btn primary" data-act="shared" title="Every payslip of this run was sent">Payslips shared</button>` : ''}
       <button class="btn" data-act="csv">Download CSV</button>
+      ${paidForm(run, c)}
       ${run.lines.length ? html`<button class="btn" data-act="allSlips" title="Every payslip of the month, one per page">Print all payslips</button>` : ''}
       <button class="btn" data-act="print">Print</button>
       <button class="btn danger" data-act="removeRun">Delete</button>
@@ -202,19 +209,27 @@ export const actions = {
     });
     notice = `Days and overtime read again from the daily reports of ${c.project.name}.`;
   },
+  check(el, c) {
+    const run = find(c.company);
+    if (!run || run.status !== 'draft') return;
+    if (!confirm(`The days, hours and figures of ${monthLabel(run.month)} are right? Someone else then approves the amounts.`)) return;
+    store.updateCompany(co => { const r = find(co); r.status = 'checked'; r.checkedBy = store.user?.email || store.profile.name || 'Admin'; r.checkedOn = c.today; });
+  },
+  shared(el, c) { store.updateCompany(co => { const r = find(co); if (r?.status === 'paid') { r.status = 'shared'; r.sharedOn = c.today; } }); },
   approve(el, c) {
     const run = find(c.company);
     if (!run) return;
+    const may = mayApprove({ checkedBy: run.checkedBy, me: store.user?.email || store.profile.name || 'Admin', admin: store.isAdmin });
+    if (!may.ok) { notice = may.why; return; }
+    if (may.self && !confirm('You checked this run yourself. Approve it anyway as the Admin? It is recorded.')) return;
     const warn = warnings(run.lines, run.settings);
     if (warn.length && !confirm(`${warn.length} thing${warn.length === 1 ? '' : 's'} to check:\n\n${warn.slice(0, 5).join('\n')}\n\nApprove anyway?`)) return;
     if (!confirm(`Approve the payroll of ${monthLabel(run.month)}? The figures are locked until you reopen it.`)) return;
-    store.updateCompany(co => { const r = find(co); r.status = 'approved'; r.approvedBy = store.profile.name || store.user?.name || 'Admin'; r.approvedOn = c.today; });
+    store.updateCompany(co => { const r = find(co); r.status = 'approved'; r.approvedBy = store.profile.name || store.user?.name || 'Admin'; r.approvedOn = c.today; r.selfApproved = !!may.self; });
+    sendPayReport({ name: `${run.month} Payroll${run.division ? ` ${run.division}` : ''}`, csv: payrollReport(run, totals(run.lines, run.settings)), subject: `Payroll of ${monthLabel(run.month)} approved` });
   },
-  reopen() { store.updateCompany(co => { const r = find(co); if (r?.status === 'approved') { r.status = 'draft'; r.approvedBy = ''; r.approvedOn = ''; } }); },
-  markPaid(el, c) {
-    if (!confirm('Mark this payroll as paid? It can no longer be reopened.')) return;
-    store.updateCompany(co => { const r = find(co); if (r?.status === 'approved') { r.status = 'paid'; r.paidOn = c.today; } });
-  },
+  reopen() { store.updateCompany(co => { const r = find(co); if (r?.status === 'approved' || r?.status === 'checked') { r.status = 'draft'; r.approvedBy = ''; r.approvedOn = ''; r.checkedBy = ''; r.checkedOn = ''; } }); },
+  dropRates(el) { if (confirm('Remove these rates?')) store.updateCompany(co => { co.payRates = (co.payRates || []).filter(r => r.from !== el.dataset.id); }); },
   csv(el, c) {
     const run = find(c.company);
     if (run) downloadText(`Payroll ${run.month}.csv`, toCSV(csvRows(run)), 'text/csv');
@@ -255,7 +270,61 @@ export const changes = {
   },
 };
 
+/** v0.48.0: Paid, by hand: the date, how and the reference. The app never moves money. */
+function paidForm(run, c) {
+  if (run.status !== 'approved') return '';
+  return html`<form data-form="markPaid" class="entry no-print">
+    <label>Paid on <input type="date" name="date" value="${c.today}" required></label>
+    <label>How <select name="method">${options(METHODS.filter(([k]) => k !== 'mobile'), 'bank')}</select></label>
+    <input name="ref" placeholder="Reference (bank or receipt No.)" aria-label="Reference">
+    <button class="btn primary">Mark as paid</button></form>`;
+}
+
+/** v0.48.0: tax and pension rates, each from a month on; a run takes those of its month. */
+function ratesBox(c) {
+  const list = [...(c.company.payRates || [])].sort((a, b) => b.from.localeCompare(a.from));
+  return html`<section class="card">
+    <h2>Tax and pension rates</h2>
+    <p class="muted">Entered once, each from a month on, never fixed in the app. Tax bands: one per line, "up to, rate %, deduction" on the monthly gross (for example "600, 0, 0" then "1650, 10, 60" … then "above, 35, 1500").</p>
+    ${list.length ? html`<table class="table compact"><thead><tr><th>From</th><th class="r">Pension, employee</th><th class="r">Pension, employer</th><th>Tax bands</th><th></th></tr></thead>
+      <tbody>${list.map(r => html`<tr><td>${monthLabel(r.from)}</td><td class="r">${r.pensionEmployee}%</td><td class="r">${r.pensionEmployer}%</td>
+        <td class="small">${(r.bands || []).length ? (r.bands || []).map(b => `${b.upTo ?? 'above'}: ${b.rate}%${b.deduct ? ` − ${b.deduct}` : ''}`).join(' · ') : 'none (typed per person)'}</td>
+        <td><button type="button" class="btn ghost small" data-act="dropRates" data-id="${r.from}">Remove</button></td></tr>`)}</tbody></table>` : html`<p class="muted">No rates yet.</p>`}
+    <form data-form="payRates" class="grid2">
+      <label>From the month <input type="month" name="from" value="${todayMonth(c.today)}" required></label>
+      <label>Pension, employee % <input type="number" name="pensionEmployee" min="0" step="any" value="${list[0]?.pensionEmployee ?? 7}"></label>
+      <label>Pension, employer % <input type="number" name="pensionEmployer" min="0" step="any" value="${list[0]?.pensionEmployer ?? 11}"></label>
+      <label>Income tax bands <textarea name="bands" rows="4" placeholder="600, 0, 0">${bandsText(list[0]?.bands)}</textarea></label>
+      <button class="btn">Save the rates</button></form>
+    <h2>Drafts and reports</h2>
+    <p class="muted">The server makes the payroll Draft on the payroll day at 06:00 (this month: ${payrollDay(todayMonth(c.today), +store.global?.payrollDay || 0)}), and each crew pay sheet the morning after its period ends. After approval the report goes to Google Drive and to the report list.</p>
+    <form data-form="payAuto" class="grid2">
+      <label>Payroll day (1 to 31; empty = last working day) <input type="number" name="day" min="1" max="31" value="${store.global?.payrollDay || ''}"></label>
+      <label>Report list (emails, comma between) <input name="to" value="${store.global?.payReportTo || ''}" placeholder="${reportList({}, store.user?.email || '').join(', ') || 'the Admin'}"></label>
+      <button class="btn">Save</button></form>
+  </section>`;
+}
+
 export const submits = {
+  payAuto(fd) {
+    const day = Math.min(31, Math.max(0, Math.round(+fd.get('day') || 0)));
+    const to = String(fd.get('to') || '').split(/[,;s]+/).filter(x => /@/.test(x)).join(', ');
+    store.updateGlobal(g => { g.payrollDay = day; g.payReportTo = to; });
+    notice = 'Saved.';
+  },
+  markPaid(fd, c) {
+    const run = find(c.company);
+    if (!run || run.status !== 'approved') return false;
+    if (!confirm(`Mark the payroll of ${monthLabel(run.month)} as paid? It can no longer be reopened.`)) return false;
+    store.updateCompany(co => { const r = find(co); r.status = 'paid'; r.paidOn = String(fd.get('date') || c.today); r.paidMethod = String(fd.get('method') || ''); r.paidRef = String(fd.get('ref') || '').trim(); });
+  },
+  payRates(fd) {
+    const from = String(fd.get('from') || '');
+    if (!/^\d{4}-\d{2}$/.test(from)) return false;
+    const r = { from, pensionEmployee: Math.max(0, +fd.get('pensionEmployee') || 0), pensionEmployer: Math.max(0, +fd.get('pensionEmployer') || 0), bands: parseBands(fd.get('bands')), by: store.user?.email || '' };
+    store.updateCompany(co => { co.payRates = [...(co.payRates || []).filter(x => x.from !== from), r]; });
+    notice = `Rates saved from ${monthLabel(from)}.`;
+  },
   newRun(fd, c) {
     const month = String(fd.get('month') || '');
     if (!/^\d{4}-\d{2}$/.test(month)) { notice = 'Choose the month.'; return false; }
@@ -263,8 +332,10 @@ export const submits = {
     if (existing) { notice = `There is already a payroll run for ${monthLabel(month)}. Open it, or delete it first.`; return false; }
     const settings = {};
     for (const k of Object.keys(DEFAULT_SETTINGS)) settings[k] = Math.max(0, +fd.get(k) || 0) || (k.startsWith('pension') ? 0 : DEFAULT_SETTINGS[k]);
+    const rates = ratesFor(c.company.payRates, month);   // v0.48.0: the month's rates win over the form
+    if (rates) { settings.pensionEmployee = rates.pensionEmployee; settings.pensionEmployer = rates.pensionEmployer; settings.bands = rates.bands || []; }
     const run = {
-      id: uid('pr'), month, ...stamp(), status: 'draft', settings, createdOn: c.today, approvedBy: '', approvedOn: '', paidOn: '',
+      id: uid('pr'), month, ...stamp(), status: 'draft', settings, createdOn: c.today, checkedBy: '', approvedBy: '', approvedOn: '', paidOn: '',
       lines: newLines(c.company.staff.filter(p => !onSitePay(p)), month, sheetReports(c)),
     };
     const left = c.company.staff.filter(onSitePay).length;

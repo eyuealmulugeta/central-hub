@@ -745,9 +745,8 @@ export function render(c) {
           ${co.logo ? html`<div class="split"><img class="logo-preview" src="${co.logo}" alt="Company logo"><button class="btn ghost small" data-act="removeLogo">Remove logo</button></div>` : ''}
         </div>`)}
 
-    ${panel('monthly', 'Paid monthly', monthlyRolesOf(g).join(', ') || 'Nobody: everyone is paid per day', () => html`
-        <p class="muted">These positions are paid by the month; everyone else on site is paid per day. Attendance is taken for everyone: for the monthly-paid it is a record and does not change the pay. An HR agreement that says "per day" or "per month" wins. A monthly position with no monthly wage in its agreement is flagged on Payments, never paid per day.</p>
-        ${positionGroups().filter(([grp]) => grp !== 'Old').map(([grp, list]) => html`<h4 class="tick-group">${grp}</h4>${pills(list.map(r => html`<label class="check pill"><input type="checkbox" data-chg="monthlyRole" data-v="${r}" ${monthlyRolesOf(g).includes(r) ? 'checked' : ''}> ${r}</label>`))}`)}`)}
+    ${panel('monthly', 'Paid monthly', 'By tier: Tiers 1, 2, 3 and 5 monthly (Payroll), Tier 4 by the day (Payments)', () => html`
+        <p class="muted">Since v0.48.0 the tier of a person's positions decides how they are paid; set positions in the Manpower Directory.</p>`)}
     </div>`;
 }
 

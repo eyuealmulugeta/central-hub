@@ -8,6 +8,8 @@ import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
 import { dayRateOf, setDayRate } from '../engine/people.js';
 import { store } from '../core/store.js';
 import { periodFor, shiftPeriod, waitingNote } from '../engine/attendance.js';
+import { checkOf, mayApprove as stepMay, crewReport } from '../engine/paysteps.js';
+import { sendPayReport } from './payreport.js';
 import { payLines, monthlyRolesOf, newRun, lockLines, runStatus, STATUS_LABEL, METHODS, methodLabel, paymentFor, csvRows, runId, personSummary } from '../engine/crewpay.js';
 import { onSite } from '../sync/fieldreport.js';
 import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
@@ -125,7 +127,7 @@ export function render(c) {
       <b class="att-period">${p.label}</b>
       <button class="btn small" data-act="shift" data-n="1" aria-label="Next period" ${p.to >= c.today ? 'disabled' : ''}>›</button>
       ${at ? html`<button class="btn small ghost" data-act="today">This period</button>` : ''}
-      ${chip(STATUS_LABEL[status], STATUS_TONE[status])}
+      ${chip(STATUS_LABEL[draft && checkOf(c.ws, p.from) ? 'checked' : status], STATUS_TONE[status])}${draft ? html` <span class="muted small">${checkOf(c.ws, p.from) ? `Days and hours checked by ${checkOf(c.ws, p.from).byName || checkOf(c.ws, p.from).by}` : 'Waiting for the Site Engineer to check the days and hours (Attendance sheet)'}</span>` : ''}
       ${can && draft && mayApprove() ? html`<button class="btn" data-act="approve" title="Locks what each person earned in this period">Approve</button>` : ''}
       ${store.isAdmin && !draft ? html`<button class="btn ghost" data-act="reopen" title="Back to draft: what was earned is worked out from the sheet again">Reopen</button>` : ''}
       ${can && owing.length ? html`<button class="btn primary" data-act="openPayAll">Pay all outstanding</button>` : ''}
@@ -243,9 +245,15 @@ export const actions = {
   approve(el, c) {
     const p = periodOf(c);
     const { lines } = payLines(ctxOf(c), p);
+    const ck = checkOf(c.ws, p.from), may = stepMay({ checkedBy: ck?.by, me: store.user?.email || 'local', admin: store.isAdmin });
+    if (!may.ok) { notice = may.why; return; }   // v0.48.0: the Site Engineer checks the days and hours first
+    if (may.self && !confirm('You checked these days yourself. Approve anyway as the Admin? It is recorded.')) return;
     if (!confirm(`Approve ${p.label}? What each person earned is locked; payments can still be recorded.`)) return;
-    store.update(ws => { const run = ensureRun(ws, p); run.lines = lockLines(run, lines); run.status = 'approved'; run.approvedBy = store.user?.email || ''; run.approvedAt = new Date().toISOString(); });
+    store.update(ws => { const run = ensureRun(ws, p); run.lines = lockLines(run, lines); run.status = 'approved'; run.approvedBy = store.user?.email || ''; run.approvedAt = new Date().toISOString(); run.checkedBy = ck.by; run.selfApproved = !!may.self; });
     notice = `${p.label} approved.`;
+    // v0.48.1: the weekly crew pay report, with the labour cost to date against the budget
+    const labourToDate = (store.ws.payruns || []).filter(r => r.status !== 'draft').reduce((s, r) => s + Object.values(r.lines || {}).reduce((t, l) => t + (+l.earned || 0), 0), 0);
+    sendPayReport({ name: `${p.from.slice(0, 7)} ${c.project.name} Crew pay ${p.from}`, csv: crewReport({ project: c.project, period: p, lines, labourToDate, budget: +c.project.budget || 0 }), subject: `Crew pay of ${c.project.name}, ${p.label}, approved` });
   },
   reopen(el, c) {
     const p = periodOf(c);

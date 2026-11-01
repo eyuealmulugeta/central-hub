@@ -3,6 +3,7 @@
 // next-day plan and requests. Reports arrive from Field Report (and wait for
 // the Office to confirm their progress) or are entered here directly.
 
+import { normRole } from '../engine/positions.js';
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
 import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds } from '../sync/fieldreport.js';
@@ -114,7 +115,7 @@ const REPLY_DONE = {
 const reportable = c => c.sched.rows.filter(r => r.progress < 100 && (r.actualStart || r.es <= toDay(c.today) + LOOKAHEAD_DAYS));
 const underReview = ws => ws.reports.find(r => r.id === reviewing && r.review === 'pending') || null;
 // trades with a day rate (read only by those who see pay), the team's roles, and any the field report used
-const tradeList = (ws, cur) => [...new Set([...Object.keys(ws.laborRates || {}), ...ws.team.map(m => m.role).filter(Boolean), ...(cur?.manpower || []).map(m => m.trade)])];
+const tradeList = (ws, cur) => [...new Set([...Object.keys(ws.laborRates || {}), ...ws.team.map(m => normRole(m.role)).filter(Boolean), ...(cur?.manpower || []).map(m => m.trade)])];   // v0.39.0: Foreman, not Steel structure foreman
 // equipment named in earlier reports, most recent first, offered again as ready rows
 const knownEquipment = ws => [...new Set([...ws.reports].sort((a, b) => b.date.localeCompare(a.date))
   .flatMap(r => (r.field?.equipment || []).map(e => e.name)))].filter(Boolean);

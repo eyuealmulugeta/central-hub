@@ -6,7 +6,7 @@
 import { statusOf, activitiesOf, cleanActivities, cleanText, cleanLink, cleanEmail, LIMITS } from '../engine/deployment.js';
 import { targetFor } from '../engine/calendar.js';
 import { toDay, fromDay } from '../core/util.js';
-import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
+import { SITE_DEPARTMENTS, normDepartment, normRole } from '../engine/positions.js';
 import { fieldProjectOf, problemsOf, differences } from '../engine/fieldproject.js';
 import { fixesForField, siteFixes } from '../engine/attendance.js';
 
@@ -317,9 +317,9 @@ export function buildSetup({ project, ws, sched, bill, people = [], company = {}
     })),
     // a milestone the site can report as reached; the ones that release a payment are marked
     milestones: open.filter(r => r.milestone).map(r => ({ id: r.id, name: r.name, payment: triggers.has(r.id) })),
-    crew: site.map(m => ({ id: m.id, name: m.name, role: m.role || '' })),
+    crew: site.map(m => ({ id: m.id, name: m.name, role: normRole(m.role) })),   // v0.39.0: merged positions as the one they became (Foreman)
     // the roster of this project: only people currently on it (a team member can be switched off without being deleted)
-    staff: site.filter(m => m.active !== false).map(m => ({ id: m.id, name: m.name, trade: m.role || '', active: true, level: m.level || 'crew' })),
+    staff: site.filter(m => m.active !== false).map(m => ({ id: m.id, name: m.name, trade: normRole(m.role), active: true, level: m.level || 'crew' })),
     // the calendar and the target (finish) date: start + planned working days, skipping every non-working day
     ...(({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }) => ({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }))(targetFor(project, ws, today)),
     // the people whose email the Admin linked to this project: the only ones who should see it in Field Report

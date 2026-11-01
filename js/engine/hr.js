@@ -5,6 +5,7 @@ import { toDay, sum } from '../core/util.js';
 import { convert } from './pricing.js';
 import { ratingsOf } from './evaluation.js';
 import { normDepartment } from './positions.js';
+import { needsAgreement } from './manpower.js';
 
 export const AGREEMENT_TYPES = [
   ['permanent', 'Permanent employment'], ['fixed', 'Fixed term'], ['probation', 'Probation'],
@@ -32,6 +33,7 @@ export function staffAlerts(person, today) {
   };
   for (const d of person.documents || []) check(d.kind, d.expiry);
   const a = person.agreement || {};
+  if (!needsAgreement(person)) return out.sort((x, y) => x.days - y.days);   // v0.47.0: Tier 4, paid by the day, has no agreement
   if (a.type) {
     check('Agreement', a.end);
     if (a.probationEnd) {

@@ -7,11 +7,11 @@ import { store } from '../core/store.js';
 import { html, options, chip } from './dom.js';
 import { uid, money } from '../core/util.js';
 import { stamp } from '../core/division.js';
-import { positionGroups, ROLES, normRole } from '../engine/positions.js';
+import { positionGroups, ROLES, normRole, setExtraPositions } from '../engine/positions.js';
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
 import { ratingOf } from '../engine/hr.js';
-import { tierOfTitle, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
+import { tierOfTitle, tierOfPerson, positionsOf, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
 import { syncPages, sendRules } from './prices.js';
 import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
@@ -58,7 +58,7 @@ const photo = p => (p.photo ? html`<img class="avatar" src="${p.photo}" alt="">`
 const PER = { month: '/ month', day: '/ day', hour: '/ hour' };
 
 function row(p, i, c, edit) {
-  const tier = tierOfTitle(p.title), pay = payOf(p), r = ratingOf(p, c.company.evaluations || []);
+  const tier = tierOfPerson(p), more = positionsOf(p).slice(1), pay = payOf(p), r = ratingOf(p, c.company.evaluations || []);
   const proj = projectOfRow(p), names = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
   const dis = edit ? '' : 'disabled';
   return html`<tr class="${p.status === 'left' ? 'muted' : ''}">
@@ -68,6 +68,8 @@ function row(p, i, c, edit) {
     <td>${p.email || accountOf(p) || html`<span class="muted">—</span>`}</td>
     <td class="nowrap">${p.phone || html`<span class="muted">—</span>`}</td>
     <td><select data-chg="mpTitle" data-id="${p.id}" aria-label="Position of ${p.name}" ${dis}>${chooseGroups(positionGroups(p.title), normRole(p.title), 'No position')}</select>
+      ${more.map(w => html`<span class="chip">${w}${edit ? html` <button type="button" class="mini" data-act="mpDropPos" data-id="${p.id}" data-w="${w}" aria-label="Remove ${w} from ${p.name}">✕</button>` : ''}</span>`)}
+      ${edit && p.title ? html`<select data-chg="mpAddPos" data-id="${p.id}" aria-label="Another position for ${p.name}">${chooseGroups(positionGroups(), '', '+ Another position')}</select>` : ''}
       ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}</td>
     <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
     <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
@@ -138,6 +140,30 @@ function newCrew(c) {
     ${store.cloud && fieldusers.isBusy() ? html`<p class="muted">Asking Field Report for the crew sent from site…</p>` : ''}`;
 }
 
+/**
+ * v0.47.0 "+ Add a position": a name not in the list is added to it with the tier the Admin or GM gives
+ * (company.extraPositions). Returns the position, '' for none, or null when nothing is to be done.
+ */
+function known(value) {
+  if (value === null || value === '' || tierOfTitle(value)) return value;
+  if (!(store.isAdmin || (store.profile?.ranks || []).includes('general_manager'))) { tell('Only the Admin or the General Manager adds a position.'); return null; }
+  const t = Number((typeof prompt === 'function' ? prompt(`"${value}" is a new position. Its tier (1 to 5)?\n1 Owner, GM · 2 Project Engineer, Accountant, HR · 3 Site Engineer, Foreman, office · 4 daily crew · 5 Security`) : '') || 0);
+  if (![1, 2, 3, 4, 5].includes(t)) { tell('Not added: the tier must be 1, 2, 3, 4 or 5.'); return null; }
+  store.updateCompany(co => { co.extraPositions = [...(co.extraPositions || []).filter(x => x.name !== value), { name: value, tier: t }]; });
+  setExtraPositions([...(store.company?.extraPositions || []), { name: value, tier: t }]);
+  tell(`✓ "${value}" added to the positions, ${TIER_WORDS[t]}.`);
+  return value;
+}
+
+/** v0.45.1, v0.47.0: the sign-in follows all the person's positions: its ranks (highest tier first), pages and access rules. */
+function signIn(id, c) {
+  const p = find(c, id);
+  const u = p && accountOf(p) && store.users.find(x => x.email === accountOf(p));
+  if (!u) return;
+  const patch = rankPatchFor(positionsOf(p));
+  store.setUser(u.email, patch); syncPages([{ ...u, ...patch }]); sendRules();
+}
+
 const find = (c, id) => (c.company.staff || []).find(p => p.id === id);
 const ask = text => confirm(`${text}\n\nPress OK to apply, Cancel to leave it as it is.`);
 
@@ -170,6 +196,12 @@ export const actions = {
   mpForms() { crewforms.openReview(); location.hash = '#crewforms'; },
   mpFromTeam: (...a) => hrActions.fromTeam(...a),
   fuCrew: (...a) => fieldusers.actions.fuCrew(...a),
+  mpDropPos(el, c) {
+    const p = find(c, el.dataset.id), w = el.dataset.w;
+    if (!p || !ask(`Take the position ${w} away from ${p.name}?`)) return;
+    store.updateCompany(co => { const x = co.staff.find(y => y.id === p.id); x.titles = positionsOf(x).slice(1).filter(v => v !== w); });
+    signIn(p.id, c);
+  },
   mpEdit(el) { focusOn(el.dataset.id, 'work'); location.hash = '#hr'; },
   mpData(el) { focusOn(el.dataset.id, 'private'); location.hash = '#hr'; },
   mpRemove(el, c) {
@@ -186,7 +218,7 @@ export const changes = {
   mpFilt(el) { filt[el.dataset.f] = el.value; },
   mpTitle(el, c) {
     const p = find(c, el.dataset.id);
-    const value = chosenValue(el, 'position');
+    const value = known(chosenValue(el, 'position'));
     if (!p || value === null || value === normRole(p.title)) { store.notify(); return; }
     const t = tierOfTitle(value);
     if (!ask(`Make ${p.name} ${value || 'no position'}${t ? ` (${TIER_WORDS[t]})` : ''}? It was ${p.title || 'no position'}.`)) { store.notify(); return; }
@@ -194,15 +226,26 @@ export const changes = {
     store.updateCompany(co => {
       const x = co.staff.find(y => y.id === p.id);
       x.title = value;
+      x.titles = (x.titles || []).map(normRole).filter(w => w && w !== value);   // the others stay
       x.assignments = (x.assignments || []).map(y => (y.active !== false ? { ...y, role: value } : y));
       a = x.assignments;
     });
     // v0.45.1: the sign-in follows the position: its title (rank), and so its pages and access rules
     const u = accountOf(p) && store.users.find(x => x.email === accountOf(p));
-    if (u) { const patch = rankPatchFor(value); store.setUser(u.email, patch); syncPages([{ ...u, ...patch }]); sendRules(); }
+    signIn(p.id, c);
     const live = a.filter(y => y.active !== false);
     for (const y of live) store.updateOther(y.projectId, ws => assign(ws, { ...p, title: value }, y));
-    if (tableOf({ title: value }) !== table) tell(`✓ ${p.name} is now in the ${table === 'crew' ? 'Staff' : 'Crew'} table.`);
+    if (tableOf(find(c, p.id) || {}) !== table) tell(`✓ ${p.name} is now in the ${table === 'crew' ? 'Staff' : 'Crew'} table.`);
+  },
+  /** v0.47.0: one more position; the highest tier of all counts. */
+  mpAddPos(el, c) {
+    const p = find(c, el.dataset.id);
+    const value = known(chosenValue(el, 'position'));
+    if (!p || !value || positionsOf(p).includes(value)) { store.notify(); return; }
+    const t = tierOfTitle(value);
+    if (!ask(`Give ${p.name} the position ${value}${t ? ` (${TIER_WORDS[t]})` : ''} as well? Main position stays ${p.title}.`)) { store.notify(); return; }
+    store.updateCompany(co => { const x = co.staff.find(y => y.id === p.id); x.titles = [...positionsOf(x).slice(1), value]; });
+    signIn(p.id, c);
   },
   mpProject(el, c) {
     const p = find(c, el.dataset.id);

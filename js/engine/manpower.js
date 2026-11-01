@@ -2,24 +2,22 @@
 // 1, 2, 3 and 5 (paid monthly), crew is Tier 4 (paid by the day). The tier comes from the person's position, by the
 // owner's Excel positions sheet (the Shared prompt's <tiers>). Pure functions over the staff records.
 
-import { normRole } from './positions.js';
+import { normRole, tierOfPosition } from './positions.js';
 import { activeProjects, accountOf } from './people.js';
 import { TITLES, titlePatch } from './titles.js';
 
-const TIER_LIST = [
-  [1, ['Owner', 'General Manager', 'CEO', 'Board member']],
-  [2, ['Project Engineer', 'Project Coordinator', 'Coordinator', 'Chief Engineer', 'Accountant', 'HR', 'HR/Admin Assistant', 'HSE Officer']],
-  [3, ['Site Engineer', 'Office Engineer', 'Architect', 'Draft person', 'Quantity Surveyor (QS)', 'QS', 'Procurement Manager', 'Procurement', 'Logistics Coordinator', 'Logistics', 'Foreman']],
-  [4, ['Technician', 'Welder', 'Carpenter', 'Mason', 'Bar bender', 'Tiler', 'Plasterer', 'Painter', 'Plumber', 'Electrician', 'Skilled Labourer', 'Semi-skilled labor', 'Labourer', 'Daily labor', 'Daily labourer']],
-  [5, ['Site Guard', 'Security', 'Guard']],
-];
-const TIER_OF = new Map(TIER_LIST.flatMap(([t, list]) => list.map(w => [w.toLowerCase(), t])));
 export const TIER_WORDS = { 1: 'Tier 1', 2: 'Tier 2', 3: 'Tier 3', 4: 'Tier 4', 5: 'Tier 5' };
 
 /** The tier of a position, by the Excel sheet; null for a position it does not name. */
-export const tierOfTitle = title => TIER_OF.get(normRole(title).toLowerCase()) ?? null;
+export const tierOfTitle = title => tierOfPosition(title);
+/** v0.47.0: a person's positions, the main one (title) first, each once. */
+export const positionsOf = person => [...new Set([person?.title, ...(person?.titles || [])].map(normRole).filter(Boolean))];
+/** v0.47.0: a person's tier: the highest (lowest number) of their positions; null when none has a tier. */
+export const tierOfPerson = person => { const t = positionsOf(person).map(tierOfPosition).filter(Boolean); return t.length ? Math.min(...t) : null; };
 /** Which table a person is in: crew (Tier 4) or staff (everybody else, a person with no position too). */
-export const tableOf = person => (tierOfTitle(person?.title) === 4 ? 'crew' : 'staff');
+export const tableOf = person => (tierOfPerson(person) === 4 ? 'crew' : 'staff');
+/** v0.47.0: agreements are for Tiers 1, 2, 3 and 5; Tier 4 is paid by the day with none. */
+export const needsAgreement = person => tierOfPerson(person) !== 4;
 
 /** Salary or wage as the directory shows it: the agreement's pay, else (crew) the day rate on an active project. */
 export function payOf(person) {
@@ -44,11 +42,11 @@ export function directoryRows(staff, table, f = {}) {
   const status = f.status || 'active';
   return (staff || []).filter(p => p.division !== 'trading' && tableOf(p) === table
     && (status === 'all' || (status === 'left' ? p.status === 'left' : p.status !== 'left'))
-    && (!f.position || normRole(p.title) === f.position)
-    && (!f.tier || String(tierOfTitle(p.title) ?? '') === String(f.tier))
+    && (!f.position || positionsOf(p).includes(f.position))
+    && (!f.tier || String(tierOfPerson(p) ?? '') === String(f.tier))
     && (!f.project || activeProjects(p).includes(f.project))
-    && (!text || [p.name, p.title, p.phone, p.email, p.accountEmail].some(v => String(v || '').toLowerCase().includes(text))))
-    .sort((a, b) => (tierOfTitle(a.title) ?? 9) - (tierOfTitle(b.title) ?? 9) || String(a.name || '').localeCompare(String(b.name || '')));
+    && (!text || [p.name, ...positionsOf(p), p.phone, p.email, p.accountEmail].some(v => String(v || '').toLowerCase().includes(text))))
+    .sort((a, b) => (tierOfPerson(a) ?? 9) - (tierOfPerson(b) ?? 9) || String(a.name || '').localeCompare(String(b.name || '')));
 }
 
 /**
@@ -69,10 +67,15 @@ export function personByEmail(staff, email) {
   return (staff || []).find(p => accountOf(p) === m) || (staff || []).find(p => String(p.email || '').trim().toLowerCase() === m) || null;
 }
 
-/** v0.45.1: what a directory position sets on the person's sign-in: the matching title (its rank), else the words only. */
-export function rankPatchFor(position) {
-  const key = TITLES.find(t => t[1] === normRole(position))?.[0];
-  return key ? titlePatch(key) : { ranks: [], title: normRole(position) };
+/**
+ * What a person's positions set on their sign-in: the ranks of those that are titles, highest tier first (the first
+ * rank sets the starting pages), and the main position's words. A string is one position. (v0.45.1, v0.47.0)
+ */
+export function rankPatchFor(positions) {
+  const list = (Array.isArray(positions) ? positions : [positions]).map(normRole).filter(Boolean);
+  const keys = list.map(w => TITLES.find(t => t[1] === w)).filter(Boolean).sort((a, b) => a[3] - b[3]).map(t => t[0]);
+  if (keys.length === 1 && list.length === 1) return titlePatch(keys[0]);
+  return { ranks: [...new Set(keys)], title: list[0] || '' };
 }
 
 /** Who added a person and when, for the directory's "Added by" column. */

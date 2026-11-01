@@ -10,7 +10,7 @@
 // A rater's tier comes from their title (users/<email>.ranks); the tier of a team member is the one
 // chosen for them (`level`, 't2' to 't5'), else the one of their job position.
 
-import { normRole } from './positions.js';
+import { normRole, tierOfPosition } from './positions.js';
 import { sum } from '../core/util.js';
 import { TITLES } from './titles.js';
 
@@ -19,13 +19,6 @@ export const OWNER_RANKS = ['general_manager', 'project_manager'];
 /** The tier of the person being rated, kept on each team member (`level`). Tier 1 is never rated. */
 export const LEVELS = [['t1', 'Tier 1 · Owners and General Manager (not rated)'], ['t2', 'Tier 2 · Project Engineer and heads'], ['t3', 'Tier 3 · Site Engineer, QS, procurement, logistics'],
   ['t4', 'Tier 4 · Technicians, foremen, skilled labour'], ['t5', 'Tier 5 · Daily labourers, site guards']];
-/** Job positions by tier, for a member whose tier was never chosen. Anything else is tier 4. */
-const ROLE_TIERS = {
-  t1: ['General Manager', 'Owner'],
-  t2: ['Project Engineer', 'Project Manager', 'Operations Lead', 'Chief Engineer', 'Accountant', 'HSE Officer'],   // Operations Lead: records from before v0.24.0
-  t3: ['Site Engineer', 'Architect', 'Site Architect', 'QS', 'Procurement Manager', 'Logistics Coordinator', 'Quantity Surveyor (QS)', 'Office Engineer', 'Coordinator'],
-  t5: ['Daily labor', 'Labourer', 'Site Guard'],
-};
 /** The levels of before the tiers. */
 const OLD_LEVELS = { project_manager: 't2', site_engineer: 't3' };
 
@@ -36,11 +29,8 @@ export const RATES = { 1: ['t2', 't3', 't4', 't5'], 2: ['t3'], 3: ['t4'], 4: ['t
 
 export const rankLabel = id => TITLES.find(([k]) => k === id)?.[1] || id;
 export const levelLabel = id => LEVELS.find(([k]) => k === id)?.[1] || LEVELS[3][1];
-export const tierOfRole = role => {
-  const r = normRole(role).toLowerCase();
-  const hit = Object.entries(ROLE_TIERS).find(([, list]) => list.some(x => x.toLowerCase() === r));
-  return hit ? hit[0] : 't4';
-};
+/** The tier of a member whose tier was never chosen: by the position list (v0.47.0); anything else is tier 4. */
+export const tierOfRole = role => { const t = tierOfPosition(role); return t ? `t${t}` : 't4'; };
 export const levelOf = member => (LEVELS.some(([k]) => k === member?.level) ? member.level : OLD_LEVELS[member?.level] || tierOfRole(member?.role || member?.title));
 
 /** The rater's tier: the highest of their titles' (1 is highest); 0 when none rates anybody. */

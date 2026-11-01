@@ -5,21 +5,43 @@
 
 import { NATIONALITY } from './docread.js';
 
-export const ROLE_GROUPS = [
-  ['Management', ['General Manager', 'Project Engineer', 'Chief Engineer', 'Site Engineer']],
-  ['Supervision', ['Foreman', 'HSE Officer']],
-  ['Technicians', ['Technician', 'Welder', 'Mason', 'Electrician', 'Plumber']],
-  ['Labour', ['Skilled Labourer', 'Semi-skilled labor', 'Labourer', 'Daily labor', 'Site Guard']],
-  ['Office', ['Accountant', 'Quantity Surveyor (QS)', 'Procurement Manager', 'Logistics Coordinator', 'Office Engineer', 'Architect', 'Coordinator', 'HR/Admin Assistant']],
+// v0.47.0 (Phase B3): the owner's Excel positions sheet, by tier; Chief Engineer, HSE Officer, Welder and the labourers
+// are kept with a tier (owner, 1 Nov 2026). Positions the Admin or GM adds ("+ Add a position") join their tier.
+const BASE_GROUPS = [
+  ['Tier 1', ['Owner', 'General Manager', 'CEO', 'Board member']],
+  ['Tier 2', ['Project Engineer', 'Project Coordinator', 'Chief Engineer', 'Accountant', 'HR', 'HSE Officer']],
+  ['Tier 3', ['Site Engineer', 'Office Engineer', 'Architect', 'Draft person', 'QS', 'Procurement', 'Logistics', 'Foreman']],
+  ['Tier 4', ['Technician', 'Welder', 'Carpenter', 'Mason', 'Bar bender', 'Tiler', 'Plasterer', 'Painter', 'Plumber', 'Electrician', 'Skilled Labourer', 'Semi-skilled labor', 'Labourer', 'Daily labourer']],
+  ['Tier 5', ['Security']],
 ];
-export const ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
+let EXTRA = [];   // [{ name, tier }] from company.extraPositions
+/** v0.47.0: the positions added by the Admin or GM (company.extraPositions), kept in their tiers. */
+export function setExtraPositions(list) {
+  const base = new Set(BASE_GROUPS.flatMap(([, l]) => l.map(x => x.toLowerCase())));
+  EXTRA = (Array.isArray(list) ? list : []).filter(x => x && String(x.name || '').trim() && [1, 2, 3, 4, 5].includes(+x.tier) && !base.has(String(x.name).trim().toLowerCase()))
+    .map(x => ({ name: String(x.name).trim(), tier: +x.tier }));
+  ROLE_GROUPS = BASE_GROUPS.map(([g, l], i) => [g, [...l, ...EXTRA.filter(x => x.tier === i + 1).map(x => x.name)]]);
+  ROLES = ROLE_GROUPS.flatMap(([, l]) => l);
+}
+export let ROLE_GROUPS = BASE_GROUPS;
+export let ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
+/** The tier (1-5) of a position, by the list; null for a position it does not have. */
+export const tierOfPosition = r => {
+  const w = normRole(r).toLowerCase();
+  const i = ROLE_GROUPS.findIndex(([, l]) => l.some(x => x.toLowerCase() === w));
+  return i < 0 ? null : i + 1;
+};
 /** v0.24.0: positions merged or renamed by the owner, and the one each became. A record is read as the new one. Operations Lead is gone (shown as old). */
 const OLD_ROLES = {
   'container house technician': 'Technician', 'general foreman': 'Foreman', 'steel structure foreman': 'Foreman',
-  'daily labourer': 'Daily labor', 'site architect': 'Architect',   // v0.29.0: an office position
+  'daily labor': 'Daily labourer', 'site architect': 'Architect',   // v0.29.0: an office position
   'semi-skilled labourer': 'Semi-skilled labor',
+  'site guard': 'Security', 'procurement manager': 'Procurement', 'logistics coordinator': 'Logistics', 'quantity surveyor (qs)': 'QS', 'hr/admin assistant': 'HR', 'coordinator': 'Project Coordinator', 'site technician': 'Technician', 'welder / fitter': 'Welder',   // v0.47.0: the Excel words
 };
-export const normRole = r => OLD_ROLES[String(r || '').trim().toLowerCase()] || String(r || '').trim();
+export const normRole = r => {
+  const w = String(r || '').trim(), k = w.toLowerCase();
+  return OLD_ROLES[k] || ROLES.find(x => x.toLowerCase() === k) || w;   // v0.47.0: a listed position in its own spelling
+};
 
 export const DEPARTMENTS = ['Executive & General Management', 'Project Management & Site Supervision', 'Engineering & Technical Services',
   'Procurement, Supply Chain & Logistics', 'Finance, Accounting & Administration', 'Commercial, Sales & International Trade'];

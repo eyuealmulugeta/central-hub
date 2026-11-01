@@ -29,7 +29,7 @@ import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
 import { personSummary, methodLabel } from '../engine/crewpay.js';
-import { addedStamp } from '../engine/manpower.js';
+import { addedStamp, needsAgreement } from '../engine/manpower.js';
 
 let selected = null;
 let tab = 'work';       // work | private | pay | papers
@@ -336,7 +336,7 @@ function form({ p, alerts, monthly }, c) {
 
     pay: html`
       <div class="grid2">
-        <label>Agreement type <select data-chg="agreement" data-f="type" data-fk="ag-type"><option value="">None recorded</option>${options(AGREEMENT_TYPES, a.type || null)}</select></label>
+        ${needsAgreement(p) ? html`<label>Agreement type <select data-chg="agreement" data-f="type" data-fk="ag-type"><option value="">None recorded</option>${options(AGREEMENT_TYPES, a.type || null)}</select></label>` : html`<p class="muted">Tier 4: paid by the day, no agreement.</p>`}
         ${agree('Signed on', 'signedOn', 'ag-signed', 'date')}
         ${agree('Starts', 'start', 'ag-start', 'date')}
         ${agree('Ends (leave empty if open-ended)', 'end', 'ag-end', 'date')}

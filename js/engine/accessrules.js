@@ -37,7 +37,7 @@ export const FEATURES = [
 export const feature = key => FEATURES.find(f => f.key === key);
 
 /** The tiers, the same five as the evaluations. */
-export const TIERS = [[1, 'Tier 1 · Owners and General Manager'], [2, 'Tier 2 · Project Engineer, Accountant, HSE'], [3, 'Tier 3 · Site Engineer, QS, office engineers'], [4, 'Tier 4 · Foremen, technicians, assistants'], [5, 'Tier 5 · Daily labour, guards']];
+export const TIERS = [[1, 'Tier 1 · Owner, General Manager, CEO, Board'], [2, 'Tier 2 · Project Engineer, Coordinator, Accountant, HR, HSE'], [3, 'Tier 3 · Site Engineer, office engineers, QS, Procurement, Logistics, Foreman'], [4, 'Tier 4 · Technicians and labour (daily)'], [5, 'Tier 5 · Security (monthly)']];
 
 /** Positions: the titles, and a place for people with no title yet (by their sign-in role). */
 export const POSITIONS = [...TITLES.map(([key, words, group, tier]) => ({ key, words, group, tier })),
@@ -68,6 +68,8 @@ const START = {
   procurement_manager: { fr_requests: 'S', ch_schedule: 'S', ch_eval: 'D', ...ALL_TALK },
   logistics_coordinator: { fr_requests: 'S', ch_schedule: 'S', ch_eval: 'D', ...ALL_TALK },
 };
+for (const k of ['owner', 'ceo', 'board_member']) START[k] ||= START.general_manager;   // v0.47.0: Tier 1 starts like the GM
+START.draft_person ||= START.architect;
 for (const k of OFFICE) START[k] ||= { ch_schedule: 'S', ...(k === '_office' ? {} : { ch_eval: 'D' }), ...ALL_TALK };
 export const startOf = (pos, feat) => (START[pos] || {})[feat] || '';
 

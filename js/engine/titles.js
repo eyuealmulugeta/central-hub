@@ -5,22 +5,27 @@
 // are on one project at a time. The key project_manager is kept for the Project Engineer: it is the rank of the chain.
 
 // [key, words, group, evaluation tier]: the tier says whom the holder rates (js/engine/evaluation.js, myTier() in firestore.rules)
+// v0.47.0: tiers by the owner's Excel sheet (Foreman Tier 3, HR Tier 2); new keys owner, ceo, board_member, draft_person.
 export const TITLES = [
+  ['owner', 'Owner', 'Management', 1],
   ['general_manager', 'General Manager', 'Management', 1],
+  ['ceo', 'CEO', 'Management', 1],
+  ['board_member', 'Board member', 'Management', 1],
   ['project_manager', 'Project Engineer', 'Management', 2],
+  ['coordinator', 'Project Coordinator', 'Office', 2],
   ['chief_engineer', 'Chief Engineer', 'Management', 2],
-  ['site_engineer', 'Site Engineer', 'Management', 3],
-  ['hse_officer', 'HSE Officer', 'Site', 2],
-  ['foreman', 'Foreman', 'Site', 4],
-  ['technician', 'Technician', 'Site', 4],
   ['accountant', 'Accountant', 'Office', 2],
-  ['qs', 'Quantity Surveyor (QS)', 'Office', 3],
-  ['procurement_manager', 'Procurement Manager', 'Office', 3],
-  ['logistics_coordinator', 'Logistics Coordinator', 'Office', 3],
+  ['hr_assistant', 'HR', 'Office', 2],
+  ['hse_officer', 'HSE Officer', 'Site', 2],
+  ['site_engineer', 'Site Engineer', 'Management', 3],
   ['office_engineer', 'Office Engineer', 'Office', 3],
   ['architect', 'Architect', 'Office', 3],   // v0.29.0
-  ['coordinator', 'Coordinator', 'Office', 3],
-  ['hr_assistant', 'HR/Admin Assistant', 'Office', 4],
+  ['draft_person', 'Draft person', 'Office', 3],
+  ['qs', 'QS', 'Office', 3],
+  ['procurement_manager', 'Procurement', 'Office', 3],
+  ['logistics_coordinator', 'Logistics', 'Office', 3],
+  ['foreman', 'Foreman', 'Site', 3],
+  ['technician', 'Technician', 'Site', 4],
 ];
 export const GROUPS = ['Management', 'Site', 'Office'];
 /** Titles whose holder can be on only one project at a time. */

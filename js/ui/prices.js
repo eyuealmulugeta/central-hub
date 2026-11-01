@@ -761,7 +761,7 @@ export const actions = {
   openPerson(el) { focusPerson(el.dataset.pid, 'projects'); location.hash = '#hr'; },
   ...fieldprojects.actions,
   ...fieldusers.actions,
-  mpTable: (...a) => directory.actions.mpTable(...a), mpAdd: (...a) => directory.actions.mpAdd(...a), mpEdit: (...a) => directory.actions.mpEdit(...a), mpData: (...a) => directory.actions.mpData(...a), mpRemove: (...a) => directory.actions.mpRemove(...a), mpForms: (...a) => directory.actions.mpForms(...a), mpFromTeam: (...a) => directory.actions.mpFromTeam(...a),
+  mpTable: (...a) => directory.actions.mpTable(...a), mpAdd: (...a) => directory.actions.mpAdd(...a), mpEdit: (...a) => directory.actions.mpEdit(...a), mpData: (...a) => directory.actions.mpData(...a), mpRemove: (...a) => directory.actions.mpRemove(...a), mpForms: (...a) => directory.actions.mpForms(...a), mpDropPos: (...a) => directory.actions.mpDropPos(...a), mpFromTeam: (...a) => directory.actions.mpFromTeam(...a),
   dropPack() { pack = null; packNotice = ''; },
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
@@ -907,7 +907,7 @@ export const changes = {
   ...fieldsetup.changes,
   ...fieldprojects.changes,
   ...fieldusers.changes,
-  mpFilt: (...a) => directory.changes.mpFilt(...a), mpTitle: (...a) => directory.changes.mpTitle(...a), mpProject: (...a) => directory.changes.mpProject(...a),
+  mpFilt: (...a) => directory.changes.mpFilt(...a), mpAddPos: (...a) => directory.changes.mpAddPos(...a), mpTitle: (...a) => directory.changes.mpTitle(...a), mpProject: (...a) => directory.changes.mpProject(...a),
   /** Read the chosen file and show what is in it. Nothing is saved here. */
   async pack(el) {
     const file = el.files[0];

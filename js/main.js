@@ -25,6 +25,7 @@ import * as meetings from './ui/meetings.js';
 import * as contactsView from './ui/contacts.js';
 import * as evaluation from './ui/evaluation.js';
 import * as directory from './ui/directory.js';
+import { setExtraPositions } from './engine/positions.js';
 import * as letters from './ui/letters.js';
 import * as requests from './ui/requests.js';
 import * as payroll from './ui/payroll.js';
@@ -335,6 +336,7 @@ function renderSidebar(name, summaries) {
 
 function render() {
   queued = false;
+  setExtraPositions(store.company?.extraPositions);   // v0.47.0: positions added by the Admin or GM
   const name = route();
   const view = VIEWS[name];
   const p = store.project;

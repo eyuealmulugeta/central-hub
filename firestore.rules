@@ -92,10 +92,11 @@ service cloud.firestore {
     // everybody. The tier comes from the title. Keep in step with TITLES in js/engine/titles.js.
     function ranks() { return hasUser() ? user().get('ranks', []) : []; }
     function myTier() {
-      return ranks().hasAny(['general_manager']) ? 1
-        : ranks().hasAny(['project_manager', 'chief_engineer', 'accountant', 'hse_officer']) ? 2
-        : ranks().hasAny(['site_engineer', 'qs', 'procurement_manager', 'logistics_coordinator', 'office_engineer', 'architect', 'coordinator']) ? 3
-        : ranks().hasAny(['technician', 'foreman', 'hr_assistant']) ? 4 : 9;
+      // v0.47.0: the owner's Excel tiers (js/engine/titles.js): Foreman Tier 3, HR and Project Coordinator Tier 2
+      return ranks().hasAny(['general_manager', 'owner', 'ceo', 'board_member']) ? 1
+        : ranks().hasAny(['project_manager', 'chief_engineer', 'accountant', 'hse_officer', 'coordinator', 'hr_assistant']) ? 2
+        : ranks().hasAny(['site_engineer', 'qs', 'procurement_manager', 'logistics_coordinator', 'office_engineer', 'architect', 'draft_person', 'foreman']) ? 3
+        : ranks().hasAny(['technician']) ? 4 : 9;
     }
     function mayRate(level) {
       return (level in ['t2', 't3', 't4', 't5'] && myTier() == 1)

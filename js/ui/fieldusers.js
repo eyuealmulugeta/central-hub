@@ -282,6 +282,7 @@ const person = email => (feed?.people || []).find(p => p.email === email);
 
 export const actions = {
   fuLoad() { return load(true); },
+  fuCompare() { return compareLoad(); },   // v0.44.3: a click (it was wrongly among the changes)
   /** v0.27.0: reject every waiting sign-up request at once; each person gets the email. */
   async fuRejectAll() {
     const wait = signupsWaiting();
@@ -350,7 +351,6 @@ Each person gets an email saying it was not approved, and cannot ask again from 
 
 export const changes = {
   fuRoute(el) { store.setFieldRoute(el.value); },
-  fuCompare() { compareLoad(); },
   fuCrewEdit(el) { const v = el.value.trim(); if (v || el.dataset.f === 'trade') crewEdits[el.dataset.id] = { ...(crewEdits[el.dataset.id] || {}), [el.dataset.f]: v }; },
   fuEdit(el) { edit(el.dataset.e, { [el.dataset.f]: el.value }); },
   fuAll(el) {

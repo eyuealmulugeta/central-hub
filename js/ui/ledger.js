@@ -8,11 +8,12 @@ import { paperHtml } from '../sync/mail.js';
 import { html, options, meter, chip } from './dom.js';
 import { docHead, docSec, docFoot, footText, signoff } from './print.js';
 import { openMail } from './maildialog.js';
+import { bankView, bankActions, bankChanges } from './bank.js';
 
 const LABEL = { labor: 'Labour', material: 'Material', equipment: 'Equipment', subcontract: 'Subcontract', transport: 'Transport', overhead: 'Overhead' };
 
 let only = null;   // 'income' or 'expense' when the menu opened this screen as Income or Expenses
-let view = 'entries';   // entries | statement | summary (v0.22.2: the two print-outs)
+let view = 'entries';   // entries | statement | summary (v0.22.2: the two print-outs) | bank (v0.62.0)
 let from = '', to = '';  // the statement's period; '' = from the first entry / up to today
 let notice = '';
 
@@ -24,8 +25,9 @@ const titleOf = () => (view === 'summary' ? 'Project finance summary' : only ? `
 const refOf = c => docRef({ company: c.global.company, project: c.project, type: view === 'summary' ? 'FIN' : 'LED', key: to || c.today });
 
 export function render(c) {
-  const seg = html`<div class="seg" role="group" aria-label="View">${[['entries', 'Entries'], ['statement', 'Statement'], ['summary', 'Summary']].map(([k, l]) => html`<button class="${view === k ? 'on' : ''}" data-act="view" data-v="${k}">${l}</button>`)}</div>`;
+  const seg = html`<div class="seg" role="group" aria-label="View">${[['entries', 'Entries'], ['statement', 'Statement'], ['summary', 'Summary'], ['bank', 'Bank statement']].map(([k, l]) => html`<button class="${view === k ? 'on' : ''}" data-act="view" data-v="${k}">${l}</button>`)}</div>`;
   if (view === 'entries') return html`<div class="toolbar no-print">${seg}<span class="muted">${notice}</span></div>${entries(c)}`;
+  if (view === 'bank') return html`<div class="toolbar no-print">${seg}</div>${bankView(c)}`;
   return html`
     <div class="toolbar no-print">
       ${seg}
@@ -142,7 +144,7 @@ function entries(c) {
           <tr>
             <td class="nowrap">${fmtDate(r.date)}</td>
             <td>${r.type === 'income' ? chip('Received', 'ok') : chip(LABEL[r.category] || r.category)}</td>
-            <td>${r.description}${r.estimate ? html` ${chip('estimate, not counted: the crew is paid through Payments', 'warn')}` : r.auto ? html` ${chip('auto', 'info')}` : ''}${r.payId ? html` ${chip('Payments', 'info')}` : ''}</td>
+            <td>${r.description}${r.estimate ? html` ${chip('estimate, not counted: the crew is paid through Payments', 'warn')}` : r.auto ? html` ${chip('auto', 'info')}` : ''}${r.payId ? html` ${chip('Payments', 'info')}` : ''}${r.bank ? html` ${chip('In bank', 'ok')}` : ''}</td>
             <td class="muted">${r.vendor || ''}</td>
             <td class="r nowrap">${money(r.amount, r.currency)}</td>
             <td class="r nowrap ${r.type === 'income' ? 'ok' : ''}">${r.type === 'income' ? '+' : '−'}${money(r.base, cur)}</td>
@@ -176,11 +178,13 @@ export const submits = {
 };
 
 export const changes = {
+  ...bankChanges,
   from(el) { from = el.value; },
   to(el) { to = el.value; },
 };
 
 export const actions = {
+  ...bankActions,
   view(el) { view = el.dataset.v; notice = ''; },
   print() { print(); },
   csv(el, c) {

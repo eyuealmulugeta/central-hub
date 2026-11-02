@@ -125,14 +125,22 @@ function signupsCard(catalog) {
 }
 
 /** v0.28.0 (script 7.37.0): the crew list the site sent, per project, for the Admin to approve as that project's crew. */
-export const crewWaiting = () => feed?.crewReqs || [];
+// v0.50.2: crew already approved on a phone (Field Report crewOk, `ok`) is added by Central Hub without asking again
+export const crewWaiting = () => (feed?.crewReqs || []).filter(r => !r.ok);
+/** Approved on a phone but not on the team yet: added when the Admin's Central Hub reads the list (or no project has the code). */
+export const crewApproved = () => (feed?.crewReqs || []).filter(r => r.ok);
 const projectOf = code => store.projects.find(p => !p.binned && String(p.fieldCode || '').toUpperCase() === code) || (isDemo() ? store.project : null);
+/** v0.50.2: crew approved on a phone: no second approval; said here while it is being added, or why it cannot be. */
+function stuckNote(list) {
+  const lost = list.filter(r => !projectOf(r.proj));
+  return html`<p class="muted small">${list.length - lost.length ? `${list.length - lost.length} approved on the phone (${list.filter(r => projectOf(r.proj)).map(r => r.name).join(', ')}): being added to the crew, no second approval. ` : ''}${lost.length ? html`<b>${lost.map(r => r.name).join(', ')}</b> approved on the phone for ${[...new Set(lost.map(r => r.proj))].join(', ')}, but no project in Central Hub has that Field Report code.` : ''}</p>`;
+}
 function crewCard() {
-  const all = crewWaiting();
-  if (!all.length) return '';
+  const all = crewWaiting(), done = crewApproved();
+  if (!all.length) return done.length ? stuckNote(done) : '';
   const by = new Map();
   for (const r of all) by.set(r.proj, [...(by.get(r.proj) || []), r]);
-  return html`<h4>Crew from the site <span class="chip high">${all.length} waiting</span></h4>
+  return html`${done.length ? stuckNote(done) : ""}<h4>Crew from the site <span class="chip high">${all.length} waiting</span></h4>
     <p class="muted small">Names, trades and daily wages the site sent from Field Report. Approve puts the person on the crew of that project only, with the daily wage. A wage that is not the trade's daily wage is kept but flagged "Wage to review" on Payments until you clear it.</p>
     ${[...by].map(([code, list]) => { const pj = projectOf(code); return html`<h5>${code} · ${pj ? pj.name : 'no project in Central Hub has this Field Report code'}</h5>
       <ul class="list fu-devs">${list.map(r0 => { const r = { ...r0, ...(crewEdits[r0.id] || {}) }; return html`<li class="fu-dev"><div>${crewEditing === r.id ? html`<input value="${r.name}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="name" aria-label="Name"> <input value="${r.trade || ''}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="trade" aria-label="Trade" placeholder="Trade">` : html`<b>${r.name}</b>`} <span class="muted">${crewEditing === r.id ? '' : r.trade || 'No trade'} · ${r.wage || r.tradeWage || 0} a day</span>${r.at ? html` <span class="muted">· sent${r.by ? ` by ${r.by}` : ''} ${new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}${crewEdits[r.id] ? html` ${chip('Corrected here', 'info')}` : ''}

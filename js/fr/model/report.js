@@ -5,6 +5,12 @@ import { plural, hoursBetween } from '../core/util.js';
 import { carryEquipment, dayStatus } from './day.js';
 import { endStatus } from './end.js';
 
+/** 2.27.0: the step a screen belongs to (a work item is Work done, a delivery Materials...). */
+const STEP_OF = { att: 'crew', item: 'work', photo: 'photos', delivery: 'materials', delay: 'safety', request: 'end', sign: 'send', me: 'send' };
+export const stepOfScreen = h => STEP_OF[h] || (STEPS.some(s => s.id === h) ? h : '');
+/** 2.27.0: "Eyob · 02:51": who last changed a step and when (Addis time). */
+export const stampLine = st => (st && st.at > 1e12 ? [st.by, new Date(st.at).toLocaleTimeString('en-GB', { timeZone: 'Africa/Addis_Ababa', hour: '2-digit', minute: '2-digit' })].filter(Boolean).join(' · ') : '');
+
 export const PHASES = [
   { id: 'morning', title: 'Morning' },
   { id: 'day', title: 'During the day', note: 'log as it happens' },

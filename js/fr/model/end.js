@@ -2,7 +2,7 @@
 // report file Central Hub imports (schema 4: the old fields it reads, plus the new ones beside them).
 
 import { uid, num, sum, plural, pad, fnv, dayLabel } from '../core/util.js';
-import { rateReport, rateLine } from './rating.js';
+import { rateReport, rateLine, checkLines } from './rating.js';
 import { codesOf } from '../core/names.js';
 import { openPlanned } from './report.js';
 import { itemLine, itemReady, workMeta } from './items.js';
@@ -136,7 +136,7 @@ export function reportMeta(r, project, profile = {}) {
   };
   meta.hash = fnv(JSON.stringify(meta));
   const rt = rateReport(r);   // 2.18.0: shown in the office's notification
-  meta.rating = { v: rt.v, ...Object.fromEntries(Object.entries(rt.parts).map(([k, p]) => [k, p.v])), line: rateLine(rt) };
+  meta.rating = { v: rt.v, ...Object.fromEntries(Object.entries(rt.parts).map(([k, p]) => [k, p.v])), line: rateLine(rt), checks: checkLines(rt) };   // 2.27.0
   return meta;
 }
 

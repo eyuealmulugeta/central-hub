@@ -42,18 +42,36 @@ export function slotsOf(r) {
   return [...out].sort((a, b) => a - b);
 }
 
+/** 2.27.0: morning before 11:00, midday to 14:00, afternoon after. */
+export const thirdOf = hhmm => { const m = mins(hhmm); return m == null ? '' : m < 660 ? 'morning' : m < 840 ? 'midday' : 'afternoon'; };
+/** The time in Addis of a moment (ms). */
+export const addisTime = ms => addis(ms);
+
 /**
- * Engagement (2.19.3, owner: the engineer works with the app all day; a report made in 20 minutes is not ideal):
- * the parts of the day reached (morning before 11:00, day to 16:00, end after) and the half hours worked in (6 or more
- * for full marks) multiply, so one short sitting scores low however full the report is.
+ * 2.27.0 Engagement (owner, 2 Nov): four checks, each worth a quarter: photos spread over morning, midday and afternoon;
+ * most parts filled in (6 of 8); attendance marked on time (within an hour of the start); the report sent before 18:00.
+ * A report not sent yet counts as on time while it is before 18:00. Each check says what it found.
  */
-export function engageScore(r) {
-  const slots = slotsOf(r);
-  const parts = ['m', 'd', 'e'].filter(p => slots.some(s => partOf(`${String(Math.floor(s / 2)).padStart(2, '0')}:${s % 2 ? '30' : '00'}`) === p));
-  const word = { m: 'morning', d: 'day', e: 'end' };
-  const v = 5 * (parts.length / 3) * Math.min(1, slots.length / 6);
-  const span = slots.length ? (slots[slots.length - 1] - slots[0] + 1) * 30 : 0;
-  return { v: round(v), parts, slots: slots.length, why: slots.length ? `${parts.map(p => word[p]).join(', ') || 'no part'} · ${slots.length} half hour${slots.length > 1 ? 's' : ''} over ${span >= 60 ? `${Math.round(span / 60)} h` : `${span} min`}` : 'No times kept' };
+export function engageChecks(r, nowMs = Date.now()) {
+  const thirds = [...new Set((r.photos || []).map(p => thirdOf(p.at)).filter(Boolean))];
+  const d = r.done || {};
+  const filled = [r.start && r.start.done, (r.crew && r.crew.rows || []).length, d.work, d.equipment, d.materials, d.safety || (r.safety && r.safety.done), (r.photos || []).length >= 3, d.end].filter(Boolean).length;
+  const crewAt = r.stamps && r.stamps.crew && r.stamps.crew.first;
+  const startM = mins(r.start && r.start.start) ?? 480;
+  const crewM = crewAt ? mins(addis(crewAt)) : null;
+  const sentM = mins(addis(r.sentAt || nowMs));
+  return [
+    { k: 'photos', label: 'Photos spread over morning, midday and afternoon', v: thirds.length / 3, why: thirds.length ? thirds.join(', ') : 'No photos' },
+    { k: 'filled', label: 'Most sections filled in', v: filled >= 6 ? 1 : filled / 6, why: `${filled} of 8` },
+    { k: 'att', label: 'Attendance marked on time', v: crewM == null ? 0 : crewM <= startM + 60 ? 1 : 0, why: crewM == null ? 'Not marked' : `at ${addis(crewAt)}` },
+    { k: 'sent', label: 'Report sent before 18:00', v: sentM != null && sentM < 1080 ? 1 : 0, why: r.sentAt ? `at ${addis(r.sentAt)}` : sentM < 1080 ? 'Not sent yet' : 'Not sent by 18:00' },
+  ];
+}
+
+/** Engagement: the owner's four checks (engageChecks), out of 5. (Before 2.27.0: the half hours worked in.) */
+export function engageScore(r, nowMs = Date.now()) {
+  const cs = engageChecks(r, nowMs);
+  return { v: round(5 * cs.reduce((n, x) => n + x.v, 0) / cs.length), checks: cs, why: `${cs.filter(x => x.v >= 1).length} of 4 checks met` };
 }
 
 /** Free text written in the report. */
@@ -72,8 +90,8 @@ export function grammarScore(r) {
 }
 
 /** The rating: the four parts and their average. */
-export function rateReport(r) {
-  const parts = { photos: photoScore(r), data: dataScore(r), engage: engageScore(r), grammar: grammarScore(r) };
+export function rateReport(r, nowMs = Date.now()) {
+  const parts = { photos: photoScore(r), data: dataScore(r), engage: engageScore(r, nowMs), grammar: grammarScore(r) };
   // 2.19.3: engagement half the rating; the rating is never more than 1.5 above it
   const w = 0.5 * parts.engage.v + 0.2 * parts.photos.v + 0.15 * parts.data.v + 0.15 * parts.grammar.v;
   const v = round(Math.min(w, parts.engage.v + 1.5));
@@ -83,3 +101,6 @@ export function rateReport(r) {
 export const RATE_WORD = { photos: 'Photo times', data: 'Data strength', engage: 'Engagement', grammar: 'Grammar' };
 /** "Rating 4.2/5 · Photo times 5 · Data strength 4 · Engagement 3.3 · Grammar 5" */
 export const rateLine = x => `Rating ${x.v}/5 · ${Object.entries(x.parts).map(([k, p]) => `${RATE_WORD[k]} ${p.v}`).join(' · ')}`;
+
+/** 2.27.0: the engagement checks as lines, "✓ Report sent before 18:00 · at 17:12", shown whenever a report is sent or opened. */
+export const checkLines = x => ((x.parts.engage || {}).checks || []).map(c => `${c.v >= 1 ? '✓' : c.v > 0 ? '◐' : '✗'} ${c.label} · ${c.why}`);

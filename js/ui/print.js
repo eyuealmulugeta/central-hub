@@ -37,9 +37,16 @@ export function docHead(c, { title, sub = '', ref = '', status = '', tone = '', 
 export const docSec = (n, title, body, sub = '', cls = '') => html`<section class="dsr-sec ${cls}"><h3>${n === '' ? '' : html`<span>${typeof n === 'number' ? String(n).padStart(2, '0') : n}</span>`}${title}${sub ? html` <small>${sub}</small>` : ''}</h3>${body}</section>`;
 
 /** Sign-off blocks: [{ label, name, note }], each with lines for the signature and the date; `{ stamp: true }` is a box for the company stamp. */
-export const signoff = list => html`<div class="doc-sign" style="grid-template-columns:repeat(${list.length},1fr)">${list.map(s => s.stamp
-  ? html`<div><span>${s.label || 'Company stamp'}</span><em class="doc-stamp"></em></div>`
-  : html`<div><span>${s.label}</span><b>${s.name || ''}</b><i>Signature</i><i>${s.note || 'Date'}</i></div>`)}</div>`;
+// v0.53.0: `seal` (ui/seal.js sealOf) puts the company stamp in the stamp box (one is added when the list has none)
+// and the person's own signature, with their name when the box has none, in the box they sign
+export const signoff = (list, seal = null) => {
+  const boxes = seal?.stamp && !list.some(s => s.stamp) ? [...list, { stamp: true }] : list;
+  return html`<div class="doc-sign" style="grid-template-columns:repeat(${boxes.length},1fr)">${boxes.map(s => s.stamp
+    ? html`<div><span>${s.label || 'Company stamp'}</span>${seal?.stamp ? html`<em class="doc-stamp has-img"><img src="${seal.stamp}" alt="Company stamp"></em>` : html`<em class="doc-stamp"></em>`}</div>`
+    : seal?.sig && s.label === seal.as
+      ? html`<div><span>${s.label}</span><b>${s.name || seal.name || ''}</b><img class="doc-sig-img" src="${seal.sig}" alt="Signature"><i>Signature</i><i>${s.note || 'Date'}</i></div>`
+      : html`<div><span>${s.label}</span><b>${s.name || ''}</b><i>Signature</i><i>${s.note || 'Date'}</i></div>`)}</div>`;
+};
 
 /** The footer line on screen and in the shared PDF; on paper it is in the page margin, with the page number. */
 export const docFoot = foot => html`<p class="doc-foot">${foot}</p>`;

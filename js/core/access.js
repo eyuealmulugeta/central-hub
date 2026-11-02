@@ -94,10 +94,11 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
-  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'logsheet', 'messages', 'evaluations', 'spotlight', 'officeAttendance', 'officeStaff', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
+  if (role === 'owner') return ['shipments', 'sales', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'logsheet', 'seals', 'sealLog', 'messages', 'evaluations', 'spotlight', 'officeAttendance', 'officeStaff', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
   if (role !== 'office' && role !== 'site') return ['messages'];
   return [
-    'messages', ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
+    'messages', ...(role === 'office' ? ['seals'] : []),   // v0.53.0: Office adds the company stamp to what it prints
+    ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
     ...(pages.includes('trade') || pages.includes('finance') ? ['shipments', 'sales'] : []),
     ...(pages.includes('contracts') ? ['contracts', ...SIGN_SECTIONS] : []),
   ];

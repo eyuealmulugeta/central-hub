@@ -20,6 +20,16 @@ import { chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
+import { stampPng } from './seal.js';
+
+/** v0.53.0: the last uses of the stamp and signatures (company/main/sealLog), newest first: the Admin's. */
+const sealUses = () => {
+  const list = [...(store.company?.sealLog || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 30);
+  return list.length ? html`<details><summary>Stamp and signatures used (${(store.company?.sealLog || []).length})</summary><table class="table compact">
+    <thead><tr><th>When</th><th>Who</th><th>Document</th><th>Signed as</th><th>Added</th></tr></thead>
+    <tbody>${list.map(u => html`<tr><td class="nowrap">${String(u.at).slice(0, 16).replace('T', ' ')}</td><td>${u.name || u.by}</td><td>${u.ref || u.key}${u.type ? ` (${u.type})` : ''}</td><td>${u.as || ''}</td>
+      <td>${[u.stamp ? 'stamp' : '', u.sig ? 'signature' : ''].filter(Boolean).join(' + ')}</td></tr>`)}</tbody></table></details>` : html`<p class="muted">The stamp has not been used yet.</p>`;
+};
 import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { transferMember } from '../engine/sitecrew.js';
 import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo } from '../engine/accessrules.js';
@@ -743,6 +753,10 @@ export function render(c) {
           <label>Bank details for invoices <textarea data-chg="company" data-f="bank" data-fk="co-bank" rows="3">${co.bank || ''}</textarea></label>
           <label>Logo <input type="file" accept="image/*" data-chg="logo"></label>
           ${co.logo ? html`<div class="split"><img class="logo-preview" src="${co.logo}" alt="Company logo"><button class="btn ghost small" data-act="removeLogo">Remove logo</button></div>` : ''}
+          ${store.isAdmin ? html`<label>Company stamp (PNG with a clear background) <input type="file" accept="image/png" data-chg="stampPng"></label>
+          ${stampPng() ? html`<div class="split"><img class="logo-preview" src="${stampPng()}" alt="Company stamp"><button class="btn ghost small" data-act="removeStamp">Remove stamp</button></div>` : ''}
+          <p class="muted">v0.53.0: kept in the database, never in Git. The Admin and Office people see it and may add it, with their own signature, to letters, invoices, quotations, purchase orders, client reports and payslips; every use is logged below.</p>
+          ${sealUses()}` : ''}
         </div>`)}
 
     ${panel('monthly', 'Paid monthly', 'By tier: Tiers 1, 2, 3 and 5 monthly (Payroll), Tier 4 by the day (Payments)', () => html`
@@ -876,6 +890,10 @@ export const actions = {
   },
   removeUser(el) { if (confirm(`Remove access for ${el.dataset.id}?`)) store.removeUser(el.dataset.id); },
   removeLogo() { store.updateGlobal(g => { g.company = { ...g.company, logo: '' }; }); },
+  removeStamp() {
+    if (!store.isAdmin || !confirm('Remove the company stamp? Documents can no longer have it until a new one is added.')) return;
+    store.updateCompany(co => { co.seals = (co.seals || []).filter(s => s.id !== 'stamp'); });
+  },
   /** Take someone off this project's team. A person from the directory keeps their record there; only this project is taken off it. */
   removeMember(el, c) {
     const id = el.dataset.id;
@@ -1078,6 +1096,19 @@ export const changes = {
       const list = monthlyRolesOf(g).filter(r => r !== el.dataset.v);
       g.monthlyRoles = el.checked ? [...list, el.dataset.v] : list;
     });
+  },
+  /** v0.53.0: the company stamp, a PNG scaled to fit like the logo; the Admin's. */
+  async stampPng(el) {
+    const file = el.files[0];
+    el.value = '';
+    if (!file || !store.isAdmin) return;
+    try {
+      const r = await pictureFor(file, LOGO, 'logo');
+      if (!/^data:image\/png/.test(r.dataUrl)) throw new Error('The stamp must be a PNG file, so its background stays clear.');
+      const rec = { id: 'stamp', png: r.dataUrl, by: store.user?.email || '', at: new Date().toISOString() };
+      store.updateCompany(co => { co.seals = [...(co.seals || []).filter(s => s.id !== 'stamp'), rec]; });
+      tell(sizeNote('Stamp', r) || 'Stamp added.');
+    } catch (err) { tell(err.message); }
   },
   /** Any picture is accepted: it is scaled down to fit (about 200 KB), keeping a transparent background. */
   async logo(el) {

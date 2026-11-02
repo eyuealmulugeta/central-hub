@@ -12,6 +12,7 @@ import { paperHtml } from '../sync/mail.js';
 import { html, options, chip } from './dom.js';
 import { stamp } from '../core/division.js';
 import { docHead, docFoot, footText, signoff } from './print.js';
+import { sealBar, sealOf } from './seal.js';
 import { companyCode } from '../engine/docref.js';
 import { withFixes, officeReports } from '../engine/attendance.js';
 import { paidOnSite } from '../engine/crewpay.js';
@@ -169,12 +170,15 @@ function slipPaper(run, l, c) {
     </div>
     <div class="slip-net"><span>Net pay</span><b>${m(r.net, l.currency)}</b></div>
     <p class="muted p-notes">${l.payPer === 'month' ? '' : `Days worked: ${l.days || 0}. `}${r.pensionEmployer ? `Employer pension ${run.settings.pensionEmployer}%: ${m(r.pensionEmployer, l.currency)} (not deducted). ` : ''}${run.paidOn ? `Paid on ${fmtFull(run.paidOn)}.` : ''}${l.notes ? ` ${l.notes}` : ''}</p>
-    ${signoff([{ label: 'Prepared by · Office' }, { label: 'Approved by', name: run.approvedBy || '' }, { label: 'Received by · Employee', name: l.name }])}
+    ${signoff([{ label: SLIP_SIGN[0] }, { label: SLIP_SIGN[1], name: run.approvedBy || '' }, { label: 'Received by · Employee', name: l.name }], sealOf(`slip:${run.id}`))}
     <div class="slip-tear"><span>✂ Tear here: the office keeps this part</span></div>
     <dl class="slip-stub"><div><dt>Employee</dt><dd>${l.name}</dd></div><div><dt>Month</dt><dd>${monthLabel(run.month)}</dd></div><div><dt>Net pay</dt><dd>${m(r.net, l.currency)}</dd></div><div><dt>Received, signature</dt><dd class="slip-line"></dd></div></dl>
     ${docFoot(`${foot} · ${ref}`)}
   </div>`;
 }
+
+// v0.53.0: the boxes the stamp tick box may sign (the employee's box is never the office's)
+const SLIP_SIGN = ['Prepared by · Office', 'Approved by'];
 
 /** One payslip on screen, or every payslip of the run (slip '*'), each on its own page. */
 function payslip(run, l, c) {
@@ -185,6 +189,7 @@ function payslip(run, l, c) {
       <span class="muted">${all ? `${run.lines.length} payslips, one per page. ` : ''}${notice}</span><span class="grow"></span>
       ${all ? '' : html`<button class="btn" data-act="emailSlip">Email as PDF</button>
       <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>`}
+      ${sealBar(`slip:${run.id}`, SLIP_SIGN, { ref: `Payslips ${run.month}`, type: 'payslip' })}
       <button class="btn primary" data-act="print">Print</button>
     </div>
     <section class="card sheet slip-sheet">${all ? run.lines.map(x => slipPaper(run, x, c)) : slipPaper(run, l, c)}</section>`;

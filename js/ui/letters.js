@@ -13,6 +13,7 @@ import { docHead, footText, signoff } from './print.js';
 import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { archiveDoc } from './archive.js';
+import { sealBar, sealOf } from './seal.js';
 
 let selected = null;
 let notice = '';
@@ -69,6 +70,7 @@ function detail(l, c) {
       <span class="muted">${l.number}${l.emails?.length ? `. Emailed to ${l.emails.at(-1).to} on ${fmtFull(l.emails.at(-1).at)}` : ''}</span>
       <span class="grow"></span>
       ${draft ? html`<button class="btn" data-act="issue" title="Locks the wording. A letter that has gone out should not change">Mark as issued</button>` : html`<span class="chip ok">Issued</span>`}
+      ${sealBar(`letter:${l.id}`, [`For ${co.name || 'the company'}`], { ref: letterRef(c, l), type: 'letter' })}
       <button class="btn" data-act="email">Email as PDF</button>
       <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="print">Print</button>
@@ -91,7 +93,7 @@ function detail(l, c) {
         <p class="pre">${l.body || ''}</p>
         <p>Yours faithfully,</p>
       </div>
-      ${signoff([{ label: `For ${co.name || 'the company'}`, name: sender.join(', ') || 'Authorised signatory' }, { stamp: true }])}
+      ${signoff([{ label: `For ${co.name || 'the company'}`, name: sender.join(', ') || 'Authorised signatory' }, { stamp: true }], sealOf(`letter:${l.id}`))}
       ${staff ? html`<p class="muted no-print">About ${staff.name}, from the HR record.</p>` : ''}
     </div></section>`;
 }

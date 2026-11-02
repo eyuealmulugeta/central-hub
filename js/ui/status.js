@@ -8,6 +8,7 @@ import { calendarOf } from '../engine/calendar.js';
 import { fmtFull, fmtDate, fmtDay, money } from '../core/util.js';
 import { html } from './dom.js';
 import { docHead, docSec, docFoot, footText, signoff, sCurveSvg } from './print.js';
+import { sealOf } from './seal.js';
 
 const SEV = { high: 0, warn: 1, info: 2 };
 const pct = v => `${Math.round(v || 0)} %`;
@@ -53,7 +54,7 @@ export function statusPaper(c) {
         : html`<p class="dsr-none">No milestones ahead in the schedule.</p>`)}
     </div>
 
-    ${signoff([{ label: 'Prepared by · Project engineer', name: '', note: fmtFull(c.today) }, { label: 'Approved by · Project manager' }])}
+    ${signoff([{ label: 'Prepared by · Project engineer', name: '', note: fmtFull(c.today) }, { label: 'Approved by · Project manager' }], sealOf(`status:${c.project?.id}`))}
     ${docFoot(foot)}
   </div>`;
 }

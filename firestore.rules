@@ -315,6 +315,13 @@ service cloud.firestore {
     match /company/main/officeStaff/{id} {
       allow read: if isHR();
     }
+    // v0.53.0: the company stamp is the Admin's; Office reads it to print it. Each use is logged in the user's own name, read by the Admin
+    match /company/main/seals/{id} {
+      allow read: if isOffice();
+    }
+    match /company/main/sealLog/{id} {
+      allow create: if (isOwner() || isOffice()) && request.resource.data.by == me() && request.resource.data.id == id;
+    }
     match /company/main/spotlight/{id} {
       allow read: if seesAll() || (hasUser() && ('hr_assistant' in ranks() || resource.data.by == me()));
       allow create: if hasUser() && request.resource.data.by == me() && request.resource.data.id == id

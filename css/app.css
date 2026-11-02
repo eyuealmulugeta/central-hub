@@ -1432,6 +1432,11 @@ body.side-narrow .side-health { display: none; }
 
 /* v0.22.2 invoices, quotations and purchase orders; the stamp box */
 .doc-stamp { display: block; height: 62px; border: 1px dashed #98a2b3; border-radius: 6px; margin-top: 6px; }
+/* v0.53.0: the stamp and a signature added from the toolbar (ui/seal.js) */
+.doc-stamp.has-img { height: auto; border: 0; }
+.doc-stamp img { display: block; max-height: 96px; max-width: 160px; }
+.doc-sig-img { grid-column: 1 / -1; max-height: 46px; max-width: 180px; margin: 4px 0 -20px; }
+.seal-bar { white-space: nowrap; }
 .paper.bill-paper .bill-to { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
 .paper.bill-paper .bill-to .p-block { background: var(--dsr-soft); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 1px; }
 .paper.bill-paper table.dsr-t td { padding: 5px 7px; border-bottom: 1px solid #e3e7ee; font-size: 12px; }

@@ -149,6 +149,8 @@ export const emptyCompany = () => ({
   contacts: [],   // email addresses and phone numbers documents are sent to (see engine/contacts.js): the office and the Admin
   owners: [],     // the owners of the company (see engine/owners.js): kept apart from the employees, Admin only
   payroll: [],    // one run a month (see engine/payroll.js): Admin only, built from HR pay
+  seals: [],      // v0.53.0: the company stamp ({ id: 'stamp', png, by, at }): written by the Admin, read by the Admin and Office
+  sealLog: [],    // v0.53.0: each use of the stamp or a signature on a document (who, when, which): written by who used it, read by the Admin
   logsheet: [],   // v0.51.0: Log sheet rows of no project (payroll, office letters): Admin only
   letters: [],    // letters of the office (see engine/letters.js): Admin only, built from HR records
   officeStaff: [],        // v0.50.1: names and positions of the office staff (no project), kept by the Admin's app for HR

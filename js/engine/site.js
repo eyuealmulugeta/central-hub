@@ -5,6 +5,7 @@
 import { billingOf } from './billing.js';
 import { sum } from '../core/util.js';
 import { dayRateOf } from './people.js';
+import { wageOf } from './crewpay.js';
 
 const inRange = (reports, from, to) => reports.filter(r => r.date >= from && r.date <= to).sort((a, b) => a.date.localeCompare(b.date));
 
@@ -13,9 +14,11 @@ const inRange = (reports, from, to) => reports.filter(r => r.date >= from && r.d
  * Pay = days present x day rate + overtime hours x (day rate / hours per day) x overtime multiplier.
  * The day rate is the one set on the project's team; a person without one is listed with no amount.
  */
-export function paySheet({ ws, project }, from, to) {
+export function paySheet({ ws, project, company }, from, to) {
   const { hoursPerDay, otMultiplier } = billingOf(project);
-  const rate = new Map(ws.team.map(m => [m.id, dayRateOf(ws, m.id)]));
+  // v0.59.0: the day rate of the Manpower Directory first (the project's own only for someone with none there)
+  const dayOf = m => { const w = wageOf({ id: m.id, role: m.role }, { ws, project, staff: company?.staff || [] }); return w.per === 'day' && w.wage > 0 ? w.wage : dayRateOf(ws, m.id); };
+  const rate = new Map(ws.team.map(m => [m.id, dayOf(m)]));
   const role = new Map(ws.team.map(m => [m.id, m.role || '']));
   const people = new Map();
   const reports = inRange(ws.reports, from, to).filter(r => r.field?.attendance?.length);

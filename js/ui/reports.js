@@ -967,13 +967,16 @@ async function pullOther(project) {
  * of the open project differs from the one last sent, the lists go again (only once they were sent from Settings).
  */
 let crewTimer = 0;
+/** v0.59.0 (owner): what Field Report must be sent again for: the crew, and the site details (location, scope, links, status). */
+export const setupKey = setup => JSON.stringify([setup.staff, setup.location || '', setup.scope || '', setup.mapLink || '', setup.layoutLink || '', setup.status || '']);
+
 export function watchCrew() {
   clearTimeout(crewTimer);
   crewTimer = setTimeout(() => {
     const p = store.project;
     if (!p?.fieldCode || store.role === 'site' || !store.ws?.team) return;   // v0.31.1: a confirmed code is enough
     let key;
-    try { key = JSON.stringify(buildSetup({ ...derive(p, store.ws, store.global, todayISO()), people: store.users }, todayISO()).staff); } catch { return; }
+    try { key = setupKey(buildSetup({ ...derive(p, store.ws, store.global, todayISO()), people: store.users }, todayISO())); } catch { return; }
     if (key === p.fieldCrewKey) return;
     resendSetup().then(ok => { if (ok) store.updateProject(x => { x.fieldCrewKey = key; }); });
   }, 4000);
@@ -985,7 +988,7 @@ export async function sendListsFor(project, ws) {
   try {
     const setup = buildSetup({ ...derive(project, ws, store.global, todayISO()), people: store.users }, todayISO());
     await sendSetup(setup);
-    store.patchProject(project.id, { fieldSetupAt: todayISO(), fieldCrewKey: JSON.stringify(setup.staff) });
+    store.patchProject(project.id, { fieldSetupAt: todayISO(), fieldCrewKey: setupKey(setup) });
     return true;
   } catch (err) { console.warn(`The lists of ${project.name} could not be sent:`, err.message); return err.message || String(err); }   // v0.31.2: the reason, shown
 }

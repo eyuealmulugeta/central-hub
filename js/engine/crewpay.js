@@ -31,17 +31,40 @@ export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_RO
   const a = person?.agreement || {};
   const payCur = project.payCurrency || project.currency;   // v0.25.0: the currency of this project's day rates
   const currency = a.currency || payCur;
-  if (a.payPer === 'month' && +a.pay > 0) return { per: 'month', wage: +a.pay, currency, from: 'agreement' };
+  // v0.59.0 (owner): the Manpower Directory's rate, currency and wage type come first, for everybody in it;
+  // a project day rate counts only for someone with none there (a casual worker, or before it was moved over)
+  const per = a.payPer === 'day' || a.payPer === 'month' ? a.payPer : isMonthly(person, member?.role || row.role) ? 'month' : 'day';
+  if (+a.pay > 0 && a.payPer !== 'hour') return { per, wage: +a.pay, currency, from: 'agreement' };
   // v0.48.0: the tier decides (Tiers 1, 2, 3 and 5 monthly, Tier 4 by the day); the old position list is no longer used
-  if (a.payPer !== 'day' && isMonthly(person, member?.role || row.role)) {
-    return +a.pay > 0 && !a.payPer ? { per: 'month', wage: +a.pay, currency, from: 'agreement' } : { per: 'month', wage: 0, currency, from: 'missing' };
-  }
+  if (a.payPer !== 'day' && isMonthly(person, member?.role || row.role)) return { per: 'month', wage: 0, currency, from: 'missing' };
   const day = member ? dayRateOf(ws, member.id) : 0;
   if (day > 0) return { per: 'day', wage: day, currency: dayCurOf(ws, member.id) || payCur, from: 'project' };   // v0.58.0: each person's own ETB or USD
-  if (a.payPer === 'day' && +a.pay > 0) return { per: 'day', wage: +a.pay, currency, from: 'agreement' };
   const trade = ws.laborRates?.[member?.role || row.role];
   if (+trade > 0) return { per: 'day', wage: +trade, currency: payCur, from: 'trade' };
   return { per: 'day', wage: 0, currency: payCur, from: '' };
+}
+
+/**
+ * v0.59.0: the pay of a directory person: their rate, currency and wage type (Daily or Monthly; by the tier when not
+ * chosen). null when none is set. Pure.
+ */
+export function directoryPay(person) {
+  const a = person?.agreement || {};
+  if (!(+a.pay > 0)) return null;
+  return { amount: +a.pay, currency: a.currency || '', per: a.payPer || (isMonthly(person, person?.title) ? 'month' : 'day') };
+}
+
+/**
+ * v0.59.0: the day rates kept on projects (assignments and project teams) moved once into the directory, for people
+ * who have no rate there yet: [{ id, agreement }]. `projects` gives each project's pay currency. Pure.
+ */
+export function payMerges(staff, projects = []) {
+  const curOf = id => { const p = projects.find(x => x.id === id); return p ? p.payCurrency || p.currency || '' : ''; };
+  return (staff || []).flatMap(p => {
+    if (+(p.agreement || {}).pay > 0) return [];
+    const a = (p.assignments || []).find(x => x.active !== false && +x.dayRate > 0) || (p.assignments || []).find(x => +x.dayRate > 0);
+    return a ? [{ id: p.id, agreement: { ...(p.agreement || {}), pay: +a.dayRate, currency: a.currency || curOf(a.projectId), payPer: 'day' } }] : [];
+  });
 }
 
 /** What a person earned in a period, from their row on the Attendance sheet. */

@@ -17,6 +17,9 @@ import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
 import { tell } from '../core/image.js';
 import { makeLink, linkUrl } from '../engine/crewform.js';
+import { PAY_OPTIONS } from '../engine/currencies.js';
+import { withPayChange } from '../engine/paysteps.js';
+import { directoryPay } from '../engine/crewpay.js';
 import { unlinked } from '../engine/people.js';
 import * as fieldusers from './fieldusers.js';
 import * as crewforms from './crewforms.js';
@@ -57,6 +60,16 @@ const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map
 const photo = p => (p.photo ? html`<img class="avatar" src="${p.photo}" alt="">` : html`<span class="avatar">${initials(p.name)}</span>`);
 const PER = { month: '/ month', day: '/ day', hour: '/ hour' };
 
+/** v0.59.0 (owner): rate, currency (ETB or USD) and wage type, kept here only; every money page reads them. */
+const WAGE_TYPES = [['day', 'Daily'], ['month', 'Monthly']];
+function payCells(p, c) {
+  const a = p.agreement || {}, d = directoryPay(p);
+  const per = a.payPer === 'hour' ? 'hour' : d ? d.per : tableOf(p) === 'crew' ? 'day' : 'month';
+  return html`<input class="price" type="number" min="0" step="any" data-chg="mpPay" data-id="${p.id}" data-f="pay" data-fk="mp-pay-${p.id}" value="${+a.pay > 0 ? a.pay : ''}" placeholder="Rate" aria-label="Rate of ${p.name}">
+    <select data-chg="mpPay" data-id="${p.id}" data-f="currency" aria-label="Currency of ${p.name}">${options(PAY_OPTIONS, a.currency || c.global.fx.base)}</select>
+    <select data-chg="mpPay" data-id="${p.id}" data-f="payPer" aria-label="Wage type of ${p.name}">${options(per === 'hour' ? [...WAGE_TYPES, ['hour', 'Hourly']] : WAGE_TYPES, per)}</select>`;
+}
+
 function row(p, i, c, edit) {
   const tier = tierOfPerson(p), more = positionsOf(p).slice(1), pay = payOf(p), r = ratingOf(p, c.company.evaluations || []);
   const proj = projectOfRow(p), names = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
@@ -73,7 +86,7 @@ function row(p, i, c, edit) {
       ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}</td>
     <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
     <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
-    <td class="nowrap">${pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>
+    <td class="nowrap mp-pay">${edit ? payCells(p, c) : pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>
     <td>${p.addedBy || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>
     <td class="nowrap">${edit ? html`<button type="button" class="btn small" data-act="mpEdit" data-id="${p.id}">Edit</button> <button type="button" class="btn ghost small" data-act="mpRemove" data-id="${p.id}">Remove</button>` : ''}</td>
     <td>${p.status === 'left' ? chip('Left', 'warn') : chip('Working', 'ok')}</td>
@@ -115,10 +128,10 @@ function manpower(c) {
       <span class="grow"></span><span class="muted">${rows.length} shown</span>
     </div>
     ${rows.length ? html`<div class="table-wrap"><table class="table compact mp-table">
-      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
+      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${edit ? 'Rate · currency · wage type' : table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
       <tbody>${rows.map((p, i) => row(p, i, c, edit))}</tbody>
     </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
-    <p class="muted">Changing a position or a project asks first. Wages and salaries are set in Employee data (Pay); they are never shown to Site users.</p>`}
+    <p class="muted">Changing a position or a project asks first. Each person's rate, currency (ETB or USD) and wage type (Daily or Monthly) are set here and nowhere else: Payments, Payroll, the pay sheets and the labour cost all take them from here. They are never shown to Site users.</p>`}
   </section>`;
 }
 
@@ -224,6 +237,27 @@ export const actions = {
 };
 
 export const changes = {
+  /** v0.59.0: a rate, currency or wage type; a change of an existing pay is kept with the date it applies from (as in Employee data). */
+  mpPay(el, c) {
+    const p = find(c, el.dataset.id), f = el.dataset.f;
+    if (!p || !store.isAdmin || !['pay', 'currency', 'payPer'].includes(f)) return;
+    const value = f === 'pay' ? Math.max(0, +el.value || 0) : el.value;
+    const old = p.agreement || {};
+    if (String(old[f] ?? '') === String(value)) return;
+    let from = '';
+    if (+old.pay > 0) {
+      from = (typeof prompt === 'function' ? prompt(`${p.name}: from which date does the new pay apply? (YYYY-MM-DD)`, c.today) : c.today) || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) { store.notify(); return; }
+    }
+    store.updateCompany(co => {
+      const x = (co.staff || []).find(y => y.id === p.id);
+      if (!x) return;
+      const was = x.agreement || {};
+      if (from && !(x.payHistory || []).length) x.payHistory = withPayChange([], { from: was.start || x.started || '2000-01-01', pay: was.pay, payPer: was.payPer, currency: was.currency });
+      x.agreement = { ...was, [f]: value, ...(f === 'pay' && !was.currency ? { currency: c.global.fx.base } : {}), ...(f === 'pay' && !was.payPer ? { payPer: tableOf(x) === 'crew' ? 'day' : 'month' } : {}) };
+      if (from) x.payHistory = withPayChange(x.payHistory, { from, pay: x.agreement.pay, payPer: x.agreement.payPer, currency: x.agreement.currency, by: store.user?.email || '' });
+    });
+  },
   search(el) { search = el.value; },
   mpFilt(el) { filt[el.dataset.f] = el.value; },
   mpTitle(el, c) {

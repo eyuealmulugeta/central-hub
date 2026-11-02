@@ -45,7 +45,7 @@ import { targetFor, parseDates, companyCalendar, ownWeekOf, ownOffOf, projectPat
 import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUsers, LIMITS } from '../engine/deployment.js';
 import { money, num, fmtFull } from '../core/util.js';
 import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
-import { monthlyRolesOf } from '../engine/crewpay.js';
+import { monthlyRolesOf, directoryPay } from '../engine/crewpay.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ROLES = [['office', 'Office: works from the office, on the projects ticked'], ['site', 'Site: works on site, on the projects ticked (active ones only)']];
@@ -594,7 +594,7 @@ function projectPage(c) {
             <span class="muted">${m.contact || ''}</span>
             <span title="${levelLabel(levelOf(m))}">Tier ${levelOf(m).slice(1)}</span>
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
-            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${dayCurOf(ws, m.id) || p.payCurrency || p.currency}` : 'No rate'}</span>
+            <span class="muted nowrap">${(d => (d ? `${d.amount} ${d.currency || p.payCurrency || p.currency} ${d.per === 'day' ? 'Daily' : 'Monthly'}` : dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${dayCurOf(ws, m.id) || p.payCurrency || p.currency}` : 'No rate'))(directoryPay(c.company.staff.find(x => x.id === m.personId)))}</span>
             ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
             ${store.isAdmin && otherProjects(p).length ? html`<select data-chg="memberMove" data-id="${m.id}" aria-label="Move ${m.name} to another project"><option value="">Move to…</option>${otherProjects(p).map(x => html`<option value="${x.id}">${x.name}</option>`)}</select>` : ''}${m.wageReview ? html`<span class="chip warn" title="The site typed ${m.wageReview.wage} a day; the trade's daily wage is ${m.wageReview.tradeWage}. Clear it on Payments.">Wage to review</span>` : ''}
           </li>` : html`
@@ -608,7 +608,7 @@ function projectPage(c) {
             <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button>
             ${store.isAdmin && otherProjects(p).length ? html`<select data-chg="memberMove" data-id="${m.id}" aria-label="Move ${m.name} to another project"><option value="">Move to…</option>${otherProjects(p).map(x => html`<option value="${x.id}">${x.name}</option>`)}</select>` : ''}${m.wageReview ? html`<span class="chip warn" title="The site typed ${m.wageReview.wage} a day; the trade's daily wage is ${m.wageReview.tradeWage}. Clear it on Payments.">Wage to review</span>` : ''}
           </li>`)}</ul>
-          <p class="muted">People marked Directory are changed in Crew, Employee data. Day rates are in ${p.payCurrency || p.currency}; all of them are on Payments, Day rates and pay period.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
+          <p class="muted">People marked Directory are changed in the Manpower Directory, their pay too (rate, ETB or USD, Daily or Monthly). Only people not in the directory have a day rate here, in ETB or USD on Payments.</p>` : html`<p class="muted">Add the people working on this project to assign tasks and follow-ups.</p>`}
         ${store.isAdmin && c.company.staff.some(x => x.status !== 'left' && !assignmentOf(x, p.id)) ? html`<form data-form="fromDirectory" class="entry">
           <select name="personId" aria-label="Person from the directory">${options(c.company.staff.filter(x => x.status !== 'left' && !assignmentOf(x, p.id)).map(x => [x.id, x.title ? `${x.name}, ${x.title}` : x.name]), null)}</select>
           <select name="role" aria-label="Role here"><option value="">Role: same as their job</option>${groupOptions(positionGroups(), null)}</select>

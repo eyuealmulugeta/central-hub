@@ -7,6 +7,8 @@
 import { store } from '../core/store.js';
 import { titleFixes, userSyncPatches, sameNameLinks } from '../engine/manpower.js';
 import { syncPages, sendRules } from './prices.js';
+import { payMerges } from '../engine/crewpay.js';
+import { dayRateOf, dayCurOf } from '../engine/people.js';
 
 let busy = false;
 const sent = new Map();   // email -> the patch sent, so one is not sent again before the sign-in list catches up
@@ -20,6 +22,16 @@ export function syncPeople() {
         for (const f of fixes) { const p = (co.staff || []).find(x => x.id === f.id); if (p) { p.title = f.title; if (p.titles) p.titles = f.titles; } }
       });
     }
+    // v0.59.0: day rates kept on projects move once into the directory (rate, currency, Daily) for people with none there
+    const merges = payMerges(store.company?.staff, store.projects);
+    const ws = store.project?.id ? store.ws : null;
+    for (const m of ws?.team || []) {
+      const p = m.personId && (store.company?.staff || []).find(x => x.id === m.personId);
+      if (p && !(+(p.agreement || {}).pay > 0) && dayRateOf(ws, m.id) > 0 && !merges.some(x => x.id === p.id)) {
+        merges.push({ id: p.id, agreement: { ...(p.agreement || {}), pay: dayRateOf(ws, m.id), currency: dayCurOf(ws, m.id) || store.project.payCurrency || store.project.currency || '', payPer: 'day' } });
+      }
+    }
+    if (merges.length) store.updateCompany(co => { for (const m of merges) { const p = (co.staff || []).find(x => x.id === m.id); if (p && !(+(p.agreement || {}).pay > 0)) p.agreement = m.agreement; } });
     const users = userSyncPatches(store.users, store.company?.staff).filter(({ email, patch }) => sent.get(email) !== JSON.stringify(patch));
     users.forEach(({ email, patch }) => sent.set(email, JSON.stringify(patch)));
     for (const { email, patch } of users) store.setUser(email, patch);

@@ -10,7 +10,7 @@ import { store } from '../core/store.js';
 import { periodFor, shiftPeriod, waitingNote } from '../engine/attendance.js';
 import { checkOf, mayApprove as stepMay, crewReport } from '../engine/paysteps.js';
 import { sendPayReport } from './payreport.js';
-import { payLines, monthlyRolesOf, newRun, lockLines, runStatus, STATUS_LABEL, METHODS, methodLabel, paymentFor, csvRows, runId, personSummary } from '../engine/crewpay.js';
+import { directoryPay, payLines, monthlyRolesOf, newRun, lockLines, runStatus, STATUS_LABEL, METHODS, methodLabel, paymentFor, csvRows, runId, personSummary } from '../engine/crewpay.js';
 import { onSite } from '../sync/fieldreport.js';
 import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
@@ -71,13 +71,15 @@ function ratesView(c) {
       </form>` : ''}
     </section>
     <section class="card set-box"><h3>Wage of each person</h3>
-      ${ws.team.length ? html`<table class="table compact"><thead><tr><th>Person</th><th>Role</th><th class="r">Day rate here</th><th>HR agreement (Manpower Directory)</th></tr></thead>
-        <tbody>${ws.team.map(m => { const a = staff.find(x => x.id === m.personId)?.agreement || {}; return html`<tr>
+      ${ws.team.length ? html`<table class="table compact"><thead><tr><th>Person</th><th>Role</th><th>Rate · currency · wage type</th><th>Set in</th></tr></thead>
+        <tbody>${ws.team.map(m => { const person = staff.find(x => x.id === m.personId), d = directoryPay(person); return html`<tr>
           <td>${m.name}</td><td>${m.role || ''}</td>
-          <td class="r"><input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="—" aria-label="Day rate of ${m.name}" ${dis}>
-            <select data-chg="memberCur" data-id="${m.id}" aria-label="Currency of ${m.name}'s day rate" title="Paid in ETB or USD" ${dis}>${options(PAY_OPTIONS, dayCurOf(ws, m.id) || cur)}</select></td>
-          <td>${+a.pay > 0 ? `${money(+a.pay, a.currency || cur, 0)} ${a.payPer === 'day' ? 'per day' : a.payPer === 'hour' ? 'per hour' : 'per month'}` : html`<span class="muted">none</span>`}</td></tr>`; })}</tbody></table>
-        <p class="muted">A day rate here wins over the trade rate. Each person's rate is in their own currency, ETB or USD, and is paid in it (not converted). A monthly wage comes from the person's HR agreement (Crew, Employee data).</p>` : html`<p class="muted">Nobody is on this project yet (Settings, This project, Team).</p>`}
+          ${person ? html`<td class="nowrap">${d ? `${money(d.amount, d.currency || cur, 0)} · ${d.per === 'day' ? 'Daily' : d.per === 'hour' ? 'Hourly' : 'Monthly'}` : html`<span class="muted">Not set</span>`}</td>
+            <td><a href="#directory">Manpower Directory</a></td>`
+          : html`<td class="nowrap"><input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="Day rate" aria-label="Day rate of ${m.name}" ${dis}>
+            <select data-chg="memberCur" data-id="${m.id}" aria-label="Currency of ${m.name}'s day rate" title="Paid in ETB or USD" ${dis}>${options(PAY_OPTIONS, dayCurOf(ws, m.id) || cur)}</select> · Daily</td>
+            <td class="muted">This project (not in the directory)</td>`}</tr>`; })}</tbody></table>
+        <p class="muted">Each person's rate, currency (ETB or USD) and wage type (Daily or Monthly) are kept in the Manpower Directory, and every pay here comes from there, not converted. Only someone not in the directory (a casual worker) has a day rate on this project. The trade rates above count only for someone with no rate at all.</p>` : html`<p class="muted">Nobody is on this project yet (Settings, This project, Team).</p>`}
     </section>
   </div>`;
 }

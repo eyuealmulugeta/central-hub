@@ -28,6 +28,8 @@ import { actions as hrActions } from './hr.js';
 let search = '';
 let table = 'staff';      // staff | crew | all | lists | new (v0.46.0: New crew for approval; v0.57.0: All people, Positions & trades)
 const filt = { search: '', position: '', tier: '', project: '', status: 'active' };
+/** v0.60.0: Employee data's "Change in Manpower Directory" opens the person's row (All people, searched by name). */
+export function showInDirectory(name) { table = 'all'; Object.assign(filt, { search: name || '', position: '', tier: '', project: '', status: '' }); }
 
 /** The active members of a project's team, as the directory shows them. Pure. */
 export const directoryOf = (team, projectName) => team.filter(m => m.active !== false && String(m.name || '').trim())

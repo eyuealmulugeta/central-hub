@@ -5,7 +5,7 @@
 import { store } from '../core/store.js';
 import { money, fmtDate, fmtFull } from '../core/util.js';
 import { html, icon } from './dom.js';
-import { healthOf, projectLine, needsYou, thisWeek, waitingOn } from '../engine/today.js';
+import { healthOf, projectLine, needsYou, needGroups, thisWeek, waitingOn } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 
 let only = '';   // the project the lists are filtered to; '' = all projects
@@ -115,7 +115,9 @@ export function render(c) {
     <section class="today-grid">
       <div class="card">
         <h3 class="card-h">Needs you <em class="count-q">${needs.length}</em></h3>
-        ${needs.length ? html`<ul class="tlist">${needs.map(n => needRow(n, c))}</ul>` : html`<p class="empty">All clear. New reports, requests and alerts show here.</p>`}
+        ${needs.length ? needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
+          <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
+          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`) : html`<p class="empty">All clear. New reports, requests and alerts show here.</p>`}
       </div>
       <div class="today-side">
         <div class="card">
@@ -133,8 +135,11 @@ export function render(c) {
     </section>`;
 }
 
+const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
+
 export const actions = {
   only(el) { only = el.dataset.id || ''; },
+  needFold(el, _c, e) { e?.preventDefault?.(); const k = el.dataset.k; if (folded.has(k)) folded.delete(k); else folded.add(k); },
   /** Open a project (and a page of it) from a card or a line about another project. */
   openProject(el) {
     const to = el.dataset.to || 'dashboard';

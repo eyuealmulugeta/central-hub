@@ -28,6 +28,22 @@ export function projectLine(s = {}, today) {
 }
 
 /**
+ * v0.60.0 (owner, 2 Nov): "Needs you" grouped by the type of message (Field reports, Requests, Other project...).
+ * The groups with something urgent come first, then the bigger ones; inside a group the order stays (most urgent first).
+ * @returns [{ kind, items, high }]
+ */
+export function needGroups(needs = []) {
+  const map = new Map();
+  for (const n of needs) {
+    const k = n.kind || 'Other';
+    if (!map.has(k)) map.set(k, { kind: k, items: [], high: 0, at: map.size });
+    const g = map.get(k); g.items.push(n); if (n.sev === 'high') g.high++;
+  }
+  return [...map.values()].sort((a, b) => (b.high > 0) - (a.high > 0) || b.items.length - a.items.length || a.at - b.at)
+    .map(({ kind, items, high }) => ({ kind, items, high }));
+}
+
+/**
  * What needs this person, most urgent first. The open project's alerts (already filtered to what they may open),
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]

@@ -28,7 +28,8 @@ import { docHead, docSec, footText } from './print.js';
 import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { html, options, field, chip } from './dom.js';
-import { personSummary, methodLabel } from '../engine/crewpay.js';
+import { personSummary, methodLabel, directoryPay } from '../engine/crewpay.js';
+import { showInDirectory } from './directory.js';
 import { addedStamp, needsAgreement } from '../engine/manpower.js';
 import { withPayChange } from '../engine/paysteps.js';
 
@@ -275,6 +276,15 @@ function accessPane(p) {
 
 // ---- one employee ----
 
+// v0.60.0 (owner, 2 Nov): pay is kept in the Manpower Directory only (Rate, Currency, Wage type); Employee data shows it.
+const PER_WORD = { day: 'per day', month: 'per month', hour: 'per hour' };
+function payFromDirectory(p) {
+  const d = directoryPay(p);
+  return html`<div class="wide paybox"><b>Pay</b> ${d ? html`${money(d.amount, d.currency)} ${PER_WORD[d.per] || ''}` : html`<span class="muted">not set yet</span>`}
+    <span class="muted small">From the Manpower Directory (rate, currency, wage type).</span>
+    <button type="button" class="btn small" data-act="payInDirectory" data-id="${p.id}">Change in Manpower Directory</button></div>`;
+}
+
 function form({ p, alerts, monthly }, c) {
   const a = p.agreement || {};
   const base = c.global.fx.base;
@@ -344,10 +354,8 @@ function form({ p, alerts, monthly }, c) {
         ${agree('Ends (leave empty if open-ended)', 'end', 'ag-end', 'date')}
         ${agree('Probation ends', 'probationEnd', 'ag-prob', 'date')}
         ${agree('Notice period, days', 'noticeDays', 'ag-notice', 'number', html`min="0"`)}
-        ${agree('Pay', 'pay', 'ag-pay', 'number', html`min="0" step="any"`)}
-        <label>Paid <select data-chg="agreement" data-f="payPer" data-fk="ag-per">${options(PAY_PERIODS, a.payPer || 'month')}</select></label>
-        <label>Currency <select data-chg="agreement" data-f="currency" data-fk="ag-cur">${options(currencies, a.currency || base)}</select></label>
       </div>
+      ${payFromDirectory(p)}
       ${a.pay ? html`<p class="muted">About ${money(monthly, base)} a month.</p>` : ''}
       <label>Link to the signed agreement <input data-chg="agreement" data-f="link" data-fk="ag-link" value="${a.link || ''}" placeholder="Paste the Google Drive link of the signed file"></label>
       ${isLink(a.link) ? html`<a href="${a.link}" target="_blank" rel="noopener">Open the signed agreement</a>` : ''}
@@ -448,6 +456,7 @@ function crewPayPane(p, c) {
 }
 
 export const actions = {
+  payInDirectory(el, c) { showInDirectory(c.company.staff.find(x => x.id === el.dataset.id)?.name); location.hash = '#directory'; },
   select(el) { selected = el.dataset.id; tab = 'work'; notice = ''; mode = 'form'; resetZoom(); },
   back() { selected = null; mode = 'form'; resetZoom(); },
   zoomPassport() { toggleZoom(); },

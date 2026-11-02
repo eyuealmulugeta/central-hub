@@ -886,6 +886,7 @@ function start() {
     setTimeout(quick, FAST_PULL_MS);
     // v0.57.0: people's details follow the Manpower Directory (positions, sign-in titles, same-name team members)
     setTimeout(syncPeople, 20_000);
+    setInterval(meetings.remindSoon, 60_000);   // v0.64.0: a note 30 minutes before a meeting
     store.subscribe(() => { refresh(); reports.watchCrew(); setTimeout(syncPeople, 0); });   // v0.31.0: allocated crew goes to Field Report
     addEventListener('storage', e => { if (e.key === 'sf:company' || e.key === 'sf:booking') store.reloadCompany(); });
     store.onError(toast);

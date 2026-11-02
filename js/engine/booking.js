@@ -103,10 +103,20 @@ export function calendarLink({ title, start, minutes, where, details }) {
   const q = new URLSearchParams({ action: 'TEMPLATE', text: title, dates: `${stamp(start)}/${stamp(start + minutes * 60000)}`, location: where || '', details: details || '' });
   return `https://calendar.google.com/calendar/render?${q}`;
 }
-/** The meeting as a calendar file, for Outlook, Apple Calendar and others. */
-export function calendarFile({ id, title, start, minutes, where, details }) {
+/**
+ * The meeting as a calendar file, for Google Calendar, Outlook, Apple Calendar and others. v0.64.0: emailed with the
+ * invitation (method REQUEST; a later SEQUENCE replaces it, method CANCEL takes it off), with the organiser, the people
+ * invited and a reminder 30 minutes before.
+ */
+export function calendarFile({ id, title, start, minutes, where, details }, { method = '', sequence = 0, organizer = null, attendees = [], alarm = 0, now = Date.now() } = {}) {
   const text = s => String(s || '').replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amistad Prefab//Central Hub//EN', 'BEGIN:VEVENT',
-    `UID:${id}@amistad-central-hub`, `DTSTAMP:${stamp(Date.now())}`, `DTSTART:${stamp(start)}`, `DTEND:${stamp(start + minutes * 60000)}`,
-    `SUMMARY:${text(title)}`, `LOCATION:${text(where)}`, `DESCRIPTION:${text(details)}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  const who = p => `CN=${String(p.name || p.email).replace(/[";:,]/g, ' ')}:mailto:${p.email}`;
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Amistad Prefab//Central Hub//EN', ...(method ? [`METHOD:${method}`] : []), 'BEGIN:VEVENT',
+    `UID:${id}@amistad-central-hub`, `DTSTAMP:${stamp(now)}`, `DTSTART:${stamp(start)}`, `DTEND:${stamp(start + minutes * 60000)}`,
+    `SUMMARY:${text(title)}`, `LOCATION:${text(where)}`, `DESCRIPTION:${text(details)}`,
+    ...(method ? [`SEQUENCE:${sequence}`, `STATUS:${method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'}`] : []),
+    ...(organizer ? [`ORGANIZER;${who(organizer)}`] : []),
+    ...attendees.map(a => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;${who(a)}`),
+    ...(alarm && method !== 'CANCEL' ? ['BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${text(title)}`, `TRIGGER:-PT${alarm}M`, 'END:VALARM'] : []),
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
 }

@@ -9,6 +9,8 @@ import { html, chip, field, options } from './dom.js';
 import { tell } from '../core/image.js';
 import { linked } from './discuss.js';
 import { openMail } from './maildialog.js';
+import { sendMail } from '../sync/mail.js';
+import { calendarFile } from '../engine/booking.js';
 import { currentDivision, TRADING, stamp } from '../core/division.js';
 import { withDefaults, whenLabel, stepsOf, slotId, calendarLink } from '../engine/booking.js';
 import { docHead, docSec, footText, signoff } from './print.js';
@@ -268,6 +270,47 @@ const saveRecord = (c, fn) => store.updateCompany(co => {
   x.record.updated = new Date().toISOString();
 });
 
+/** v0.64.0: the calendar file of a meeting: the invitation, an update (sequence) or the cancelling. */
+const icsOf = (m, method = 'REQUEST') => ({
+  name: method === 'CANCEL' ? 'cancelled.ics' : 'invite.ics',
+  text: calendarFile({ id: m.id, title: m.title, start: Date.parse(m.start), minutes: m.minutes, where: m.where, details: inviteText(m) },
+    { method, sequence: m.seq || 0, organizer: { email: m.by, name: m.byName }, attendees: m.invitees || [], alarm: 30 }),
+});
+
+/** v0.64.0: the invitation (or the cancelling) emailed to everyone invited, with the calendar file; no form to fill in. */
+async function mailInvite(m, method = 'REQUEST') {
+  const cancel = method === 'CANCEL';
+  const to = (m.invitees || []).map(i => i.email).join(', ');
+  try {
+    await sendMail({
+      to, subject: `${cancel ? 'Cancelled' : 'Meeting'}: ${m.title}, ${whenOf(m)}`, replyTo: m.by, fromName: m.byName || '',
+      message: cancel
+        ? `Hello,\n\nThis meeting is cancelled:\n\n${inviteText(m)}\n\nThe attached file takes it off your calendar.\n\nKind regards,\n${store.signature}`
+        : `Hello,\n\nYou are invited to a meeting.\n\n${inviteText(m)}\n\nOpen the attached file to add it to your calendar (Google Calendar, Outlook or your phone); it reminds you 30 minutes before. Or use this link:\n${calendarLink({ title: m.title, start: Date.parse(m.start), minutes: m.minutes, where: m.where, details: '' })}\n\nKind regards,\n${store.signature}`,
+      ics: icsOf(m, method),
+    });
+    store.updateCompany(co => { const x = (co.meetings || []).find(k => k.id === m.id); if (x) x.mailed = { at: new Date().toISOString(), method }; });
+    return `${cancel ? 'Cancelling' : 'Invitation'} emailed to ${to}.`;
+  } catch (err) {
+    return `Not emailed: ${err.message}`;
+  }
+}
+
+/** v0.64.0: a note 30 minutes before each meeting of this person (organised or invited), once per meeting on this device. */
+export function remindSoon(now = Date.now()) {
+  const company = store.company;
+  if (!company || !store.user) return;
+  let done = [];
+  try { done = JSON.parse(localStorage.getItem('sf:mtgRemind') || '[]'); } catch { /* none kept */ }
+  for (const m of mineOf(company)) {
+    const t = Date.parse(m.start) - now;
+    if (!live(m) || t <= 0 || t > 30 * 60000 || done.includes(m.id)) continue;
+    tell(`In ${Math.max(1, Math.round(t / 60000))} minutes: ${m.title}${m.where ? `, ${m.where}` : ''}`);
+    done = [...done.slice(-50), m.id];
+  }
+  try { localStorage.setItem('sf:mtgRemind', JSON.stringify(done)); } catch { /* the note may come again */ }
+}
+
 export const actions = {
   openMinutes(el) { minutesOf = el.dataset.id; notice = ''; },
   closeMinutes() { minutesOf = null; notice = ''; },
@@ -275,11 +318,12 @@ export const actions = {
   cutAction(el, c) { saveRecord(c, r => { r.actions = r.actions.filter(a => a.id !== el.dataset.id); }); },
   tab(el) { tab = el.dataset.t; notice = ''; },
   past() { showPast = !showPast; },
-  /** The invitation by email to everyone invited, with the calendar link. */
+  /** The invitation by email to everyone invited, with the calendar link and (v0.64.0) the calendar file. */
   invite(el, c) {
     const m = (c.company.meetings || []).find(x => x.id === el.dataset.id);
     if (!m) return;
     openMail({
+      ics: icsOf(m),
       to: (m.invitees || []).map(i => i.email).join(', '),
       subject: `Meeting: ${m.title}, ${whenOf(m)}`,
       message: `Hello,\n\nYou are invited to a meeting.\n\n${inviteText(m)}\n\nAdd it to your calendar:\n${calendarLink({ title: m.title, start: Date.parse(m.start), minutes: m.minutes, where: m.where, details: '' })}\n\nKind regards,\n${store.signature}`,
@@ -288,8 +332,9 @@ export const actions = {
   },
   cancelMeeting(el, c) {
     const m = (c.company.meetings || []).find(x => x.id === el.dataset.id);
-    if (!m || !confirm(`Cancel "${m.title}" on ${whenOf(m)}? The people invited see it as cancelled. No email is sent.`)) return;
-    store.updateCompany(co => { const x = co.meetings.find(k => k.id === m.id); if (x) x.status = 'cancelled'; });
+    if (!m || !confirm(`Cancel "${m.title}" on ${whenOf(m)}? The people invited see it as cancelled and get an email that takes it off their calendar.`)) return;
+    store.updateCompany(co => { const x = co.meetings.find(k => k.id === m.id); if (x) { x.status = 'cancelled'; x.seq = (x.seq || 0) + 1; } });
+    mailInvite({ ...m, seq: (m.seq || 0) + 1 }, 'CANCEL').then(t => { notice = t; store.notify(); });
   },
   copyLink() {
     navigator.clipboard.writeText(link()).then(() => { notice = 'Booking link copied.'; store.notify(); }, () => {});
@@ -302,6 +347,7 @@ export const actions = {
       to: b.email,
       subject: `Confirmed: ${b.typeName}, ${whenLabel(start, s.offset)}`,
       message: `Dear ${b.name},\n\nYour meeting with ${s.company} is confirmed.\n\n${b.typeName}, ${b.minutes} minutes\n${whenLabel(start, s.offset)} (${s.zone})\n${b.where || ''}\n\nAdd it to your calendar:\n${calendarLink({ title: `${b.typeName} with ${s.company}`, start, minutes: b.minutes, where: b.where, details: '' })}\n\nIf you cannot make it, please reply to this email.\n\nKind regards,\n${store.signature}\n${s.company}`,
+      ics: { name: 'invite.ics', text: calendarFile({ id: b.id, title: `${b.typeName} with ${s.company}`, start, minutes: b.minutes, where: b.where, details: '' }, { method: 'REQUEST', organizer: { email: store.user?.email || '', name: s.company }, attendees: [{ email: b.email, name: b.name }], alarm: 30 }) },
       onSent({ to }) { notice = `Confirmation sent to ${to}.`; store.notify(); },
     });
   },
@@ -372,7 +418,8 @@ export const submits = {
     };
     store.updateCompany(co => { (co.meetings ||= []).push(m); });
     tab = 'list';
-    notice = `"${m.title}" scheduled. The people invited see it with a note. Use "Email the invitation" to send it to their inbox too.`;
+    notice = `"${m.title}" scheduled. Emailing the invitation…`;
+    mailInvite(m).then(t => { notice = `"${m.title}" scheduled. ${t}`; store.notify(); });
   },
   type(fd) {
     const s = withDefaults(store.booking);

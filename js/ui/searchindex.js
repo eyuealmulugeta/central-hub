@@ -2,7 +2,7 @@
 // each page shows. Built fresh each time the box opens, from what this person may open now. Each entry is
 // { kind, label, hint, body, run }: `body` is the rest of the text, matched but not shown (the box shows a snippet of it).
 
-import { flatText, htmlToText } from '../engine/find.js';
+import { flatText, htmlToText, headingsOf } from '../engine/find.js';
 import { fmtFull } from '../core/util.js';
 
 // These pages mark things as read when they are drawn, or load their figures when opened, so they are not drawn just to read their text:
@@ -85,7 +85,7 @@ export async function indexPages(env, push) {
     try {
       if (settingsPage) env.settings.set(page);
       const html = settingsPage && view.indexText ? view.indexText(ctx) : String(view.render(ctx));
-      push([{ kind: 'On the page', label: titles[page] || page, hint: '', body: htmlToText(html), run: () => env.goTo(page) }]);
+      push([{ kind: 'On the page', label: titles[page] || page, hint: '', body: htmlToText(html), heads: headingsOf(html), run: () => env.goTo(page) }]);   // v0.64.0: headings kept apart
     } catch { /* a page that cannot be drawn here is simply not searched */ }
     finally { env.settings.set(before); }
   }

@@ -128,7 +128,7 @@ function wire() {
       // replies come back to the person who pressed Send: the address set under Backup, else the one they signed in with
       const replyTo = driveConfig.get().replyTo || (store.cloud ? store.user?.email : '') || '';
       const fromName = store.profile?.name || (store.cloud ? store.user?.name : '') || '';
-      const out = await sendMail({ ...v, replyTo, fromName, html, filename: job.filename, files: [...(ownPdf ? [ownPdf] : []), ...picked].map(({ name, dataBase64 }) => ({ name, dataBase64 })) });
+      const out = await sendMail({ ...v, replyTo, fromName, html, filename: job.filename, files: [...(ownPdf ? [ownPdf] : []), ...picked].map(({ name, dataBase64 }) => ({ name, dataBase64 })), ics: job.ics || null });
       $('dlg-mail').close();
       keepRecipients(v);
       job.onSent?.({ to: v.to, cc: v.cc, attached: out.attached || '' });

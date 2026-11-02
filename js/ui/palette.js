@@ -1,7 +1,7 @@
 // The search box (Ctrl+K): type any words, a number, a date or part of a code, in any format, and find the page, record
 // or text that has them. The words of the page itself are searched too; choosing a result opens its page with the words marked.
 
-import { matches, snippet } from '../engine/find.js';
+import { matches, snippet, matchPlace } from '../engine/find.js';
 
 const $ = id => document.getElementById(id);
 const MAX_SHOWN = 14;
@@ -26,10 +26,13 @@ function search(text) {
     const inBody = !inHead && item.body && matches(item.body, query);
     if (!inHead && !inBody) continue;
     const label = lower(item.label);
-    scored.push({ item, inBody, rank: inBody ? (item.kind === 'On the page' ? 4 : 3) : label.startsWith(first) ? 0 : matches(item.label, query) ? 1 : 2 });
+    const place = matchPlace(item, query);
+    // a page heading comes before words further down a page
+    scored.push({ item, inBody, place, rank: inBody ? (place === 'Heading' ? 2.5 : item.kind === 'On the page' ? 4 : 3) : label.startsWith(first) ? 0 : matches(item.label, query) ? 1 : 2 });
   }
   scored.sort((a, b) => a.rank - b.rank);
-  const out = scored.slice(0, MAX_SHOWN).map(x => (x.inBody ? { ...x.item, hint: snippet(x.item.body, query, 100) } : x.item));
+  const headLine = (heads, q) => String(heads).split('\n').find(h => matches(h, q)) || '';
+  const out = scored.slice(0, MAX_SHOWN).map(x => ({ ...x.item, place: x.place, ...(x.inBody ? { hint: x.place === 'Heading' ? headLine(x.item.heads, query) : snippet(x.item.body, query, 100) } : {}) }));
   return [...(options.extra?.(query) || []), ...out];
 }
 
@@ -37,7 +40,7 @@ function draw() {
   shown = search($('palette-input').value);
   at = Math.min(at, Math.max(0, shown.length - 1));
   $('palette-list').innerHTML = shown.length
-    ? shown.map((x, i) => `<li role="option" data-i="${i}" class="${i === at ? 'on' : ''}" aria-selected="${i === at}"><span class="chip">${esc(x.kind)}</span><b>${esc(x.label)}</b><span class="muted">${esc(x.hint || '')}</span></li>`).join('')
+    ? shown.map((x, i) => `<li role="option" data-i="${i}" class="${i === at ? 'on' : ''}" aria-selected="${i === at}"><span class="chip">${esc(x.kind)}</span>${x.place ? `<span class="chip place">${esc(x.place)}</span>` : ''}<b>${esc(x.label)}</b><span class="muted">${esc(x.hint || '')}</span></li>`).join('')
     : '<li class="none">Nothing matches. Try a name, a number, a date or a page, in any format.</li>';
 }
 

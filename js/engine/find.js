@@ -147,3 +147,19 @@ export function flatText(value, limit = 800) {
   walk(value, '');
   return out.join(' ').slice(0, limit * 2);
 }
+
+/** v0.64.0 (owner): the headings of a page (titles of sections, tables, groups of fields), as one text per line. */
+export function headingsOf(html) {
+  return [...String(html || '').matchAll(/<(h[1-4]|legend|th|summary)\b[^>]*>([\s\S]*?)<\/\1>/gi)]
+    .map(m => htmlToText(m[2]).trim()).filter(Boolean).join('\n');
+}
+
+/**
+ * v0.64.0 (owner): where the words were found, shown beside each search result: in the page title (or a record's
+ * name), in a heading of the page, or in the details (the rest of the text).
+ */
+export function matchPlace(item, query) {
+  if (matches(item.label || '', query)) return item.kind === 'On the page' ? 'Page title' : 'Title';
+  if (item.heads && matches(item.heads, query)) return 'Heading';
+  return 'Detail';
+}

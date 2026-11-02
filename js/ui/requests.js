@@ -13,6 +13,9 @@ import { html, options, chip } from './dom.js';
 import { docHead, docSec, footText, signoff } from './print.js';
 import { docRef } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
+import { isExpense, expenseMoves, expenseStatus, expenseStep, checkExpense, expenseTitle, costOf, isGM, limitOf, overLimit, EXPENSE_CATEGORIES, PAY_METHODS, RECEIPT } from '../engine/expenses.js';
+import { pictureFor, tell } from '../core/image.js';
+import { money } from '../core/util.js';
 
 let selected = null;
 let filter = null;          // waiting | open | done | all; chosen from the person's role until they pick one
@@ -24,7 +27,13 @@ const stamp = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getT
 const approver = () => store.role === 'owner' || store.role === 'office';
 const me = () => ({ email: (store.user?.email || '').toLowerCase(), name: store.profile.name || store.user?.name || 'Admin' });
 const find = ws => ws.requests.find(r => r.id === selected);
-const STATUS_CLASS = { requested: 'warn', approved: 'info', arranging: 'info', fulfilled: 'ok', rejected: 'high', cancelled: '' };
+const STATUS_CLASS = { requested: 'warn', approved: 'info', arranging: 'info', fulfilled: 'ok', rejected: 'high', cancelled: '', gm: 'warn', paid: 'ok' };
+// v0.61.0: an expense has its own steps and words (engine/expenses.js)
+const gm = () => isGM({ role: store.role, ranks: store.ranks });
+const movesOf = (r, c) => (isExpense(r) ? expenseMoves(r, { approver: approver(), gm: gm(), company: c.company }) : moves(r.status, approver()));
+const labelOf = r => (isExpense(r) ? expenseStatus(r.status) : statusLabel(r.status));
+const titleFor = r => (isExpense(r) ? expenseTitle(r) : titleOf(r));
+let receipt = null;   // the receipt photo chosen for a new expense, made small
 
 export function render(c) {
   const r = find(c.ws);
@@ -35,7 +44,9 @@ function list(c) {
   const all = c.ws.requests.filter(sent).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.number.localeCompare(a.number));
   const s = summary(all, c.today);
   const on = filter || (approver() ? 'waiting' : 'open');
-  const shown = all.filter(r => (on === 'waiting' ? r.status === 'requested' : on === 'open' ? isOpen(r) : on === 'done' ? !isOpen(r) : true));
+  const shown = all.filter(r => (on === 'waiting' ? ['requested', 'gm'].includes(r.status) : on === 'open' ? isOpen(r) : on === 'done' ? !isOpen(r) : on === 'expenses' ? isExpense(r) : true));
+  const nEx = all.filter(r => isExpense(r) && isOpen(r)).length;
+  const payCur = c.project.payCurrency === 'USD' ? 'USD' : 'ETB';
   const tasks = c.ws.tasks.filter(t => !t.milestone).map(t => [t.id, t.name]);
   const tab = (id, label, n) => html`<button type="button" class="btn small ${on === id ? 'primary' : ''}" data-act="filter" data-k="${id}">${label}${n != null ? ` (${n})` : ''}</button>`;
   return html`
@@ -59,23 +70,40 @@ function list(c) {
       </form>
     </section>
     <section class="card">
+      <div class="toolbar"><h2>New expense</h2><span class="muted">The PM approves; above ${money(limitOf(c.company, 'ETB'), 'ETB')} or ${money(limitOf(c.company, 'USD'), 'USD')} the GM too. Approved expenses go into the Ledger costs.</span></div>
+      <form data-form="newExpense">
+        <div class="grid2">
+          <label>What it is for <input name="description" required placeholder="e.g. Diesel for the generator, 40 litres"></label>
+          <label>Paid to (optional) <input name="vendor" placeholder="Shop or person"></label>
+          <label>Amount <input name="amount" type="number" min="0" step="any" required class="amount"></label>
+          <label>Currency <select name="currency">${options([['ETB', 'ETB'], ['USD', 'USD']], payCur)}</select></label>
+          <label>Category <select name="category">${options(EXPENSE_CATEGORIES, 'material')}</select></label>
+          <label>Receipt photo <input type="file" accept="image/*" data-chg="receipt"></label>
+        </div>
+        ${receipt ? html`<p class="muted">Receipt ready <img class="receipt-thumb" src="${receipt}" alt="Receipt"></p>` : ''}
+        <label>Why it is needed (optional) <textarea name="purpose" rows="2"></textarea></label>
+        <div class="actions left"><button class="btn primary">Send for approval</button></div>
+      </form>
+    </section>
+    <section class="card">
       <div class="toolbar"><h2>Requests</h2>
-        ${tab('waiting', 'Waiting for approval', s.waiting)}${tab('open', 'Open', s.open)}${tab('done', 'Closed')}${tab('all', 'All')}
+        ${tab('waiting', 'Waiting for approval', all.filter(r => ['requested', 'gm'].includes(r.status)).length)}${tab('open', 'Open', s.open)}${tab('expenses', 'Expenses', nEx)}${tab('done', 'Closed')}${tab('all', 'All')}
         <span class="grow"></span><span class="muted">${s.overdue ? `${s.overdue} past the date needed` : ''}${s.urgent ? `${s.overdue ? ', ' : ''}${s.urgent} urgent` : ''}</span></div>
       ${shown.length ? html`<table class="table">
         <thead><tr><th>Number</th><th>What</th><th>Needed by</th><th>Priority</th><th>Status</th><th>Asked by</th></tr></thead>
         <tbody>${shown.map(r => html`<tr class="click" data-act="open" data-id="${r.id}">
           <td class="nowrap"><button class="link" type="button">${r.number}</button> <span class="muted note">${kindLabel(r.kind)}</span></td>
-          <td>${titleOf(r)}</td>
+          <td>${titleFor(r)}</td>
           <td class="nowrap ${overdue(r, c.today) ? 'bad' : ''}">${r.neededBy ? fmtFull(r.neededBy) : ''}${overdue(r, c.today) ? ' (late)' : ''}</td>
           <td>${r.priority === 'urgent' ? chip('Urgent', 'high') : ''}</td>
-          <td>${chip(statusLabel(r.status), STATUS_CLASS[r.status])}</td>
+          <td>${chip(labelOf(r), STATUS_CLASS[r.status])}</td>
           <td>${r.byName || r.by}</td></tr>`)}</tbody>
       </table>` : html`<p class="empty">${all.length ? 'Nothing in this list.' : 'No requests yet.'}</p>`}
     </section>`;
 }
 
 function detail(r, c) {
+  if (isExpense(r)) return expenseDetail(r, c);
   const can = approver();
   const edit = editable(r, can);
   const tasks = c.ws.tasks.filter(t => !t.milestone).map(t => [t.id, t.name]);
@@ -130,6 +158,50 @@ function detail(r, c) {
     </div></section>`;
 }
 
+/** v0.61.0: one expense: its figures, receipt, steps, and paying it once approved. */
+function expenseDetail(r, c) {
+  const edit = r.status === 'requested';
+  const over = overLimit(r, c.company);
+  const step = to => [...(r.log || [])].reverse().find(x => x.status === to);
+  const pm = step('gm') || (over ? null : step('approved')), gmStep = over ? step('approved') : null;
+  return html`
+    <div class="toolbar no-print">
+      <button class="btn ghost" data-act="back">← Requests</button>
+      <span class="muted">${r.number}</span><span class="grow"></span>
+      ${movesOf(r, c).filter(([to]) => to !== 'paid').map(([to, label]) => html`<button class="btn ${['approved', 'gm'].includes(to) ? 'primary' : ''}" data-act="move" data-to="${to}">${label}</button>`)}
+      <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
+      <button class="btn" data-act="print">Print</button>
+      <button class="btn danger" data-act="removeRequest">Delete</button>
+    </div>
+    ${notice ? html`<p class="ok no-print">${notice}</p>` : ''}
+    ${edit ? html`<section class="card no-print"><div class="grid2">
+      <label>What it is for <input data-chg="exLine" data-fk="ex-d" value="${r.lines?.[0]?.description || ''}"></label>
+      <label>Paid to <input data-chg="set" data-f="vendor" data-fk="ex-v" value="${r.vendor || ''}"></label>
+      <label>Amount <input type="number" min="0" step="any" data-chg="exAmount" data-fk="ex-a" value="${r.amount ?? ''}"></label>
+      <label>Currency <select data-chg="set" data-f="currency" data-fk="ex-c">${options([['ETB', 'ETB'], ['USD', 'USD']], r.currency)}</select></label>
+      <label>Category <select data-chg="set" data-f="category" data-fk="ex-k">${options(EXPENSE_CATEGORIES, r.category)}</select></label>
+    </div></section>` : ''}
+    ${r.status === 'approved' && approver() ? html`<section class="card no-print"><h3>Pay it</h3>
+      <form data-form="payExpense" class="grid2">
+        <label>Paid by <select name="method">${options(PAY_METHODS, 'bank')}</select></label>
+        <label>Bank or receipt reference <input name="ref" placeholder="As on the bank statement"></label>
+        <label>Paid on <input type="date" name="date" value="${c.today}" required></label>
+        <div class="actions left"><button class="btn primary">Mark as paid</button></div>
+      </form></section>` : ''}
+    <section class="card sheet"><div class="paper dsr doc-paper" data-foot="${footText(c, 'Expense', reqRef(c, r))}">
+      ${docHead(c, { title: 'Expense', sub: c.project.name, ref: reqRef(c, r), status: expenseStatus(r.status), tone: r.status === 'rejected' ? 'bad' : ['approved', 'paid'].includes(r.status) ? 'ok' : 'warn',
+        facts: [['Date', fmtFull(r.date)], ['Amount', money(+r.amount || 0, r.currency)], ['Category', EXPENSE_CATEGORIES.find(([k]) => k === r.category)?.[1] || ''], ['Paid to', r.vendor || '—']] })}
+      ${docSec(1, 'What it is for', html`<p class="pre">${r.lines?.[0]?.description || ''}${r.purpose ? `\n\n${r.purpose}` : ''}</p>`)}
+      ${r.receipt ? docSec(2, 'Receipt', html`<img class="receipt" src="${r.receipt}" alt="Receipt">`) : ''}
+      ${docSec(r.receipt ? 3 : 2, 'Approval and payment', html`${(r.log || []).length ? html`<table class="dsr-t"><thead><tr><th>Date</th><th>Step</th><th>By</th><th>Note</th></tr></thead>
+        <tbody>${r.log.map(x => html`<tr><td class="nowrap">${fmtFull(x.at.slice(0, 10))}</td><td>${expenseStep(x.status)}</td><td>${x.byName || x.by}</td><td>${x.note || ''}</td></tr>`)}</tbody></table>` : ''}
+        ${r.paid ? html`<p>Paid on ${fmtFull(r.paid.date)} by ${PAY_METHODS.find(([k]) => k === r.paid.method)?.[1] || r.paid.method}${r.paid.ref ? `, reference ${r.paid.ref}` : ''}.</p>` : ''}
+        ${signoff([{ label: 'Requested by', name: [r.byName || r.by, r.byTitle].filter(Boolean).join(', '), note: fmtFull(r.date) },
+          { label: 'Approved by (PM)', name: pm ? pm.byName || pm.by : '', note: pm ? fmtFull(pm.at.slice(0, 10)) : 'Date' },
+          ...(over ? [{ label: 'Approved by (GM)', name: gmStep ? gmStep.byName || gmStep.by : '', note: gmStep ? fmtFull(gmStep.at.slice(0, 10)) : 'Date' }] : [])])}`)}
+    </div></section>`;
+}
+
 /** AP-CHB-MR-2026-004: the company, the project and the request's own number. */
 const reqRef = (c, r) => docRef({ company: c.global.company, project: c.project, key: r.number });
 
@@ -142,10 +214,10 @@ export const actions = {
   move(el, c) {
     const r = find(c.ws);
     const to = el.dataset.to;
-    if (!r || !moves(r.status, approver()).some(([k]) => k === to)) return;
+    if (!r || !movesOf(r, c).some(([k]) => k === to)) return;
     let note = '';
     if (to === 'rejected' || to === 'cancelled') {
-      note = prompt(to === 'rejected' ? 'Why is it refused? The person who asked will see this.' : 'Why is it cancelled? (optional)') ;
+      note = prompt(to === 'rejected' ? (isExpense(r) ? 'Why is it sent back? The person who asked will see this.' : 'Why is it refused? The person who asked will see this.') : 'Why is it cancelled? (optional)') ;
       if (note === null) return;
     }
     const who = me();
@@ -153,11 +225,16 @@ export const actions = {
       const x = find(ws);
       x.status = to;
       x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: to, note: String(note).trim() }];
+      if (isExpense(x)) {   // v0.61.0: approved = a Ledger cost, linked; sent back, withdrawn or reopened = the cost taken out again
+        if (to === 'approved' && !ws.ledger.some(l => l.requestId === x.id)) { const cost = costOf(x, uid('l'), c.today); ws.ledger.push(cost); x.costId = cost.id; }
+        if (['rejected', 'cancelled', 'requested'].includes(to)) { ws.ledger = ws.ledger.filter(l => l.requestId !== x.id); delete x.costId; }
+        return;
+      }
       const item = x.itemId && ws.items.find(i => i.id === x.itemId);
       if (to === 'approved' && !item) { const f = followUp(x, c.today, uid('i')); ws.items.push(f); x.itemId = f.id; }
       else if (item) item.status = ['fulfilled', 'rejected', 'cancelled'].includes(to) ? 'closed' : 'open';
     });
-    notice = `${r.number}: ${statusLabel(to).toLowerCase()}.`;
+    notice = `${r.number}: ${labelOf({ ...r, status: to }).toLowerCase()}.`;
   },
   cutLine(el, c) {
     store.update(ws => { const r = find(ws); if (r && editable(r, approver())) r.lines = r.lines.filter(l => l.id !== el.dataset.id); });
@@ -189,6 +266,14 @@ export const actions = {
 };
 
 export const changes = {
+  async receipt(el) {
+    const file = el.files?.[0];
+    if (!file) return;
+    try { receipt = (await pictureFor(file, RECEIPT)).dataUrl; } catch (err) { tell(err.message); receipt = null; }
+    store.notify();
+  },
+  exLine(el) { store.update(ws => { const r = find(ws); if (r && r.status === 'requested') r.lines = [{ ...(r.lines?.[0] || { id: uid('rl'), qty: 1, unit: '' }), description: el.value.trim() }]; }); },
+  exAmount(el) { store.update(ws => { const r = find(ws); if (r && r.status === 'requested') r.amount = Math.max(0, +el.value || 0); }); },
   set(el) {
     const f = el.dataset.f;
     store.update(ws => { const r = find(ws); if (r && editable(r, approver())) r[f] = el.value.trim(); });
@@ -204,6 +289,37 @@ export const changes = {
 };
 
 export const submits = {
+  newExpense(fd, c) {
+    const who = me();
+    const rec = {
+      id: uid('rq'), number: nextNumber(c.ws.requests), kind: 'expense', priority: 'normal', status: 'requested', date: c.today,
+      lines: [{ id: uid('rl'), description: String(fd.get('description') || '').trim(), qty: 1, unit: '', note: '' }],
+      amount: +fd.get('amount') || 0, currency: fd.get('currency') === 'USD' ? 'USD' : 'ETB', category: fd.get('category') || 'overhead',
+      vendor: String(fd.get('vendor') || '').trim(), purpose: String(fd.get('purpose') || '').trim(), receipt: receipt || '',
+      by: who.email, byName: who.name, byTitle: store.profile.title || '', projectId: c.project.id,
+      log: [{ at: stamp(), by: who.email, byName: who.name, status: 'requested', note: '' }],
+    };
+    problems = checkExpense(rec);
+    if (problems.length) return false;
+    store.update(ws => ws.requests.push(rec));
+    receipt = null;
+    notice = `${rec.number} sent for approval.`;
+    selected = rec.id;
+  },
+  payExpense(fd, c) {
+    const r = find(c.ws);
+    if (!r || r.status !== 'approved' || !approver()) return false;
+    const who = me();
+    const paid = { method: fd.get('method') || 'bank', ref: String(fd.get('ref') || '').trim(), date: fd.get('date') || c.today, by: who.email };
+    store.update(ws => {
+      const x = find(ws);
+      x.status = 'paid'; x.paid = paid;
+      x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: 'paid', note: paid.ref ? `Reference ${paid.ref}` : '' }];
+      const cost = ws.ledger.find(l => l.requestId === x.id);
+      if (cost) Object.assign(cost, { method: paid.method, bankRef: paid.ref, paidOn: paid.date });
+    });
+    notice = `${r.number}: paid.`;
+  },
   newRequest(fd, c) {
     const kind = fd.get('kind');
     const who = me();

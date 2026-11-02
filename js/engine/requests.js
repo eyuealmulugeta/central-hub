@@ -6,7 +6,7 @@
 import { toDay } from '../core/util.js';
 
 export const KINDS = [['material', 'Material'], ['manpower', 'Manpower'], ['equipment', 'Equipment']];
-export const kindLabel = id => KINDS.find(([k]) => k === id)?.[1] || 'Material';
+export const kindLabel = id => (id === 'expense' ? 'Expense' : KINDS.find(([k]) => k === id)?.[1] || 'Material');   // v0.61.0: expenses
 /** What a quantity is counted in until the person says otherwise. */
 export const DEFAULT_UNIT = { material: 'pcs', manpower: 'people', equipment: 'units' };
 
@@ -17,9 +17,11 @@ export const STATUSES = [
   ['fulfilled', 'Delivered or on site'], ['rejected', 'Rejected'], ['cancelled', 'Cancelled'],
   // v0.38.0: written on a Field Report phone, not sent yet (or deleted there); Central Hub does not list them
   ['draft', 'Draft on site'], ['deleted', 'Deleted on site'],
+  // v0.61.0: expenses (engine/expenses.js): above the limit the GM approves too; an approved expense is then paid
+  ['gm', 'Waiting for the GM'], ['paid', 'Paid'],
 ];
 export const statusLabel = id => STATUSES.find(([k]) => k === id)?.[1] || id;
-export const isOpen = r => !['fulfilled', 'rejected', 'cancelled', 'draft', 'deleted'].includes(r.status);
+export const isOpen = r => !['fulfilled', 'rejected', 'cancelled', 'draft', 'deleted', 'paid'].includes(r.status);
 /** v0.38.0: a request the office sees (a site draft is not sent yet). */
 export const sent = r => !['draft', 'deleted'].includes(r.status);
 

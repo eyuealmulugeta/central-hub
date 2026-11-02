@@ -267,6 +267,11 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
     (meta.requestItems || []).forEach((r, i) => {
       const itemId = `${id}_${i}`;
       if (!r.text || r.live || ws.items.some(x => x.id === itemId)) return;   // v0.38.0: a live one is already under Requests
+      // v0.61.0: an expense sent with the report (no connection on site) waits under Requests for the PM, as one sent live
+      if (r.category === 'Expense') {
+        if (+r.amount > 0 && !ws.requests.some(x => x.id === itemId)) ws.requests.push(siteExpense(r, itemId, meta, by));
+        return;
+      }
       const urgent = r.priority === 'Urgent';
       ws.items.push({
         id: itemId, type: 'site_request', title: urgent ? `URGENT: ${r.text}` : r.text, owner: by, created: meta.date,
@@ -684,4 +689,16 @@ export async function syncProjects({ projects, users = [], regions = [], dry = f
   }
   const mine = new Set(rows.map(r => r.code).filter(Boolean));
   return { rows, extra: held.filter(x => !mine.has(String(x.code || '').toUpperCase())) };
+}
+
+const COST = { Material: 'material', Labour: 'labor', Equipment: 'equipment', Subcontract: 'subcontract', Transport: 'transport', Overhead: 'overhead' };
+/** v0.61.0: an expense from a Field Report report, in Central Hub's request shape (the receipt stays on the phone). */
+export function siteExpense(r, id, meta, by) {
+  return {
+    id, number: `SITE-${String(id).slice(-6).toUpperCase()}`, kind: 'expense', priority: 'normal', status: 'requested', date: meta.date, site: true,
+    lines: [{ id: `${id}_1`, description: String(r.text || '').trim(), qty: 1, unit: '', note: '' }],
+    amount: +r.amount, currency: r.currency === 'USD' ? 'USD' : 'ETB', category: COST[r.cost] || 'material', vendor: r.vendor || '', receipt: '',
+    purpose: r.location ? `Where on site: ${r.location}` : '', by: by || 'Site', byName: by || 'Site', byTitle: 'Field Report', projectId: meta.projectId || '',
+    log: [{ at: `${meta.date}T18:00`, by: by || 'Site', byName: by || 'Site', status: 'requested', note: 'Sent with the daily report' }],
+  };
 }

@@ -9,20 +9,26 @@ import { itemLine, itemReady, workMeta } from './items.js';
 import { manpowerMeta, attendanceRows, totals } from './crew.js';
 import { dayMeta, photoNeedsCaption } from './day.js';
 
-export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Other'];
+export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Expense', 'Other'];
+// 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PM
+// approves it in Central Hub (the GM too above the limit); approved, it is a cost in the Ledger.
+export const EXPENSE_COSTS = [['Material', 'material'], ['Labour', 'labor'], ['Equipment', 'equipment'], ['Subcontract', 'subcontract'], ['Transport', 'transport'], ['Overhead', 'overhead']];
+export const CURRENCIES = ['ETB', 'USD'];
 export const PRIORITIES = ['Normal', 'Urgent'];
 export const REQUEST_UNITS = ['pcs', 'people', 'days', 'kg', 't', 'm', 'm²', 'm³', 'bags', 'lot'];
 
 export const newRequest = (time, category = 'Material') => ({
   id: uid(), at: time, category, text: '', qty: null, unit: category === 'Manpower' ? 'people' : 'pcs', neededBy: '', priority: 'Normal', location: '',
+  amount: null, currency: 'ETB', cost: 'Material', vendor: '', receipt: '',   // 2.29.0: for an expense
 });
 export const newPlanLine = (zone = '') => ({ id: uid(), zone, taskId: '', task: '', type: '', text: '' });
 
-export const requestReady = q => !!String(q.text || '').trim();
+export const requestReady = q => !!String(q.text || '').trim() && (q.category !== 'Expense' || num(q.amount) > 0);
 export const planReady = x => !!(String(x.text || '').trim() || x.task || x.type);
 
 /** "2 people · needed by 22 Oct" */
 export function requestLine(q) {
+  if (q.category === 'Expense') return ['Expense', `${q.currency || 'ETB'} ${(num(q.amount) || 0).toLocaleString('en-US')}`, q.vendor ? `to ${q.vendor}` : '', q.receipt ? 'receipt' : ''].filter(Boolean).join(' · ');
   const amt = q.qty != null && q.qty !== '' ? `${q.qty} ${q.unit || ''}`.trim() : '';
   return [q.category, amt, q.neededBy ? `needed by ${dayLabel(q.neededBy)}` : ''].filter(Boolean).join(' · ');
 }
@@ -122,6 +128,8 @@ export function reportMeta(r, project, profile = {}) {
       ...(num(q.qty) != null ? { qty: num(q.qty) } : {}), ...(q.unit && num(q.qty) != null ? { unit: q.unit } : {}),
       ...(q.neededBy ? { neededBy: q.neededBy } : {}), ...(q.location ? { location: q.location } : {}),
       ...(q.live ? { live: true } : {}),   // 2.14.0: already under Requests in Central Hub
+      // 2.29.0: an expense (the receipt photo goes only with the shared request, too large for the report)
+      ...(q.category === 'Expense' ? { amount: num(q.amount) || 0, currency: q.currency || 'ETB', cost: q.cost || 'Material', vendor: String(q.vendor || '').trim() } : {}),
     })),
     work: work.work, milestones: work.milestones, items: work.items,
     attendance: attendanceRows(r.crew), crewFrom: 'attendance',

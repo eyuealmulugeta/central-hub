@@ -48,13 +48,19 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
   if (approver) {
-    const asked = requests.filter(r => r.status === 'requested');
+    const asked = requests.filter(r => r.status === 'requested' && r.kind !== 'expense');
     const urgent = asked.filter(r => /urgent|high/i.test(r.priority || ''));
     if (asked.length) out.push({ sev: urgent.length ? 'high' : 'warn', kind: 'Requests', title: `${asked.length} site request${asked.length > 1 ? 's' : ''} waiting for an answer`, detail: urgent.length ? `${urgent.length} marked urgent` : 'Material, manpower or equipment', link: 'requests', projectId: project.id, project: project.name });
+    // v0.61.0: expenses waiting for this person (the PM; the GM also those above the limit), and approved ones to pay
+    const ex = requests.filter(r => r.kind === 'expense');
+    const decide = ex.filter(r => r.status === 'requested' || (gm && r.status === 'gm'));
+    const toPay = ex.filter(r => r.status === 'approved');
+    if (decide.length) out.push({ sev: 'warn', kind: 'Expenses', title: `${decide.length} expense${decide.length > 1 ? 's' : ''} to approve`, detail: decide.some(r => r.status === 'gm') ? 'Some are above the limit and wait for the GM' : 'Asked for by the site or the office', link: 'requests', projectId: project.id, project: project.name });
+    if (toPay.length) out.push({ sev: 'info', kind: 'Expenses', title: `${toPay.length} approved expense${toPay.length > 1 ? 's' : ''} to pay`, detail: 'Mark each paid with the method and the bank reference', link: 'requests', projectId: project.id, project: project.name });
   }
   for (const s of others) {
     const waiting = +s.waiting || 0, alerts = +s.unseen || 0;

@@ -41,7 +41,7 @@ function needRow(n, c) {
   const other = n.projectId !== c.project.id;
   return html`<li class="trow">
     <span class="tic ${SEV_TONE[n.sev]}">${icon(n.link === 'reports' ? 'reports' : n.link === 'schedule' ? 'schedule' : n.link === 'requests' ? 'docs' : ['ledger', 'docs', 'invoices'].includes(n.link) ? 'finance' : 'dashboard', 18)}</span>
-    <span class="tt"><b>${n.title}</b><span class="muted">${n.kind}${n.detail ? `. ${n.detail}` : ''}</span></span>
+    <span class="tt"><b>${n.title}</b><span class="muted">${n.detail || ''}</span></span>
     <span class="tag ${SEV_TONE[n.sev]}">${SEV_LABEL[n.sev]}</span>
     ${other ? html`<button type="button" class="btn small" data-act="openProject" data-id="${n.projectId}" data-to="${n.link}">Open</button>`
       : html`<a class="btn small ${n.kind === 'Field reports' ? 'primary' : ''}" href="#${n.link}">${n.kind === 'Field reports' ? 'Review' : 'Open'}</a>`}

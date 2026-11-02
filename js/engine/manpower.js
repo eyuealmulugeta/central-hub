@@ -40,7 +40,7 @@ export function projectOfRow(person) {
 export function directoryRows(staff, table, f = {}) {
   const text = String(f.search || '').trim().toLowerCase();
   const status = f.status || 'active';
-  return (staff || []).filter(p => p.division !== 'trading' && tableOf(p) === table
+  return (staff || []).filter(p => p.division !== 'trading' && (table === 'all' || tableOf(p) === table)   // v0.57.0: 'all' is staff and crew in one list
     && (status === 'all' || (status === 'left' ? p.status === 'left' : p.status !== 'left'))
     && (!f.position || positionsOf(p).includes(f.position))
     && (!f.tier || String(tierOfPerson(p) ?? '') === String(f.tier))
@@ -80,3 +80,35 @@ export function rankPatchFor(positions) {
 
 /** Who added a person and when, for the directory's "Added by" column. */
 export const addedStamp = (who, today) => ({ addedBy: String(who || ''), addedOn: today || '' });
+
+// ---- v0.57.0 (owner, 2 Nov): the Manpower Directory is the one source of each person's position, tier and title ----
+
+/** People whose position is kept in an old spelling (e.g. "Site manager", read as Project Engineer): the listed words. Pure. */
+export function titleFixes(staff) {
+  return (staff || []).flatMap(p => {
+    const title = p.title ? normRole(p.title) : p.title, titles = (p.titles || []).map(normRole);
+    return title !== p.title || titles.some((t, i) => t !== p.titles[i]) ? [{ id: p.id, title, titles }] : [];
+  });
+}
+
+/** Sign-ins whose title or ranks differ from the person's positions in the directory: [{ email, patch }]. Pure. */
+export function userSyncPatches(users, staff) {
+  return (users || []).flatMap(u => {
+    const p = personByEmail(staff, u.email), pos = positionsOf(p);
+    if (!pos.length) return [];
+    const patch = rankPatchFor(pos);
+    const same = (u.title || '') === (patch.title || '') && JSON.stringify(u.ranks || []) === JSON.stringify(patch.ranks || []);
+    return same ? [] : [{ email: u.email, patch }];
+  });
+}
+
+/** Team members typed by name who are the one person of that name in the directory: [{ id, personId }]. Pure. */
+export function sameNameLinks(team, staff) {
+  const key = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const by = new Map();
+  for (const p of (staff || []).filter(x => x.status !== 'left' && key(x.name))) by.set(key(p.name), [...(by.get(key(p.name)) || []), p]);
+  return (team || []).flatMap(m => {
+    const list = !m.personId && by.get(key(m.name));
+    return list && list.length === 1 ? [{ id: m.id, personId: list[0].id }] : [];
+  });
+}

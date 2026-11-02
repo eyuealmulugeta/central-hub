@@ -29,9 +29,10 @@ export const formIdOf = (link, random = n => crypto.getRandomValues(new Uint8Arr
 export const linkUrl = (id, base = 'https://hub.amistadprefab.com/') => `${base.replace(/\/?$/, '/')}crew.html?l=${id}`;
 
 /** A new link record. `kind` 'one' (one person, `name` and `email` are theirs) or 'crew' (as many as come). */
-export function makeLink({ kind = 'one', name = '', email = '', projectId = '', projectName = '', by, byName = '', now = Date.now(), id = newLinkId() }) {
+export function makeLink({ kind = 'one', name = '', email = '', projectId = '', projectName = '', by, byName = '', now = Date.now(), id = newLinkId(), trades = [] }) {
   const k = kind === 'crew' ? 'crew' : 'one';
-  return { id, kind: k, name: String(name).trim(), email: String(email).trim().toLowerCase(), projectId, projectName, by, byName, at: new Date(now).toISOString(), untilMs: now + LINK_DAYS[k] * 864e5, status: 'open' };
+  // v0.57.0: the link carries the Manpower Directory's trades, so the form offers the same list (no tiers shown)
+  return { id, kind: k, name: String(name).trim(), email: String(email).trim().toLowerCase(), projectId, projectName, by, byName, at: new Date(now).toISOString(), untilMs: now + LINK_DAYS[k] * 864e5, status: 'open', ...(trades.length ? { trades: [...new Set(trades.map(String))].slice(0, 200) } : {}) };
 }
 /** v0.46.0: Ask for changes: the link opens again for 7 days with the office's note, shown on the form. Pure. */
 export const reopenLink = (link, note, now = Date.now()) => ({ ...link, status: 'open', untilMs: now + LINK_DAYS.one * 864e5, note: String(note || '').trim().slice(0, 300), noteAt: new Date(now).toISOString() });

@@ -20,7 +20,7 @@ import { readFayda } from '../engine/crewform.js';
 import { divOf, stamp, TRADING, INSTALLATION } from '../core/division.js';
 import { scanInto, scanButton } from './ocr.js';
 import { TITLES, GROUPS, titleOf, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
-import { positionGroups, departmentChoices, nationalityChoices, normDepartment } from '../engine/positions.js';
+import { positionGroups, departmentChoices, nationalityChoices, normDepartment, tierOfPosition } from '../engine/positions.js';
 import { chooseOptions, chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { ownerFromStaff } from '../engine/owners.js';
 import { paperHtml } from '../sync/mail.js';
@@ -292,9 +292,9 @@ function form({ p, alerts, monthly }, c) {
         ${text('Work email', 'email', 'hr-email')}
         <label>Department <select data-chg="pick" data-f="department" data-what="department" data-fk="hr-dept-f">${chooseOptions(departmentChoices({ staff: c.company.staff, current: p.department }), normDepartment(p.department))}</select></label>
         <label>Job position <span class="readonly">${p.title || 'No position'} <button type="button" class="btn ghost small" data-act="mpGo" title="Positions and projects are set only in the Manpower Directory">Change in the Manpower Directory</button></span></label>
-        <label>Evaluation tier <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person: the tier above">${options(LEVELS, levelOf(p))}</select></label>
+        ${tierOfPosition(p.title) ? html`<label>Evaluation tier <span class="readonly" title="Set by the position in the Manpower Directory">${(LEVELS.find(([k]) => k === levelOf(p)) || [, ''])[1]}</span></label>`   /* v0.57.0: the directory's tier */
+          : html`<label>Evaluation tier <select data-chg="set" data-f="level" data-fk="hr-level" title="Decides who evaluates this person: the tier above">${options(LEVELS, levelOf(p))}</select></label>`}
         <label>Manager <select data-chg="set" data-f="managerId" data-fk="hr-manager"><option value="">None</option>${options(others, p.managerId || null)}</select></label>
-        <label>Division <select data-chg="division" data-fk="hr-division">${options([[INSTALLATION, 'Installation'], [TRADING, 'Trading']], divOf(p))}</select></label>
         ${divOf(p) === TRADING ? '' : html`<label>Works on <select data-chg="set" data-f="projectId" data-fk="hr-project">
           <option value="">Head office, no project</option>${options(store.projects.map(x => [x.id, x.name]), p.projectId || null)}</select></label>`}
         ${text('Work location', 'location', 'hr-loc', 'text', html`placeholder="e.g. Modjo site, Addis office"`)}

@@ -54,6 +54,7 @@ import { alertCount as hrAlerts } from './engine/hr.js';
 import { unseenAlerts, unseenCount, alertKeys, summaryOf, headline, moneyOf, markKeysSeen, reportsOf } from './ui/seen.js';
 import * as badges from './core/badges.js';
 import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
+import { syncPeople } from './ui/peoplesync.js';
 import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, isDelete, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
 import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS } from './core/nav.js';
@@ -856,7 +857,9 @@ function start() {
       setTimeout(quick, FAST_PULL_MS);
     };
     setTimeout(quick, FAST_PULL_MS);
-    store.subscribe(() => { refresh(); reports.watchCrew(); });   // v0.31.0: allocated crew goes to Field Report
+    // v0.57.0: people's details follow the Manpower Directory (positions, sign-in titles, same-name team members)
+    setTimeout(syncPeople, 20_000);
+    store.subscribe(() => { refresh(); reports.watchCrew(); setTimeout(syncPeople, 0); });   // v0.31.0: allocated crew goes to Field Report
     addEventListener('storage', e => { if (e.key === 'sf:company' || e.key === 'sf:booking') store.reloadCompany(); });
     store.onError(toast);
     addEventListener('hashchange', () => refresh());

@@ -15,6 +15,7 @@ import { onSite } from '../sync/fieldreport.js';
 import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html, options, chip, drawer } from './dom.js';
+import { tradeChoices } from '../engine/positions.js';
 import { docHead, footText, signoff } from './print.js';
 import { payRef } from './paysheets.js';
 import { openMail } from './maildialog.js';
@@ -64,7 +65,7 @@ function ratesView(c) {
       <div class="grid2">${Object.entries(ws.laborRates || {}).map(([trade, rate], i) => html`
         <label>${trade} <input type="number" min="0" step="any" data-chg="labor" data-t="${trade}" data-fk="lb-${i}" value="${rate}" ${dis}></label>`)}</div>
       ${can ? html`<form data-form="trade" class="entry">
-        <input name="trade" placeholder="New trade" required aria-label="Trade" class="wide">
+        <select name="trade" required aria-label="Trade" title="The trades of the Manpower Directory; a new one is added there">${options([['', 'Trade…'], ...tradeChoices().filter(t => !(t in (ws.laborRates || {}))).map(t => [t, t])], '')}</select>
         <input type="number" name="rate" min="0" step="any" placeholder="Day rate" required aria-label="Day rate" class="amount">
         <button class="btn">Add</button>
       </form>` : ''}

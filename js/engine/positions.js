@@ -25,6 +25,10 @@ export function setExtraPositions(list) {
 }
 export let ROLE_GROUPS = BASE_GROUPS;
 export let ROLES = ROLE_GROUPS.flatMap(([, list]) => list);
+/** v0.57.0: the site trades of the Manpower Directory (Tiers 4 and 5), the positions added there included. */
+export const tradeChoices = () => ROLE_GROUPS.slice(3).flatMap(([, l]) => l);
+/** v0.57.0: the positions a new person may choose on the form link (no tiers shown; Tier 1 is not hired by a link). */
+export const linkTrades = () => ROLE_GROUPS.slice(1).flatMap(([, l]) => l);
 /** The tier (1-5) of a position, by the list; null for a position it does not have. */
 export const tierOfPosition = r => {
   const w = normRole(r).toLowerCase();
@@ -34,6 +38,7 @@ export const tierOfPosition = r => {
 /** v0.24.0: positions merged or renamed by the owner, and the one each became. A record is read as the new one. Operations Lead is gone (shown as old). */
 const OLD_ROLES = {
   'container house technician': 'Technician', 'general foreman': 'Foreman', 'steel structure foreman': 'Foreman',
+  'site manager': 'Project Engineer',   // v0.57.0 (owner): the same position, not a new one
   'daily labor': 'Daily labourer', 'site architect': 'Architect',   // v0.29.0: an office position
   'semi-skilled labourer': 'Semi-skilled labor',
   'site guard': 'Security', 'procurement manager': 'Procurement', 'logistics coordinator': 'Logistics', 'quantity surveyor (qs)': 'QS', 'hr/admin assistant': 'HR', 'coordinator': 'Project Coordinator', 'site technician': 'Technician', 'welder / fitter': 'Welder',   // v0.47.0: the Excel words

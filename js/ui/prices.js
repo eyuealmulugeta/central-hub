@@ -16,6 +16,7 @@ import { OWNER_SECTIONS } from '../core/schema.js';
 import { LEVELS, levelOf, levelLabel } from '../engine/evaluation.js';
 const SHORT_TIERS = LEVELS.map(([k]) => [k, `Tier ${k.slice(1)}`]);
 import { positionGroups } from '../engine/positions.js';
+import { positionsOf, personByEmail } from '../engine/manpower.js';
 import { chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
 import { DIVISIONS, divisionsOf } from '../core/nav.js';
@@ -246,7 +247,7 @@ function personDetail(u) {
         <span class="who-avatar big">${initialsOf(u.name || u.email)}</span>
         <div class="person-id">
           <input class="emp-name" data-chg="userField" data-id="${u.email}" data-f="name" data-fk="un-${u.email}" value="${u.name || ''}" placeholder="Full name" aria-label="Name of ${u.email}">
-          <span class="emp-job" title="Set by the position in the Manpower Directory">${u.title || 'No title'}</span>
+          <span class="emp-job" title="Set by the position in the Manpower Directory">${positionsOf(personByEmail(store.company?.staff, u.email)).join(', ') || u.title || 'No title'}</span>
           <span class="muted">${u.email}</span>
         </div>
         <button class="btn ghost small" data-act="removeUser" data-id="${u.email}">Remove access</button>

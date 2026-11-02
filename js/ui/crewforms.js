@@ -5,6 +5,7 @@
 
 import { store } from '../core/store.js';
 import { html, options, chip } from './dom.js';
+import { linkTrades } from '../engine/positions.js';
 import { uid } from '../core/util.js';
 import { stamp } from '../core/division.js';
 import { tell } from '../core/image.js';
@@ -116,7 +117,7 @@ export const actions = {
     const project = store.projects.find(p => p.id === pid);
     if (draft.kind === 'one' && !draft.name.trim()) return tell('Write the name of the person the link is for.');
     if (draft.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(draft.email.trim())) return tell('That email address does not look right.');
-    const l = makeLink({ ...draft, projectId: project?.id || '', projectName: project?.name || '', by: store.user?.email || 'local', byName: store.signature || store.user?.name || '' });
+    const l = makeLink({ ...draft, trades: linkTrades(), projectId: project?.id || '', projectName: project?.name || '', by: store.user?.email || 'local', byName: store.signature || store.user?.name || '' });
     try {
       if (store.isAdmin || !store.cloud) store.updateCompany(co => { (co.crewlinks ||= []).push(l); });
       else await store.cloudPut(`company/main/crewlinks/${l.id}`, l);

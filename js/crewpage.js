@@ -53,7 +53,8 @@ const shot = (label, key, capture, cls = '') => `<div class="shot ${cls}">${esc(
 
 function draw() {
   const fayda = form.doc !== 'passport';
-  const trades = [...TRADES, ...(form.trade && !TRADES.includes(form.trade) ? [form.trade] : [])];
+  const list = Array.isArray(link.trades) && link.trades.length ? link.trades : TRADES;   // v0.57.0: the directory's list, carried by the link
+  const trades = [...list, ...(form.trade && !list.includes(form.trade) ? [form.trade] : [])];
   app.innerHTML = `<div class="card">
     <h1>Crew form</h1>
     ${link.note ? `<p class="bad"><b>The office asks for changes:</b> ${esc(link.note)}</p>` : ''}

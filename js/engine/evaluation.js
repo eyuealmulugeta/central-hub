@@ -32,7 +32,9 @@ export const rankLabel = id => TITLES.find(([k]) => k === id)?.[1] || id;
 export const levelLabel = id => LEVELS.find(([k]) => k === id)?.[1] || LEVELS[3][1];
 /** The tier of a member whose tier was never chosen: by the position list (v0.47.0); anything else is tier 4. */
 export const tierOfRole = role => { const t = tierOfPosition(role); return t ? `t${t}` : 't4'; };
-export const levelOf = member => (LEVELS.some(([k]) => k === member?.level) ? member.level : OLD_LEVELS[member?.level] || tierOfRole(member?.role || member?.title));
+// v0.57.0: a listed position decides the tier (the Manpower Directory is the one source); the tier kept on the record
+// counts only for one with no listed position
+export const levelOf = member => { const t = tierOfPosition(member?.role || member?.title); return t ? `t${t}` : LEVELS.some(([k]) => k === member?.level) ? member.level : OLD_LEVELS[member?.level] || 't4'; };
 
 /** The rater's tier: the highest of their titles' (1 is highest); 0 when none rates anybody. */
 export const raterTier = ranks => Math.min(9, ...(ranks || []).map(r => RATER_TIER[r] || 9)) % 9;

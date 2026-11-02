@@ -7,7 +7,7 @@ import { store } from '../core/store.js';
 import { html, options, chip } from './dom.js';
 import { uid, money } from '../core/util.js';
 import { stamp } from '../core/division.js';
-import { positionGroups, ROLES, normRole, setExtraPositions } from '../engine/positions.js';
+import { positionGroups, ROLES, ROLE_GROUPS, normRole, setExtraPositions, linkTrades } from '../engine/positions.js';
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
 import { ratingOf } from '../engine/hr.js';
@@ -23,7 +23,7 @@ import * as crewforms from './crewforms.js';
 import { actions as hrActions } from './hr.js';
 
 let search = '';
-let table = 'staff';      // staff | crew | new (v0.46.0: New crew for approval)
+let table = 'staff';      // staff | crew | all | lists | new (v0.46.0: New crew for approval; v0.57.0: All people, Positions & trades)
 const filt = { search: '', position: '', tier: '', project: '', status: 'active' };
 
 /** The active members of a project's team, as the directory shows them. Pure. */
@@ -81,31 +81,41 @@ function row(p, i, c, edit) {
   </tr>`;
 }
 
+/** v0.57.0: the one list of positions and trades, by tier. Every position, tier and trade dropdown reads it; a new one is added here. */
+function lists(edit) {
+  const added = new Set((store.company?.extraPositions || []).map(x => x.name));
+  return html`<div class="grid2">${ROLE_GROUPS.map(([g, l], i) => html`<div class="set-box"><h3>${g}</h3>
+    <p>${l.map(w => chip(w, added.has(w) ? 'info' : ''))}</p></div>`)}</div>
+    ${edit ? html`<form data-form="mpNewPos" class="entry"><input name="name" required placeholder="New position or trade" aria-label="New position or trade" class="wide">
+      <select name="tier" aria-label="Tier">${options([1, 2, 3, 4, 5].map(t => [String(t), `Tier ${t}`]), '4')}</select><button class="btn primary">Add</button></form>` : ''}
+    <p class="muted">Tier 4 and 5 positions are the site trades: Field Report, the day rates and the crew form links use them. The five tiers are fixed, as they decide who rates whom; a new position or trade goes in one of them.</p>`;
+}
+
 function manpower(c) {
   const staff = (c.company.staff || []).filter(p => p.division !== 'trading');
   const edit = store.isAdmin;
   const rows = directoryRows(staff, table, filt);
   const count = t => directoryRows(staff, t, { status: filt.status }).length;
   const sel = (f, label, list) => html`<select data-chg="mpFilt" data-f="${f}" data-fk="mp-f-${f}" aria-label="${label}">${options(list, filt[f])}</select>`;
-  const used = [...new Set(staff.filter(p => tableOf(p) === table).map(p => normRole(p.title)).filter(Boolean))];
+  const used = [...new Set(staff.filter(p => table === 'all' || tableOf(p) === table).map(p => normRole(p.title)).filter(Boolean))];
   const positions = [...ROLES.filter(r => used.includes(r)), ...used.filter(r => !ROLES.includes(r))];
   return html`<section class="card" id="panel-manpower">
     <div class="toolbar"><h2>Manpower Directory</h2><span class="muted">The only place a person is added. Each person has an employee-data record.</span>
       <span class="grow"></span>${edit ? html`<button type="button" class="btn primary" data-act="mpAdd">+ Add a person</button>` : ''}</div>
     <div class="emp-tabs set-tabs" role="tablist">
-      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : count(k)}</span></button>`)}
+      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['all', 'All people'], ['lists', 'Positions & trades'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : k === 'lists' ? ROLES.length : count(k)}</span></button>`)}
     </div>
-    ${table === 'new' ? newCrew(c) : html`
+    ${table === 'new' ? newCrew(c) : table === 'lists' ? lists(edit) : html`
     <div class="toolbar wrap">
       <input class="search" type="search" data-chg="mpFilt" data-f="search" data-fk="mp-search" value="${filt.search}" placeholder="Search name, position, phone, email" aria-label="Search the directory">
       ${sel('position', 'Position', [['', 'Every position'], ...positions.map(x => [x, x])])}
-      ${table === 'staff' ? sel('tier', 'Tier', [['', 'Every tier'], ['1', 'Tier 1'], ['2', 'Tier 2'], ['3', 'Tier 3'], ['5', 'Tier 5']]) : ''}
+      ${table === 'staff' ? sel('tier', 'Tier', [['', 'Every tier'], ['1', 'Tier 1'], ['2', 'Tier 2'], ['3', 'Tier 3'], ['5', 'Tier 5']]) : table === 'all' ? sel('tier', 'Tier', [['', 'Every tier'], ...[1, 2, 3, 4, 5].map(t => [String(t), `Tier ${t}`])]) : ''}
       ${sel('project', 'Project', [['', 'Every project'], ...store.projects.map(x => [x.id, x.name])])}
       ${sel('status', 'Status', [['active', 'Working'], ['left', 'Left'], ['all', 'All']])}
       <span class="grow"></span><span class="muted">${rows.length} shown</span>
     </div>
     ${rows.length ? html`<div class="table-wrap"><table class="table compact mp-table">
-      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${table === 'crew' ? 'Wage' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
+      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
       <tbody>${rows.map((p, i) => row(p, i, c, edit))}</tbody>
     </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
     <p class="muted">Changing a position or a project asks first. Wages and salaries are set in Employee data (Pay); they are never shown to Site users.</p>`}
@@ -188,7 +198,7 @@ export const actions = {
     store.updateCompany(co => co.staff.push(p));
     // v0.46.0: the person may fill in their own details (Fayda ID or passport, photo) with a 7-day link
     if (!confirm(`${p.name} is added. Send them a link to fill in their own details (photo, Fayda ID or passport)?`)) return tell(`✓ ${p.name} added. Choose the position and project in the row.`);
-    const l = makeLink({ kind: 'one', name: p.name, by: store.user?.email || 'local', byName: store.signature || store.user?.name || '' });
+    const l = makeLink({ kind: 'one', name: p.name, trades: linkTrades(), by: store.user?.email || 'local', byName: store.signature || store.user?.name || '' });
     store.updateCompany(co => { (co.crewlinks ||= []).push(l); });
     const url = `${linkUrl(l.id, location.hostname === 'localhost' ? `${location.origin}/` : 'https://hub.amistadprefab.com/')}${store.cloud ? '' : '&local'}`;
     Promise.resolve(navigator.clipboard?.writeText(url)).then(() => tell(`✓ ${p.name} added. Their link is copied: paste it in WhatsApp, Telegram or an email. It works 7 days; the form comes back under New crew for approval.`), () => tell(`✓ ${p.name} added. Their link: ${url}`));
@@ -256,5 +266,20 @@ export const changes = {
     const m = moveTo(p, el.value);
     store.updateCompany(co => { const x = co.staff.find(y => y.id === p.id); x.assignments = m.assignments; });
     follow(p, m.on, m.off, m.assignments);
+  },
+};
+
+export const submits = {
+  /** v0.57.0: a new position or trade, under the tier chosen, from the Positions & trades tab. */
+  mpNewPos(fd) {
+    const name = String(fd.get('name') || '').trim().replace(/\s+/g, ' ');
+    const t = Number(fd.get('tier'));
+    if (!name || ![1, 2, 3, 4, 5].includes(t)) return false;
+    if (!(store.isAdmin || (store.profile?.ranks || []).includes('general_manager'))) { tell('Only the Admin or the General Manager adds a position.'); return false; }
+    if (ROLES.some(r => r.toLowerCase() === name.toLowerCase()) || tierOfTitle(normRole(name))) { tell(`"${name}" is already in the list.`); return false; }
+    const list = [...(store.company?.extraPositions || []).filter(x => x.name !== name), { name, tier: t }];
+    store.updateCompany(co => { co.extraPositions = list; });
+    setExtraPositions(list);
+    tell(`✓ "${name}" added to the positions, ${TIER_WORDS[t]}.`);
   },
 };

@@ -12,7 +12,7 @@ import { html, options, chip } from './dom.js';
 import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
 import { uid } from '../core/util.js';
 import { compareReports, clean } from '../engine/compare.js';
-import { personByEmail, addedStamp } from '../engine/manpower.js';
+import { personByEmail, addedStamp, addedName } from '../engine/manpower.js';
 import { fromTeam } from '../engine/people.js';
 
 export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
@@ -163,7 +163,7 @@ async function crewDecide(code, yes, list, quiet = false) {
     if (yes) ws = await store.updateOther(pj.id, w => { approveCrew(w, list, () => uid('m'), new Date().toISOString()); into = fromTeam(w, store.company?.staff || [], pj.id, () => uid('st')); });
     // v0.46.0: approved crew is in the Manpower Directory too: linked to the person of the same name, else new
     if (into && (into.created.length || into.updated.length)) store.updateCompany(co => {
-      const by = addedStamp(`${list[0].by || 'Site'} (Field Report)`, new Date().toISOString().slice(0, 10));
+      const by = addedStamp(`${addedName(list[0].byName || list[0].by, store.company?.staff, store.users) || 'Site'} (Field Report)`, new Date().toISOString().slice(0, 10));
       for (const p of into.created) co.staff.push({ ...p, ...by });
       for (const u of into.updated) { const i = co.staff.findIndex(x => x.id === u.id); if (i >= 0) co.staff[i] = u; }
     });

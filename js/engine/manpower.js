@@ -81,6 +81,17 @@ export function rankPatchFor(positions) {
 /** Who added a person and when, for the directory's "Added by" column. */
 export const addedStamp = (who, today) => ({ addedBy: String(who || ''), addedOn: today || '' });
 
+/** v0.59.1 (owner, 2 Nov): "Added by" shows the person's name; an email kept there (older rows, Field Report adds) is
+ *  read as the directory person or sign-in of that email, else left as it is. */
+export function addedName(by, staff = [], users = []) {
+  return String(by || '').replace(/[^\s()<>,]+@[^\s()<>,]+/g, e => {
+    const low = e.toLowerCase();
+    const p = (staff || []).find(x => String(x.accountEmail || x.email || '').toLowerCase() === low);
+    const u = (users || []).find(x => String(x.email || '').toLowerCase() === low);
+    return p?.name || u?.name || u?.signature || e;
+  });
+}
+
 // ---- v0.57.0 (owner, 2 Nov): the Manpower Directory is the one source of each person's position, tier and title ----
 
 /** People whose position is kept in an old spelling (e.g. "Site manager", read as Project Engineer): the listed words. Pure. */

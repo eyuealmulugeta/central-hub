@@ -17,7 +17,7 @@ export const openReview = () => { tab = 'review'; };
 import { sendMail, mailReady, mailtoLink } from '../sync/mail.js';
 
 let tab = 'links';
-let draft = { kind: 'one', name: '', email: '', projectId: '' };
+let draft = { kind: 'one', name: '', email: '', projectId: undefined };   // '' = No project yet (v0.59.1)
 let made = [];          // the links made on this computer this session (people who are not the Admin do not load the list)
 let poolNat = '', poolFree = false, open = '', editing = '';
 const when = t => { const d = new Date(t); return isNaN(d) ? '' : d.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
@@ -38,7 +38,7 @@ export function render(c) {
 
 function links(c) {
   const projects = store.projects.filter(p => !p.binned);
-  const pid = draft.projectId || c.project?.id || '';
+  const pid = draft.projectId ?? (c.project?.id || '');
   const list = store.isAdmin ? [...(c.company.crewlinks || [])].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 30) : made;
   return html`<div class="grid2">
       <label>Kind <select data-chg="cfSet" data-f="kind">${options([['one', 'One person (by email or message)'], ['crew', 'Crew link: as many people as come, 3 days']], draft.kind)}</select></label>
@@ -113,7 +113,7 @@ export const actions = {
   cfTab(el) { tab = el.dataset.t; },
   cfEditOn(el) { editing = editing === el.dataset.id ? '' : el.dataset.id; },
   async cfMake(el, c) {
-    const pid = draft.projectId || c.project?.id || '';
+    const pid = draft.projectId ?? (c.project?.id || '');
     const project = store.projects.find(p => p.id === pid);
     if (draft.kind === 'one' && !draft.name.trim()) return tell('Write the name of the person the link is for.');
     if (draft.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(draft.email.trim())) return tell('That email address does not look right.');

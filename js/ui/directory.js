@@ -11,7 +11,7 @@ import { positionGroups, ROLES, ROLE_GROUPS, normRole, setExtraPositions, linkTr
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
 import { ratingOf } from '../engine/hr.js';
-import { tierOfTitle, tierOfPerson, positionsOf, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
+import { tierOfTitle, tierOfPerson, positionsOf, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, addedName, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
 import { syncPages, sendRules } from './prices.js';
 import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
@@ -87,7 +87,7 @@ function row(p, i, c, edit) {
     <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
     <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
     <td class="nowrap mp-pay">${edit ? payCells(p, c) : pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>
-    <td>${p.addedBy || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>
+    <td>${addedName(p.addedBy, store.company?.staff, store.users) || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>
     <td class="nowrap">${edit ? html`<button type="button" class="btn small" data-act="mpEdit" data-id="${p.id}">Edit</button> <button type="button" class="btn ghost small" data-act="mpRemove" data-id="${p.id}">Remove</button>` : ''}</td>
     <td>${p.status === 'left' ? chip('Left', 'warn') : chip('Working', 'ok')}</td>
     <td><button type="button" class="btn ghost small" data-act="mpData" data-id="${p.id}">Employee data</button></td>

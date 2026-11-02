@@ -49,7 +49,7 @@ export function topoSort(tasks) {
     for (const d of t.deps || []) {
       if (!ids.has(d.id)) continue;
       indeg.set(t.id, indeg.get(t.id) + 1);
-      succ.get(d.id).push({ task: t, lag: d.lag || 0 });
+      succ.get(d.id).push({ task: t, lag: d.lag || 0, type: d.type || 'FS' });
     }
   }
   const queue = tasks.filter(t => indeg.get(t.id) === 0);
@@ -83,6 +83,11 @@ export function wouldCycle(tasks, taskId, depId) {
 
 const span = t => (t.milestone ? 0 : Math.max(1, Math.round(+t.duration || 1)));
 
+/** v0.52.0: the four link types of MS Project. FS (the default) finish-to-start, SS start-to-start, FF finish-to-finish, SF start-to-finish. */
+export const LINK_TYPES = [['FS', 'Finish to start'], ['SS', 'Start to start'], ['FF', 'Finish to finish'], ['SF', 'Start to finish']];
+/** n working days after d, or before it when n is negative (a negative lag is a lead). */
+const shift = (d, n, wd) => (n >= 0 ? addWork(d, n, wd) : subWork(d, -n, wd));
+
 /**
  * Build the live schedule.
  *
@@ -104,13 +109,22 @@ export function schedule(tasks, reports = [], { today, workDays } = {}) {
   const { order, cyclic, succ } = topoSort(tasks);
   const byId = new Map(tasks.map(t => [t.id, t]));
 
-  // a successor starts the working day after its predecessor ends (same day after a milestone)
-  const after = (predEnd, pred, lag) => addWork(predEnd, Math.max(0, (pred.milestone ? 0 : 1) + (lag || 0)), wd);
+  // a successor starts the working day after its predecessor ends (same day after a milestone; v0.52.0: a milestone
+  // sits on its predecessor's last day, as in MS Project)
+  const after = (predEnd, pred, lag, t) => addWork(predEnd, Math.max(0, (pred.milestone || t?.milestone ? 0 : 1) + (lag || 0)), wd);
+  // the earliest start one link allows (end days are inclusive, so FS and SF step one working day)
+  const fromLink = (t, d, p) => {
+    const lag = +d.lag || 0, len = Math.max(0, span(t) - 1);
+    if (d.type === 'SS') return shift(p.es, lag, wd);
+    if (d.type === 'FF') return subWork(shift(p.ef, lag, wd), len, wd);
+    if (d.type === 'SF') return subWork(shift(p.es, lag - 1, wd), len, wd);
+    return after(p.ef, byId.get(d.id), lag, t);
+  };
   const startAfterDeps = (t, done) => {
     let es = nextWork(toDay(t.start), wd);
     for (const d of t.deps || []) {
       const p = done.get(d.id);
-      if (p) es = Math.max(es, after(p.ef, byId.get(d.id), d.lag));
+      if (p) es = Math.max(es, fromLink(t, d, p));
     }
     return es;
   };
@@ -150,9 +164,15 @@ export function schedule(tasks, reports = [], { today, workDays } = {}) {
   for (const t of [...order].reverse()) {
     const r = rows.get(t.id);
     let lf = end;
+    const len = workBetween(r.es, r.ef, wd);
     for (const s of succ.get(t.id)) {
       const sr = rows.get(s.task.id);
-      if (sr.ls != null) lf = Math.min(lf, subWork(sr.ls, Math.max(0, (t.milestone ? 0 : 1) + s.lag), wd));
+      if (sr.ls == null) continue;
+      // the latest finish each link type allows, mirroring fromLink
+      lf = Math.min(lf, s.type === 'SS' ? addWork(shift(sr.ls, -s.lag, wd), len, wd)
+        : s.type === 'FF' ? shift(sr.lf, -s.lag, wd)
+        : s.type === 'SF' ? addWork(shift(sr.lf, 1 - s.lag, wd), len, wd)
+        : subWork(sr.ls, Math.max(0, (t.milestone || s.task.milestone ? 0 : 1) + s.lag), wd));
     }
     r.lf = lf;
     r.ls = subWork(lf, workBetween(r.es, r.ef, wd), wd);

@@ -23,6 +23,7 @@ export function copyTasks(tasks, start, newId) {
     duration: Math.max(t.milestone ? 0 : 1, +t.duration || 0),
     milestone: !!t.milestone,
     ...(+t.totalQty > 0 ? { totalQty: +t.totalQty, unit: t.unit || '' } : {}),
-    deps: (t.deps || []).filter(d => ids.has(d.id)).map(d => ({ id: ids.get(d.id), ...(d.lag ? { lag: +d.lag } : {}) })),
+    deps: (t.deps || []).filter(d => ids.has(d.id)).map(d => ({ id: ids.get(d.id), ...(d.lag ? { lag: +d.lag } : {}), ...(d.type && d.type !== 'FS' ? { type: d.type } : {}) })),
+    ...(t.crew?.length ? { crew: t.crew.map(x => ({ ...x })) } : {}),   // v0.52.0: link types and planned crew travel too
   }));
 }

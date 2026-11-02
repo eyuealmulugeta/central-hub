@@ -1,7 +1,8 @@
 import { calendarOf } from '../engine/calendar.js';
 import { store } from '../core/store.js';
-import { wouldCycle } from '../engine/gantt.js';
+import { wouldCycle, LINK_TYPES } from '../engine/gantt.js';
 import { copyTasks } from '../engine/taskcopy.js';
+import { importSchedule } from '../engine/schedimport.js';
 import { uid, toDay, fromDay, fmtDay, isWork, dow, num } from '../core/util.js';
 import { html, field, options } from './dom.js';
 import { ganttPaper } from './ganttprint.js';
@@ -15,7 +16,7 @@ let notice = '';
 let todayX = 0;
 let paperView = false;   // the A3 programme to print, in place of the chart
 // Import from another project: the panel is open while `imp` is set
-let imp = null;          // { from: project id, start: date, replace: bool, tasks: null | [] (loaded), loading: bool }
+let imp = null;          // { from: project id, start: date, replace: bool, tasks: null | [] (loaded), loading: bool, paste: bool, text, read: importSchedule result }
 
 /** Select a task from outside this screen (search, quick links). */
 export const focusOn = id => { selected = id; };
@@ -28,7 +29,8 @@ function importPanel(c) {
   const n = imp.tasks?.length || 0;
   return html`<aside class="card editor" id="panel-import">
     <div class="toolbar"><h2>Import tasks</h2><span class="grow"></span><button class="btn ghost small" data-act="closeImport">Close</button></div>
-    ${others.length ? html`<div class="form">
+    <div class="seg"><button class="btn small ${imp.paste ? 'ghost' : 'primary'}" data-act="impMode" data-m="">From a project</button><button class="btn small ${imp.paste ? 'primary' : 'ghost'}" data-act="impMode" data-m="paste">Paste from Excel / MS Project</button></div>
+    ${imp.paste ? pastePanel(c) : others.length ? html`<div class="form">
       <p class="muted">Copies the task list of another project: names, durations, quantities and the links between tasks. Who each task is given to and the progress stay with that project.</p>
       <label>From the project <select data-chg="impFrom" data-fk="imp-from">${options(others.map(p => [p.id, p.name]), imp.from)}</select></label>
       <label>The first task starts on <input type="date" data-chg="impStart" data-fk="imp-start" value="${imp.start}"></label>
@@ -39,6 +41,30 @@ function importPanel(c) {
         : html`<p class="muted">That project has no tasks to copy.</p>`}
     </div>` : html`<p class="empty">There is no other project to copy from.</p>`}
   </aside>`;
+}
+
+/** v0.52.0: paste a whole schedule from Excel or MS Project, see it, then add it. */
+function pastePanel(c) {
+  const r = imp.read;
+  const name = id => r?.tasks.find(t => t.id === id)?.name || '';
+  return html`<div class="form">
+    <p class="muted">In Excel or MS Project select the rows with the headings (Task Name, Duration, Start, Finish, Predecessors, Resource Names), copy, and paste here. Indented rows under a summary row take its name as their group. Links like 2SS or 12,9 and crew like Welder[400%] are kept.</p>
+    <textarea data-chg="impText" data-fk="imp-text" rows="6" placeholder="Paste the rows here">${imp.text || ''}</textarea>
+    <label>The schedule starts on <input type="date" data-chg="impStart" data-fk="imp-start" value="${imp.start}"> <span class="muted">blank = the first Start pasted</span></label>
+    ${c.ws.tasks.length && store.isAdmin ? html`<label class="check"><input type="checkbox" data-chg="impReplace" ${imp.replace ? 'checked' : ''}> Replace the ${c.ws.tasks.length} tasks this project has (otherwise they are added)</label>` : ''}
+    <button class="btn" data-act="readPaste" ${imp.text?.trim() ? '' : 'disabled'}>Read the rows</button>
+    ${r ? html`
+      <p><b>${r.tasks.length} tasks</b>${r.start ? `, ${fmtDay(toDay(r.start))} to ${r.end ? fmtDay(toDay(r.end)) : '…'}` : ''}.</p>
+      ${r.problems.length ? html`<ul class="plain">${r.problems.map(p => html`<li class="bad">${p.no ? `Row ${p.no}: ` : ''}${p.text}</li>`)}</ul>` : ''}
+      ${r.differ.length ? html`<p class="muted">Worked out again from the links and this project's working days, ${r.differ.length} finish date${r.differ.length > 1 ? 's differ' : ' differs'} from the pasted one:</p>
+        <ul class="plain">${r.differ.slice(0, 12).map(d => html`<li class="muted">Row ${d.no} ${d.name}: pasted ${fmtDay(toDay(d.pasted))}, here ${fmtDay(toDay(d.worked))}</li>`)}</ul>` : r.tasks.length ? html`<p class="muted">Every finish date matches the pasted one.</p>` : ''}
+      ${r.tasks.length ? html`<div class="scroll-x"><table class="table">
+        <thead><tr><th>Task</th><th>Days</th><th>Links</th><th>Crew</th></tr></thead>
+        <tbody>${r.tasks.slice(0, 60).map(t => html`<tr><td>${t.group ? html`<span class="muted">${t.group} › </span>` : ''}${t.name}</td><td>${t.milestone ? 'Milestone' : t.duration}</td>
+          <td>${t.deps.map(d => `${name(d.id)} (${d.type || 'FS'}${d.lag ? `${d.lag > 0 ? '+' : ''}${d.lag}` : ''})`).join(', ')}</td><td>${(t.crew || []).map(x => `${x.n} ${x.trade}`).join(', ')}</td></tr>`)}</tbody>
+      </table></div>
+      <button class="btn primary" data-act="runPaste">${imp.replace && store.isAdmin ? 'Replace with' : 'Add'} these ${r.tasks.length} tasks</button>` : ''}` : ''}
+  </div>`;
 }
 
 export function render(c) {
@@ -74,8 +100,10 @@ export function render(c) {
   const links = s.rows.flatMap(r => (r.deps || []).map(d => {
     const p = s.rows[index.get(d.id)];
     if (!p) return '';
-    const x1 = x(p.ef + 1), y1 = index.get(p.id) * ROW + ROW / 2;
-    const x2 = x(r.es), y2 = index.get(r.id) * ROW + ROW / 2;
+    // v0.52.0: an SS or SF link leaves from the start of the bar, an FF or SF link arrives at the end
+    const type = d.type || 'FS';
+    const x1 = type[0] === 'S' ? x(p.es) : x(p.ef + 1), y1 = index.get(p.id) * ROW + ROW / 2;
+    const x2 = type[1] === 'F' ? x(r.ef + 1) : x(r.es), y2 = index.get(r.id) * ROW + ROW / 2;
     return html`<path d="M${x1} ${y1}h5V${y2}H${x2}"/>`;
   }));
 
@@ -97,7 +125,7 @@ export function render(c) {
         <button class="${zoom === 'week' ? 'on' : ''}" data-act="zoom" data-z="week">Weeks</button>
       </div>
       <button class="btn" data-act="paperOn" title="The whole programme on one A3 page, to print or send" ${s.rows.length ? '' : 'disabled'}>Print programme</button>
-      ${canEdit ? html`<button class="btn" data-act="openImport" title="Copy the task list of another project into this one">Import</button><button class="btn primary" data-act="add">Add task</button>` : ''}
+      ${canEdit ? html`<button class="btn" data-act="openImport" title="Copy the task list of another project, or paste a schedule from Excel or MS Project">Import</button><button class="btn primary" data-act="add">Add task</button>` : ''}
     </div>
 
     <section class="card flush gantt" data-scroll="gantt" style="--w:${W}px">
@@ -156,12 +184,13 @@ export function render(c) {
             </select>
           </label>
 
-          <h3>Starts after</h3>
+          <h3>Linked to</h3>
           <div class="deps">${ws.tasks.filter(t => t.id !== cur.id).map(t => {
             const d = (cur.deps || []).find(d => d.id === t.id);
             return html`<div class="dep">
               <label class="check"><input type="checkbox" data-chg="dep" data-id="${t.id}" ${d ? 'checked' : ''}> ${t.name}</label>
-              ${d ? html`<input class="narrow" type="number" min="0" data-chg="lag" data-id="${t.id}" data-fk="lag-${t.id}" value="${d.lag || 0}" title="Lag in working days" aria-label="Lag in working days">` : ''}
+              ${d ? html`<select class="narrow" data-chg="linkType" data-id="${t.id}" aria-label="Kind of link" title="How the two tasks are linked">${options(LINK_TYPES.map(([k, n]) => [k, `${k} · ${n}`]), d.type || 'FS')}</select>` : ''}
+              ${d ? html`<input class="narrow" type="number" min="-60" data-chg="lag" data-id="${t.id}" data-fk="lag-${t.id}" value="${d.lag || 0}" title="Lag in working days" aria-label="Lag in working days">` : ''}
             </div>`;
           })}</div>
 
@@ -172,6 +201,8 @@ export function render(c) {
             <dt>Float</dt><dd>${cur.float} working days</dd>
             ${cur.qtyTotal ? html`<dt>Installed</dt><dd>${num(cur.qtyDone)} of ${num(cur.qtyTotal)} ${cur.unit || ''}</dd>` : ''}
             <dt>Reported delay</dt><dd>${cur.delayDays} days</dd>
+            ${cur.group ? html`<dt>Group</dt><dd>${cur.group}</dd>` : ''}
+            ${cur.crew?.length ? html`<dt>Planned crew</dt><dd>${cur.crew.map(x => `${x.n} ${x.trade}`).join(', ')}</dd>` : ''}
           </dl>
           ${cur.reasons.length ? html`<ul class="plain">${cur.reasons.map(r => html`<li class="muted">${fmtDay(toDay(r.date))}: +${r.days} d ${r.note}</li>`)}</ul>` : ''}
           <p class="muted">${cur.qtyTotal ? 'Progress is the quantity installed in daily reports divided by the total quantity.' : 'Progress is the percentage given in daily reports. Set a total quantity to have it worked out from installed quantities.'}</p>
@@ -197,9 +228,23 @@ export const actions = {
   zoom(el) { zoom = el.dataset.z; },
   openImport(el, c) {
     const other = store.projects.find(p => p.id !== c.project.id);
-    imp = { from: other?.id || '', start: c.project.start || c.today, replace: false, tasks: null, loading: false };
+    imp = { from: other?.id || '', start: other ? c.project.start || c.today : '', replace: false, tasks: null, loading: false, paste: !other, text: '', read: null };
   },
   closeImport() { imp = null; },
+  impMode(el, c) { if (imp) { imp.paste = !!el.dataset.m; imp.read = null; imp.start = imp.paste ? '' : c.project.start || c.today; } },
+  readPaste(el, c) {
+    if (!imp?.text?.trim()) return;
+    imp.read = importSchedule(imp.text, { firstStart: imp.start, workDays: calendarOf(c.project, c.ws.reports), newId: () => uid('t') });
+  },
+  runPaste(el, c) {
+    const tasks = imp?.read?.tasks;
+    if (!tasks?.length || c.role === 'site') return;
+    const replace = imp.replace && store.isAdmin;   // replacing deletes the tasks there are: the Admin's
+    if (!confirm(`${replace ? `Replace the ${c.ws.tasks.length} tasks of this project with` : 'Add'} ${tasks.length} tasks?`)) return;
+    store.update(ws => { ws.tasks = replace ? tasks : [...ws.tasks, ...tasks]; });
+    notice = `${tasks.length} tasks imported${replace ? ', replacing the ones there were' : ''}.${imp.read.problems.length ? ` ${imp.read.problems.length} rows needed attention: check their links.` : ''}`;
+    imp = null;
+  },
   /** Read the chosen project's tasks to show what would be copied. */
   async loadImport() {
     if (!imp?.from) return;
@@ -241,7 +286,8 @@ export const actions = {
 
 export const changes = {
   impFrom(el) { if (imp) { imp.from = el.value; imp.tasks = null; } },
-  impStart(el) { if (imp) imp.start = el.value; },
+  impStart(el) { if (imp) { imp.start = el.value; imp.read = null; } },
+  impText(el) { if (imp) { imp.text = el.value; imp.read = null; } },
   impReplace(el) { if (imp) imp.replace = el.checked; },
   task(el, c) {
     const f = el.dataset.f;
@@ -270,6 +316,10 @@ export const changes = {
   },
   lag(el, c) {
     if (c.role === 'site') return;
-    store.update(ws => { task(ws).deps.find(d => d.id === el.dataset.id).lag = Math.max(0, Math.round(field(el))); });
+    store.update(ws => { task(ws).deps.find(d => d.id === el.dataset.id).lag = Math.round(field(el)); });   // v0.52.0: a negative lag is a lead
+  },
+  linkType(el, c) {
+    if (c.role === 'site') return;
+    store.update(ws => { const d = task(ws).deps.find(x => x.id === el.dataset.id); if (d) { if (el.value === 'FS') delete d.type; else d.type = el.value; } });
   },
 };

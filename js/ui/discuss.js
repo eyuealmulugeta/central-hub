@@ -3,6 +3,7 @@
 // document each, so they appear on everyone's screen as they are sent.
 // The sender may correct a message within 30 seconds, and take it back at any time: it then reads
 // "This message was deleted" with the time. A new message from someone else rings and shows a note.
+// v0.65.0 (owner, Phase C2): private one-to-one chats ('dm:<email>'), in company.direct; only the two people read them.
 
 import { store } from '../core/store.js';
 import { uid } from '../core/util.js';
@@ -27,7 +28,7 @@ let editing = null;     // id of the message being corrected
 let profile = null;     // id of the message whose sender's card is open
 let heard = null;       // the newest message time already announced; null until the first look
 
-const me = () => store.user?.email || 'me';
+const me = () => String(store.user?.email || 'me').toLowerCase();
 const myName = () => store.profile?.name || store.user?.name || 'Me';
 const readSeen = () => { try { return JSON.parse(localStorage.getItem(SEEN_KEY)) || {}; } catch { return {}; } };
 const initials = name => String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -48,19 +49,53 @@ const face = (who, big = false) => (who.photo ? html`<img class="avatar ${big ? 
   : html`<span class="avatar ${big ? 'big' : 'small'}" style="background:${colour(who.email)}">${initials(who.name)}</span>`);
 const colour = text => COLOURS[[...String(text)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % COLOURS.length];
 
-/** The channels this person may use: the company one, and the projects they can open. */
-const channels = () => [{ id: general(), name: 'General', about: currentDivision() === TRADING ? 'Everyone in Trading' : 'Everyone in Installation' },
-  ...(currentDivision() === TRADING ? [] : store.projects.map(p => ({ id: p.id, name: p.name, about: 'Project channel' })))];
+const DM = 'dm:';
+export const isDirect = id => String(id || '').startsWith(DM);
+const otherOf = id => String(id).slice(DM.length);
+/** The two people of a one-to-one chat, as the database keeps them: lower case, sorted. */
+export const pairOf = (a, b) => [a, b].map(x => String(x).trim().toLowerCase()).sort();
+const chatOf = m => (m.members ? DM + (m.members.find(x => x !== me()) || '') : m.channel);
+
+/** Colleagues to write to: the people with access (the Admin's list), and everyone seen in Discuss or Meetings. */
+export function colleagues(company) {
+  const out = new Map();
+  for (const u of store.users || []) out.set(String(u.email).toLowerCase(), u.name || u.email);
+  for (const m of [...(company.messages || []), ...(company.direct || [])]) if (m.by && !out.has(m.by)) out.set(m.by, m.name || m.by);
+  for (const x of company.meetings || []) for (const i of [...(x.invitees || []), { email: x.by, name: x.byName }]) if (i.email && !out.has(i.email.toLowerCase())) out.set(i.email.toLowerCase(), i.name || i.email);
+  out.delete(me());
+  return [...out].map(([email, name]) => ({ email, name })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** v0.65.0: this person's one-to-one chats, newest first, and the one being started. */
+function directs(company) {
+  const names = new Map(colleagues(company).map(p => [p.email, p.name]));
+  const last = new Map();
+  for (const m of company.direct || []) {
+    const o = (m.members || []).find(x => x !== me());
+    if (o && (m.members || []).includes(me())) last.set(o, m.at > (last.get(o) || '') ? m.at : last.get(o));
+  }
+  if (isDirect(open) && !last.has(otherOf(open))) last.set(otherOf(open), '~');
+  return [...last].sort((a, b) => b[1].localeCompare(a[1])).map(([email]) => {
+    const who = sender(company, { by: email, name: names.get(email) || email });
+    return { id: DM + email, name: who.name, about: who.title || email, direct: true, who };
+  });
+}
+
+/** The channels this person may use: the company one, the projects they can open and (v0.65.0) their one-to-one chats. */
+const channels = (company = store.company || {}) => [{ id: general(), name: 'General', about: currentDivision() === TRADING ? 'Everyone in Trading' : 'Everyone in Installation' },
+  ...(currentDivision() === TRADING ? [] : store.projects.map(p => ({ id: p.id, name: p.name, about: 'Project channel' }))), ...directs(company)];
 // a person sees a project channel from the day they were put on the project, and General from the day they were given
 // access (store.seesFrom); people who had access before keep the history, and the Admin sees everything
 const visible = (m, id) => m.channel === id && String(m.at || '') >= store.seesFrom(id, general());
-const inChannel = (company, id) => (company.messages || []).filter(m => visible(m, id));
+const inChannel = (company, id) => (isDirect(id)
+  ? (company.direct || []).filter(m => (m.members || []).includes(me()) && (m.members || []).includes(otherOf(id)))
+  : (company.messages || []).filter(m => visible(m, id)));
 const unreadIn = (company, id, seen = readSeen()) => inChannel(company, id).filter(m => m.by !== me() && m.at > (seen[id] || '')).length;
 
 /** Messages from other people in this person's channels that they have not opened yet. */
 export function unreadCount(company) {
   const seen = readSeen();
-  return channels().reduce((n, ch) => n + unreadIn(company, ch.id, seen), 0);
+  return channels(company).reduce((n, ch) => n + unreadIn(company, ch.id, seen), 0);
 }
 
 function markSeen(company, id) {
@@ -75,7 +110,7 @@ function markSeen(company, id) {
 /** Mark every channel of the open department as read. */
 export function markAllRead(company) {
   const seen = readSeen();
-  for (const ch of channels()) {
+  for (const ch of channels(company)) {
     const last = inChannel(company, ch.id).at(-1);
     if (last && (seen[ch.id] || '') < last.at) seen[ch.id] = last.at;
   }
@@ -101,8 +136,8 @@ function ring() {
 
 /** Called on every screen update: rings and shows a note for messages from others that arrived since the last look. */
 export function announce(company, onDiscuss = false) {
-  const mine = new Set(channels().map(ch => ch.id));
-  const fresh = (company.messages || []).filter(m => mine.has(m.channel) && visible(m, m.channel) && !m.deleted);
+  const mine = new Set(channels(company).map(ch => ch.id));
+  const fresh = [...(company.messages || []).filter(m => mine.has(m.channel) && visible(m, m.channel)), ...(company.direct || [])].filter(m => !m.deleted);
   const newest = fresh.reduce((t, m) => (m.at > t ? m.at : t), '');
   if (heard === null) { heard = newest; return; }      // what was there at sign-in is not news
   const news = fresh.filter(m => m.at > heard && m.by !== me());
@@ -110,7 +145,7 @@ export function announce(company, onDiscuss = false) {
   if (!news.length) return;
   ring();
   const last = news.at(-1);
-  if (!(onDiscuss && last.channel === open)) tell(`💬 ${sender(company, last).name}: ${last.text.slice(0, 90)}${news.length > 1 ? ` (+${news.length - 1} more)` : ''}`);
+  if (!(onDiscuss && chatOf(last) === open)) tell(`💬 ${sender(company, last).name}${last.members ? ' (to you)' : ''}: ${last.text.slice(0, 90)}${news.length > 1 ? ` (+${news.length - 1} more)` : ''}`);
 }
 
 const sameDay = (a, b) => a.slice(0, 10) === b.slice(0, 10);
@@ -118,8 +153,9 @@ const dayLabel = iso => new Date(iso).toLocaleDateString([], { weekday: 'long', 
 const timeLabel = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 export function render(c) {
-  const all = channels();
+  const all = channels(c.company);
   if (!all.some(ch => ch.id === open)) open = general();
+  const people = colleagues(c.company);
   const current = all.find(ch => ch.id === open);
   const seen = readSeen();
   const q = filter.trim().toLowerCase();
@@ -131,24 +167,34 @@ export function render(c) {
   const shown = profile && log.find(m => m.id === profile);
   const card = shown && sender(c.company, shown);
 
-  return html`
-    <aside class="card chat-side">
-      <input class="search" type="search" data-chg="search" data-fk="chat-q" value="${filter}" placeholder="Search channels" aria-label="Search channels">
-      <span class="side-label">Channels</span>
-      <ul class="list">${listed.map(ch => {
+  const item = ch => {
         const n = ch.id === open ? 0 : unreadIn(c.company, ch.id, seen);
         const last = inChannel(c.company, ch.id).at(-1);
         return html`
           <li><button type="button" class="chat-ch ${ch.id === open ? 'on' : ''}" data-act="open" data-id="${ch.id}">
-            <span class="avatar small" style="background:${colour(ch.name)}">${ch.id === general() ? '#' : initials(ch.name)}</span>
+            ${ch.direct ? face(ch.who) : html`<span class="avatar small" style="background:${colour(ch.name)}">${ch.id === general() ? '#' : initials(ch.name)}</span>`}
             <span class="chat-ch-text"><b>${ch.name}</b><span class="muted">${last ? `${sender(c.company, last).name}: ${last.deleted ? 'message deleted' : last.text}` : ch.about}</span></span>
             ${n ? html`<em>${n}</em>` : ''}
           </button></li>`;
-      })}</ul>
-      ${listed.length ? '' : html`<p class="muted">No channel with that name.</p>`}
+  };
+  const dms = listed.filter(ch => ch.direct);
+
+  return html`
+    <aside class="card chat-side">
+      <input class="search" type="search" data-chg="search" data-fk="chat-q" value="${filter}" placeholder="Search channels and people" aria-label="Search channels and people">
+      <span class="side-label">Channels</span>
+      <ul class="list">${listed.filter(ch => !ch.direct).map(item)}</ul>
+      <span class="side-label">Direct messages</span>
+      ${dms.length ? html`<ul class="list">${dms.map(item)}</ul>` : ''}
+      <form data-form="dm" class="chat-new">
+        <input name="who" list="chat-people" placeholder="Write to a colleague…" aria-label="Write to a colleague (name or email)" autocomplete="off" required>
+        <datalist id="chat-people">${people.map(p => html`<option value="${p.email}">${p.name}</option>`)}</datalist>
+        <button class="btn small">Chat</button>
+      </form>
+      ${listed.length ? '' : html`<p class="muted">No channel or person with that name.</p>`}
     </aside>
     <section class="card chat-main">
-      <div class="toolbar"><h2>${current.id === general() ? '# General' : current.name}</h2><span class="muted">${current.about}${store.cloud ? '' : '. Demo: messages stay in this browser'}</span></div>
+      <div class="toolbar"><h2>${current.id === general() ? '# General' : current.name}</h2><span class="muted">${current.direct ? `🔒 Private: only you and ${current.name} see these messages` : current.about}${store.cloud ? '' : '. Demo: messages stay in this browser'}</span></div>
       ${card ? profileCard(card) : ''}
       <div class="chat-log">${rows.length ? rows.map(({ m, newDay }) => {
         const who = sender(c.company, m);
@@ -161,7 +207,7 @@ export function render(c) {
           <div class="chat-body">
             <span class="chat-meta"><b>${who.name}</b><span class="muted">${timeLabel(m.at)}${m.edited && !m.deleted ? ', edited' : ''}</span>
               ${!m.deleted && left && editing !== m.id ? html`<button type="button" class="btn ghost small" data-act="edit" data-id="${m.id}" title="You can correct it for ${left} more seconds">Edit</button>` : ''}
-              ${!m.deleted && (own || c.admin) ? html`<button type="button" class="btn ghost small" data-act="unsend" data-id="${m.id}" title="Delete this message for everyone">Delete</button>` : ''}</span>
+              ${!m.deleted && (own || (c.admin && !current.direct)) ? html`<button type="button" class="btn ghost small" data-act="unsend" data-id="${m.id}" title="Delete this message for everyone">Delete</button>` : ''}</span>
             ${m.deleted ? html`<p class="chat-gone">This message was deleted, ${timeLabel(m.deletedAt || m.at)}${sameDay(m.deletedAt || m.at, m.at) ? '' : ` on ${dayLabel(m.deletedAt)}`}</p>`
               : editing === m.id ? html`<form data-form="edit" class="chat-edit"><input name="text" maxlength="${MAX_LENGTH}" value="${m.text}" aria-label="Corrected message" data-fk="chat-edit" required><button class="btn small primary">Save</button><button type="button" class="btn ghost small" data-act="edit" data-id="">Cancel</button></form>`
               : html`<p>${linked(m.text)}</p>`}
@@ -169,7 +215,7 @@ export function render(c) {
         </div>
         ${newDay ? html`<div class="chat-day"><span>${dayLabel(m.at)}</span></div>` : ''}`;
       })
-        : html`<p class="empty">No messages here yet. Write the first one below.</p>`}</div>
+        : html`<p class="empty">${current.direct ? `No messages with ${current.name} yet. Write the first one below.` : 'No messages here yet. Write the first one below.'}</p>`}</div>
       <form data-form="send" class="chat-form">
         <input name="text" maxlength="${MAX_LENGTH}" placeholder="Message ${current.id === general() ? 'everyone' : current.name}" aria-label="Message" autocomplete="off" required>
         <button class="btn primary">Send</button>
@@ -191,9 +237,10 @@ export const actions = {
   edit(el) { editing = el.dataset.id || null; },
   /** Take a message back: everyone then sees "This message was deleted" and when. The sender, or the Admin. */
   unsend(el, c) {
-    const m = (c.company.messages || []).find(x => x.id === el.dataset.id);
-    if (!m || !(m.by === me() || c.admin) || !confirm('Delete this message for everyone?')) return;
-    store.updateCompany(co => { const x = co.messages.find(y => y.id === m.id); Object.assign(x, { text: '', deleted: true, deletedAt: new Date().toISOString() }); });
+    const sec = isDirect(open) ? 'direct' : 'messages';
+    const m = (c.company[sec] || []).find(x => x.id === el.dataset.id);
+    if (!m || !(m.by === me() || (c.admin && sec === 'messages')) || !confirm('Delete this message for everyone?')) return;
+    store.updateCompany(co => { const x = co[sec].find(y => y.id === m.id); Object.assign(x, { text: '', deleted: true, deletedAt: new Date().toISOString() }); });
   },
 };
 
@@ -206,16 +253,27 @@ export const submits = {
     const text = String(fd.get('text') || '').trim().slice(0, MAX_LENGTH);
     if (!text) return false;
     const channel = open || general();
-    store.updateCompany(co => { (co.messages ||= []).push({ id: uid('msg'), channel, by: me(), name: myName(), title: store.profile?.title || '', text, at: new Date().toISOString(), sentMs: Date.now() }); });
+    const base = { id: uid('msg'), by: me(), name: myName(), title: store.profile?.title || '', text, at: new Date().toISOString(), sentMs: Date.now() };
+    if (isDirect(channel)) store.updateCompany(co => { (co.direct ||= []).push({ ...base, members: pairOf(me(), otherOf(channel)) }); });
+    else store.updateCompany(co => { (co.messages ||= []).push({ ...base, channel }); });
+  },
+  /** v0.65.0: start (or open) a one-to-one chat with a colleague, chosen from the list or by email. */
+  dm(fd, c) {
+    const typed = String(fd.get('who') || '').trim().toLowerCase();
+    const known = colleagues(c.company).find(p => p.email === typed || p.name.toLowerCase() === typed);
+    const to = known?.email || typed;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to) || to === me()) { tell('Choose a colleague from the list, or type their email.'); return false; }
+    open = DM + to; editing = null; profile = null; filter = '';
   },
   /** A correction, only within the 30 seconds (the database allows a little more, for a slow connection). */
   edit(fd, c) {
-    const m = (c.company.messages || []).find(x => x.id === editing);
+    const sec = isDirect(open) ? 'direct' : 'messages';
+    const m = (c.company[sec] || []).find(x => x.id === editing);
     const text = String(fd.get('text') || '').trim().slice(0, MAX_LENGTH);
     editing = null;
     if (!m || !text || text === m.text) return;
     if (!editLeft(m)) { tell('Too late: a message can be corrected for 30 seconds only. Delete it and write it again.'); return; }
-    store.updateCompany(co => { Object.assign(co.messages.find(x => x.id === m.id), { text, edited: true }); });
+    store.updateCompany(co => { Object.assign(co[sec].find(x => x.id === m.id), { text, edited: true }); });
   },
 };
 

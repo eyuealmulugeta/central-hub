@@ -1704,3 +1704,6 @@ body.side-narrow .side-health { display: none; }
   .g-name .who { grid-column: 2; grid-row: 2; max-width: none; font-size: 10.5px; line-height: 1.15; }
   .g-name > .muted { grid-column: 3; grid-row: 2; font-size: 10.5px; line-height: 1.15; }
 }
+/* v0.65.0: start a one-to-one chat */
+.chat-new { display: flex; gap: 6px; padding: 0 4px; }
+.chat-new input { flex: 1; min-width: 0; }

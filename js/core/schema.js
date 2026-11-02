@@ -140,6 +140,7 @@ export const emptyCompany = () => ({
   staff: [],      // HR records: Owner only
   contracts: [],  // agreements with clients, suppliers and subcontractors
   messages: [],   // Discuss: { id, channel, by, name, text, at }
+  direct: [],     // v0.65.0, Discuss one-to-one: { id, members: [two emails, sorted], by, name, text, at }; read only by the two
   signs: [],      // documents sent for signature (see engine/sign.js)
   signkeys: [],   // the signers' keys, for the office to hand out the links again
   signed: [],     // the signatures: written by the signer's page, never changed

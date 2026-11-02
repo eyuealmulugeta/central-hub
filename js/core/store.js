@@ -57,7 +57,7 @@ let pending = 0;                      // changes sent and not yet confirmed by t
 let userEditing = false;               // true while a handler of something a person did runs: only those can be undone
 let deleting = null;                  // v0.26.0: { page } while a delete handler runs: what it takes away goes to the recycle bin
 let bin = [];                          // v0.26.0: the recycle bin (bin/<id>), read by the Admin only
-const NO_BIN = new Set(['messages', 'trash', 'signfiles']);
+const NO_BIN = new Set(['messages', 'direct', 'trash', 'signfiles']);
 let faults = [];                      // problems reported by devices: the Owner sees these
 const emit = () => subscribers.forEach(fn => fn());
 
@@ -328,6 +328,8 @@ export const store = {
       }
     }
 
+    // v0.65.0: one-to-one messages are read only by the two people in them (not the Admin): the query says so
+    shared.push(api.watchCol(`${COMPANY_PATH}/direct`, docs => { company.direct = sectionFromDocs('direct', docs); emit(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
     // evaluations are read only by whoever wrote them (the Admin reads all): the query says so, or the database refuses it
     if (role !== 'owner' && ranks.length) {
       shared.push(api.watchCol(`${COMPANY_PATH}/evaluations`, docs => { company.evaluations = sectionFromDocs('evaluations', docs); emit(); }, () => {}, ['by', '==', me.email]));
@@ -490,7 +492,7 @@ export const store = {
       const ops = diffWorkspace(before, company, COMPANY_SECTIONS).map(o => ({ path: `${COMPANY_PATH}/${o.section}/${o.id}`, data: o.data }));
       if (ops.length) send(api.batch(ops));
     }
-    offerUndo(before, company, COMPANY_SECTIONS.filter(s => s !== 'messages'), apply => this.updateCompany(apply));
+    offerUndo(before, company, COMPANY_SECTIONS.filter(s => s !== 'messages' && s !== 'direct'), apply => this.updateCompany(apply));
     emit();
   },
   /** Phase E1: Field Report's data route, 'script' (the default) or 'read' (the phones read live from the database). */

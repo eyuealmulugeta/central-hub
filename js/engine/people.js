@@ -36,11 +36,18 @@ export const activeProjects = person => (person.assignments || []).filter(a => a
  * the Admin and Office people with Costs or Payments ticked read it; Site never does.
  */
 export const dayRateOf = (ws, memberId) => +((ws.crewRates || []).find(r => r.id === memberId)?.dayRate) || 0;
+/** v0.58.0 (owner): the currency of a person's day rate, ETB or USD ('' = the project's pay currency). */
+export const dayCurOf = (ws, memberId) => (ws.crewRates || []).find(r => r.id === memberId)?.currency || '';
+export function setDayCur(ws, memberId, currency) {
+  ws.crewRates ||= [];
+  const i = ws.crewRates.findIndex(r => r.id === memberId);
+  if (i >= 0) ws.crewRates[i] = { ...ws.crewRates[i], currency }; else ws.crewRates.push({ id: memberId, dayRate: 0, currency });
+}
 export function setDayRate(ws, memberId, rate) {
   ws.crewRates ||= [];
   const value = Math.max(0, +rate || 0);
   const i = ws.crewRates.findIndex(r => r.id === memberId);
-  if (!value) { if (i >= 0) ws.crewRates.splice(i, 1); return; }
+  if (!value) { if (i >= 0 && !ws.crewRates[i].currency) ws.crewRates.splice(i, 1); else if (i >= 0) ws.crewRates[i] = { ...ws.crewRates[i], dayRate: 0 }; return; }
   if (i >= 0) ws.crewRates[i] = { ...ws.crewRates[i], dayRate: value }; else ws.crewRates.push({ id: memberId, dayRate: value });
 }
 /**

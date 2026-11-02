@@ -490,8 +490,15 @@ function groupShare(box) {
       b.classList.remove('btn', 'primary', 'ghost', 'small');
       b.classList.add('menu-item');
       b.setAttribute('role', 'menuitem');
-      if (shareKey(b) === 'print' || shareKey(b) === 'printDoc') b.textContent = 'Print or save as PDF';
+      if (shareKey(b) === 'print' || shareKey(b) === 'printDoc') b.textContent = 'Print';
       list.append(b);
+    }
+    // v0.58.0 (owner): a document on the page is saved straight to a PDF file, without the print window
+    if (box.querySelector('.paper')) {
+      const save = document.createElement('button');
+      save.type = 'button'; save.className = 'menu-item'; save.setAttribute('role', 'menuitem'); save.dataset.savepdf = '';
+      save.textContent = 'Save as PDF';
+      list.firstElementChild ? list.firstElementChild.after(save) : list.append(save);
     }
   }
 }
@@ -600,6 +607,26 @@ $('#division').addEventListener('click', e => {
 // The file is made first and the share sheet opens on a second tap, because a browser only opens it
 // for a tap that has just happened, and making the PDF can take a few seconds.
 let sharing = false;
+// v0.58.0: Save as PDF: the same PDF file as for sending, downloaded to the computer or phone
+root.addEventListener('click', async e => {
+  const button = e.target.closest('[data-savepdf]');
+  if (!button || sharing) return;
+  const paper = root.querySelector('.paper');
+  if (!paper) { toast('There is no document on this page to save.'); return; }
+  sharing = true;
+  toast('Preparing the PDF…');
+  try {
+    const file = await makePdf(paper, describePaper(paper).name);
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: file.name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+    toast(`${file.name} saved.`);
+  } catch (err) {
+    diagnostics.record(err, 'savepdf');
+    toast(`The PDF could not be made (${err.message}). Use Print, then Save as PDF.`);
+  }
+  sharing = false;
+});
 root.addEventListener('click', async e => {
   const button = e.target.closest('[data-share]');
   if (!button || sharing) return;

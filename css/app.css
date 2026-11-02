@@ -107,6 +107,8 @@ a.btn { text-decoration: none; }
 .view-schedule .gantt:last-child { grid-column: 1 / -1; }
 .view-ledger { grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) 300px; }
 .view-ledger .kpis { grid-column: 1 / -1; }
+/* v0.58.0 (owner): the Statement and Summary papers take the whole width (they sat squeezed in the 300px side column) */
+.view-ledger > .toolbar, .view-ledger > .sheet { grid-column: 1 / -1; }
 .view-estimator { grid-template: minmax(0, 1fr) / 220px 320px minmax(0, 1fr); }
 .view-prices { grid-template: minmax(0, 1fr) / minmax(0, 1fr); }
 .side { display: flex; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; border-radius: var(--radius); }

@@ -31,7 +31,7 @@ const sealUses = () => {
     <tbody>${list.map(u => html`<tr><td class="nowrap">${String(u.at).slice(0, 16).replace('T', ' ')}</td><td>${u.name || u.by}</td><td>${u.ref || u.key}${u.type ? ` (${u.type})` : ''}</td><td>${u.as || ''}</td>
       <td>${[u.stamp ? 'stamp' : '', u.sig ? 'signature' : ''].filter(Boolean).join(' + ')}</td></tr>`)}</tbody></table></details>` : html`<p class="muted">The stamp has not been used yet.</p>`;
 };
-import { assign, unassign, dayRateOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
+import { assign, unassign, dayRateOf, dayCurOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { transferMember } from '../engine/sitecrew.js';
 import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo } from '../engine/accessrules.js';
 import { fieldReady, fieldUserDo } from '../sync/fieldreport.js';
@@ -594,7 +594,7 @@ function projectPage(c) {
             <span class="muted">${m.contact || ''}</span>
             <span title="${levelLabel(levelOf(m))}">Tier ${levelOf(m).slice(1)}</span>
             <span class="muted">${m.active === false ? 'Off site' : 'On site'}</span>
-            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${p.payCurrency || p.currency}` : 'No rate'}</span>
+            <span class="muted nowrap">${dayRateOf(ws, m.id) ? `${dayRateOf(ws, m.id)} ${dayCurOf(ws, m.id) || p.payCurrency || p.currency}` : 'No rate'}</span>
             ${store.isAdmin ? html`<span class="nowrap"><button class="btn ghost small" data-act="openPerson" data-pid="${m.personId}">Edit in the directory</button> <button class="btn ghost small" data-act="removeMember" data-id="${m.id}">Remove</button></span>` : html`<span></span>`}
             ${store.isAdmin && otherProjects(p).length ? html`<select data-chg="memberMove" data-id="${m.id}" aria-label="Move ${m.name} to another project"><option value="">Move to…</option>${otherProjects(p).map(x => html`<option value="${x.id}">${x.name}</option>`)}</select>` : ''}${m.wageReview ? html`<span class="chip warn" title="The site typed ${m.wageReview.wage} a day; the trade's daily wage is ${m.wageReview.tradeWage}. Clear it on Payments.">Wage to review</span>` : ''}
           </li>` : html`

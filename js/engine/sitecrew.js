@@ -3,7 +3,7 @@
 // of the trade is kept but flagged (wageReview) until the Admin clears it on Payments. A person can be moved from one
 // project to another: off the first team (kept in its records), on the second with the same day rate. Pure functions.
 
-import { setDayRate, dayRateOf } from './people.js';
+import { setDayRate, dayRateOf, setDayCur, dayCurOf } from './people.js';
 
 export const wageDiffers = r => +r.wage > 0 && +r.tradeWage > 0 && +r.wage !== +r.tradeWage;
 const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
@@ -39,5 +39,6 @@ export function transferMember(from, to, memberId, newId, at, fromName = '') {
   else { n = { ...m, id: m.personId ? m.id : newId(), active: true }; to.team.push(n); }
   n.movedFrom = { project: fromName, at };
   if (rate) setDayRate(to, n.id, rate);
+  if (dayCurOf(from, m.id)) setDayCur(to, n.id, dayCurOf(from, m.id));   // v0.58.0: the rate's currency goes with it
   return n;
 }

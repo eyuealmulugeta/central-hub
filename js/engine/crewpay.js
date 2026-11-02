@@ -6,7 +6,7 @@
 
 import { register, daysBetween, keyOf } from './attendance.js';
 import { billingOf } from './billing.js';
-import { dayRateOf } from './people.js';
+import { dayRateOf, dayCurOf } from './people.js';
 import { isMonthly } from './paysteps.js';
 
 export const METHODS = [['cash', 'Cash'], ['bank', 'Bank transfer'], ['mobile', 'Mobile money']];
@@ -37,7 +37,7 @@ export function wageOf(row, { ws, project, staff = [], monthlyRoles = MONTHLY_RO
     return +a.pay > 0 && !a.payPer ? { per: 'month', wage: +a.pay, currency, from: 'agreement' } : { per: 'month', wage: 0, currency, from: 'missing' };
   }
   const day = member ? dayRateOf(ws, member.id) : 0;
-  if (day > 0) return { per: 'day', wage: day, currency: payCur, from: 'project' };
+  if (day > 0) return { per: 'day', wage: day, currency: dayCurOf(ws, member.id) || payCur, from: 'project' };   // v0.58.0: each person's own ETB or USD
   if (a.payPer === 'day' && +a.pay > 0) return { per: 'day', wage: +a.pay, currency, from: 'agreement' };
   const trade = ws.laborRates?.[member?.role || row.role];
   if (+trade > 0) return { per: 'day', wage: +trade, currency: payCur, from: 'trade' };

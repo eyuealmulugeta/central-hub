@@ -5,7 +5,7 @@
 
 import { usdOf, PAY_OPTIONS } from '../engine/currencies.js';
 import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
-import { dayRateOf, setDayRate } from '../engine/people.js';
+import { dayRateOf, setDayRate, dayCurOf, setDayCur } from '../engine/people.js';
 import { store } from '../core/store.js';
 import { periodFor, shiftPeriod, waitingNote } from '../engine/attendance.js';
 import { checkOf, mayApprove as stepMay, crewReport } from '../engine/paysteps.js';
@@ -71,12 +71,13 @@ function ratesView(c) {
       </form>` : ''}
     </section>
     <section class="card set-box"><h3>Wage of each person</h3>
-      ${ws.team.length ? html`<table class="table compact"><thead><tr><th>Person</th><th>Role</th><th class="r">Day rate here (${cur})</th><th>HR agreement (Manpower Directory)</th></tr></thead>
+      ${ws.team.length ? html`<table class="table compact"><thead><tr><th>Person</th><th>Role</th><th class="r">Day rate here</th><th>HR agreement (Manpower Directory)</th></tr></thead>
         <tbody>${ws.team.map(m => { const a = staff.find(x => x.id === m.personId)?.agreement || {}; return html`<tr>
           <td>${m.name}</td><td>${m.role || ''}</td>
-          <td class="r"><input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="—" aria-label="Day rate of ${m.name}" ${dis}></td>
+          <td class="r"><input class="price" type="number" min="0" step="any" data-chg="memberRate" data-id="${m.id}" data-fk="mr-${m.id}" value="${dayRateOf(ws, m.id) || ''}" placeholder="—" aria-label="Day rate of ${m.name}" ${dis}>
+            <select data-chg="memberCur" data-id="${m.id}" aria-label="Currency of ${m.name}'s day rate" title="Paid in ETB or USD" ${dis}>${options(PAY_OPTIONS, dayCurOf(ws, m.id) || cur)}</select></td>
           <td>${+a.pay > 0 ? `${money(+a.pay, a.currency || cur, 0)} ${a.payPer === 'day' ? 'per day' : a.payPer === 'hour' ? 'per hour' : 'per month'}` : html`<span class="muted">none</span>`}</td></tr>`; })}</tbody></table>
-        <p class="muted">A day rate here wins over the trade rate. A monthly wage comes from the person's HR agreement (Crew, Employee data).</p>` : html`<p class="muted">Nobody is on this project yet (Settings, This project, Team).</p>`}
+        <p class="muted">A day rate here wins over the trade rate. Each person's rate is in their own currency, ETB or USD, and is paid in it (not converted). A monthly wage comes from the person's HR agreement (Crew, Employee data).</p>` : html`<p class="muted">Nobody is on this project yet (Settings, This project, Team).</p>`}
     </section>
   </div>`;
 }
@@ -224,6 +225,7 @@ export const changes = {
   payCurrency(el) { if (mayPay() && PAY_OPTIONS.some(([k]) => k === el.value)) store.updateProject(p => { p.payCurrency = el.value; }); },
   labor(el) { if (mayPay()) store.update(ws => { ws.laborRates[el.dataset.t] = num(el); }); },
   memberRate(el) { if (mayPay()) store.update(ws => { if (ws.team.some(x => x.id === el.dataset.id)) setDayRate(ws, el.dataset.id, num(el)); }); },
+  memberCur(el) { if (mayPay() && PAY_OPTIONS.some(([k]) => k === el.value)) store.update(ws => { if (ws.team.some(x => x.id === el.dataset.id)) setDayCur(ws, el.dataset.id, el.value); }); },   // v0.58.0
   adjust(el, c) {
     const p = periodOf(c);
     const v = Math.round((+el.value || 0) * 100) / 100;

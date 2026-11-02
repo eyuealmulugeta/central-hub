@@ -54,7 +54,7 @@ export const MENUS = {
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight'] },
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'cashflow', 'income', 'expenses', 'summary'] },
-    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'requests', 'contacts', 'owners'] },
+    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'requests', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
   ],
   trading: [

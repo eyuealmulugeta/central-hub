@@ -126,6 +126,7 @@ export const emptyWorkspace = () => ({
   attendance: [],   // the office's corrections of the attendance sheet (see engine/attendance.js)
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)
   payments: [],     // Payments: what was paid to whom, for which period (each is also a labour cost in ledger)
+  logsheet: [],     // v0.51.0: the project's Log sheet rows (engine/logsheet.js): official documents and their archived file
   reportfiles: [],  // the Drive ids of each Field Report PDF ({ id: report id, pdfId, folderId }); never read by Site (v0.22.6)
 });
 
@@ -148,6 +149,7 @@ export const emptyCompany = () => ({
   contacts: [],   // email addresses and phone numbers documents are sent to (see engine/contacts.js): the office and the Admin
   owners: [],     // the owners of the company (see engine/owners.js): kept apart from the employees, Admin only
   payroll: [],    // one run a month (see engine/payroll.js): Admin only, built from HR pay
+  logsheet: [],   // v0.51.0: Log sheet rows of no project (payroll, office letters): Admin only
   letters: [],    // letters of the office (see engine/letters.js): Admin only, built from HR records
   officeStaff: [],        // v0.50.1: names and positions of the office staff (no project), kept by the Admin's app for HR
   officeAttendance: [],   // v0.50.0: office staff (no project), marked by the Admin (engine/attendance.js officeId)
@@ -157,7 +159,7 @@ export const emptyCompany = () => ({
   crewforms: [],  // v0.33.0: crew forms sent from a link, waiting for the Admin
 });
 /** Company sections only the Owner may read or write. Must match firestore.rules. */
-export const OWNER_SECTIONS = ['staff', 'letters', 'payroll', 'owners'];
+export const OWNER_SECTIONS = ['staff', 'letters', 'payroll', 'owners', 'logsheet'];
 /** Sections whose records are also written by people who are not signed in (a signer, a visitor booking a meeting). The office never re-stamps them. */
 export const PUBLIC_SECTIONS = ['signed', 'slots', 'bookings', 'crewlinks', 'crewforms'];
 

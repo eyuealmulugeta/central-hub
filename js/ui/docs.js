@@ -16,6 +16,7 @@ import { statusPaper } from './status.js';
 import { docHead, docSec, docFoot, footText, signoff } from './print.js';
 import { amountWords } from '../engine/words.js';
 import { docRef } from '../engine/docref.js';
+import { archiveDoc } from './archive.js';
 
 let tab = 'docs';
 let mode = null;     // invoices | quotations | status: what the menu opened this screen as (null = everything)
@@ -732,6 +733,8 @@ export const actions = {
       sheet: () => paper,
       onSent({ to }) {
         notice = `Sent to ${to}.`;
+        // v0.51.0: archived to Drive as a PDF and logged in the project's Log sheet
+        archiveDoc({ c, type: d ? (d.type === 'quote' ? 'quote' : d.type) : 'report', reference: d?.number || '', subject: `${name}, ${p.name}`, to, getHtml: () => paperHtml(paper, name) });
         // the record of who it went to is kept on saved documents (an issued report can only be changed by an approver)
         if (d && (d.type !== 'report' || d.status !== 'issued' || store.canApprove)) {
           store.update(ws => { const doc = ws.docs.find(x => x.id === d.id); if (doc) doc.emails = [...(doc.emails || []), { at: c.today, to }]; });

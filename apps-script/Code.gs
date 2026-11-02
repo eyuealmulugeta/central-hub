@@ -3,6 +3,8 @@
 //
 //   1. saves backup files into a Drive folder          (no "action" in the request); keeps the last 8 weekly copies
 //   2. emails a document as a PDF attachment           (action: 'email')
+//   3. v0.51.0: archives a document (body.folder "2026/11/MJO", body.pdf: an HTML page saved as a PDF) into
+//      year / month / project folders inside the same Drive folder; folders are made when missing
 //
 // Script Properties required (Project Settings > Script properties):
 //   TOKEN     = your shared secret (the "Shared secret" typed in Central Hub, Backup)
@@ -31,6 +33,17 @@ function pruneWeekly_(folder) {
   list.slice(WEEKLY_KEEP).forEach(function (f) { f.setTrashed(true); });
 }
 
+/** The folder at "a/b/c" under root, made where missing. Only letters, digits, spaces, - and _ in each part. */
+function folderAt_(root, path) {
+  var folder = root;
+  String(path || '').split('/').map(function (p) { return p.replace(/[^\w \-]/g, '').trim(); }).filter(function (p) { return p; }).slice(0, 4)
+    .forEach(function (part) {
+      var it = folder.getFoldersByName(part);
+      folder = it.hasNext() ? it.next() : folder.createFolder(part);
+    });
+  return folder;
+}
+
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -45,14 +58,18 @@ function doPost(e) {
       return json_({ ok: false, error: 'unauthorized' });
     }
     if (body.action === 'email') return sendEmail_(props, body);
-    if (body.action === 'ping') return json_({ ok: true, email: true, quota: MailApp.getRemainingDailyQuota() });
+    if (body.action === 'ping') return json_({ ok: true, email: true, archive: true, quota: MailApp.getRemainingDailyQuota() });
 
-    const folder = DriveApp.getFolderById(props.getProperty('FOLDER_ID'));
-    const name = String(body.name || 'file_' + Date.now()).replace(/[\\/:*?"<>|]/g, '_');
+    const root = DriveApp.getFolderById(props.getProperty('FOLDER_ID'));
+    const folder = body.folder ? folderAt_(root, body.folder) : root;
+    let name = String(body.name || 'file_' + Date.now()).replace(/[\\/:*?"<>|]/g, '_');
     const mime = body.mimeType || 'application/octet-stream';
     const bytes = Utilities.base64Decode(body.dataBase64);
-    const file = folder.createFile(Utilities.newBlob(bytes, mime, name));
-    if (name.indexOf(WEEKLY_PREFIX) === 0) pruneWeekly_(folder);
+    let blob = Utilities.newBlob(bytes, mime, name);
+    // v0.51.0: an archived document comes as an HTML page and is kept as a PDF
+    if (body.pdf && mime === 'text/html') { name = name.replace(/\.html?$/i, '') + '.pdf'; blob = blob.getAs('application/pdf').setName(name); }
+    const file = folder.createFile(blob);
+    if (folder === root && name.indexOf(WEEKLY_PREFIX) === 0) pruneWeekly_(root);
 
     return json_({ ok: true, id: file.getId(), url: file.getUrl(), name: file.getName() });
   } catch (err) {

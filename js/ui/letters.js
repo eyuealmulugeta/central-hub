@@ -12,6 +12,7 @@ import { stamp } from '../core/division.js';
 import { docHead, footText, signoff } from './print.js';
 import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
+import { archiveDoc } from './archive.js';
 
 let selected = null;
 let notice = '';
@@ -105,6 +106,9 @@ export const actions = {
     const open = unfilled(l.subject, l.body, l.to);
     if (open.length && !confirm(`Part of the letter is unfinished (${open.slice(0, 3).join(', ')}). Mark it as issued anyway?`)) return;
     store.updateCompany(co => { find(co).status = 'issued'; });
+    // v0.51.0: an issued letter is archived to Drive as a PDF and logged in the company's Log sheet
+    const paper = document.querySelector('.paper');
+    if (paper) archiveDoc({ c, company: true, type: 'letter', reference: letterRef(c, l), subject: l.subject || 'Letter', to: l.to || '', date: l.date || c.today, getHtml: () => paperHtml(paper, l.number) });
   },
   email(el, c) {
     const l = find(c.company);

@@ -9,6 +9,7 @@ import { html, options, meter, chip } from './dom.js';
 import { docHead, docSec, docFoot, footText, signoff } from './print.js';
 import { openMail } from './maildialog.js';
 import { bankView, bankActions, bankChanges } from './bank.js';
+import { tradeActuals, tradeLines, hasTradeBudgets } from '../engine/tradebudget.js';
 
 const LABEL = { labor: 'Labour', material: 'Material', equipment: 'Equipment', subcontract: 'Subcontract', transport: 'Transport', overhead: 'Overhead' };
 
@@ -21,6 +22,18 @@ let notice = '';
 export function preset(p = {}) { only = p.only || null; view = 'entries'; notice = ''; }
 
 const SIDE = { income: 'Money received', expense: 'Expenses' };
+
+/** v0.63.0 (Phase B3): labour budget against actual per trade, when the project has budgets per trade. */
+const TRADE_TONE = { ok: 'ok', warn: 'warn', over: 'high' };
+function tradeTable(c, cls = 'table compact') {
+  const p = c.project, cur = p.payCurrency || p.currency;
+  const lines = tradeLines(p, tradeActuals(c.ws, p, c.company.staff));
+  const pct = v => (v == null ? '—' : `${v} %`);
+  return html`<table class="${cls}"><thead><tr><th>Trade</th><th class="r">Man-days budget</th><th class="r">Man-days so far</th><th class="r">Used</th><th class="r">Amount budget</th><th class="r">Cost so far</th><th class="r">Used</th><th></th></tr></thead>
+    <tbody>${lines.map(l => html`<tr><td>${l.trade}</td><td class="r">${l.budgetDays || '—'}</td><td class="r">${l.days}</td><td class="r">${pct(l.pctDays)}</td>
+      <td class="r nowrap">${l.budgetAmount ? money(l.budgetAmount, cur) : '—'}</td><td class="r nowrap">${money(l.cost, cur)}</td><td class="r">${pct(l.pctCost)}</td>
+      <td>${l.level === 'over' ? chip('Over budget', 'high') : l.level === 'warn' ? chip('90 % used', 'warn') : l.budgetDays || l.budgetAmount ? '' : chip('no budget')}</td></tr>`)}</tbody></table>`;
+}
 const titleOf = () => (view === 'summary' ? 'Project finance summary' : only ? `${SIDE[only]} statement` : 'Ledger statement');
 const refOf = c => docRef({ company: c.global.company, project: c.project, type: view === 'summary' ? 'FIN' : 'LED', key: to || c.today });
 
@@ -103,7 +116,8 @@ function summaryPaper(c) {
       <tbody>${b.lines.map(l => html`<tr><td>${l.name}</td><td class="r">${l.budget ? money(l.budget, cur) : '—'}</td><td class="r">${money(l.actual, cur)}</td><td class="r ${l.used > 100 ? 'bad' : ''}">${pct(l.used)}</td><td class="r">${pct(l.share)}</td><td class="fin-bar"><i><b style="width:${Math.min(100, l.used ?? l.share).toFixed(1)}%"></b></i></td></tr>`)}</tbody>
       <tfoot><tr><td>Total</td><td class="r">${b.total.budget ? money(b.total.budget, cur) : '—'}</td><td class="r">${money(b.total.actual, cur)}</td><td class="r">${pct(b.total.used)}</td><td class="r">100 %</td><td></td></tr></tfoot>
     </table>`, 'only labour has its own budget line; the others show their share of the spend')}
-    ${docSec(2, 'Notes', html`<ul class="brief-list">${notes.map(n => html`<li>${n}</li>`)}</ul>`)}
+    ${hasTradeBudgets(p) ? docSec(2, 'Labour by trade', tradeTable(c, 'dsr-t')) : ''}
+    ${docSec(hasTradeBudgets(p) ? 3 : 2, 'Notes', html`<ul class="brief-list">${notes.map(n => html`<li>${n}</li>`)}</ul>`)}
     ${signoff([{ label: 'Prepared by' }, { label: 'Checked by' }, { label: 'Approved by' }])}
     ${docFoot(foot)}
   </div>`;
@@ -127,6 +141,7 @@ function entries(c) {
       ${kpi('Cash position', money(led.cash, cur), led.cpi == null ? 'Cost index not available yet' : `Cost index ${led.cpi.toFixed(2)} (1.00 = on budget)`, led.cash < 0 ? 'bad' : '')}
     </section>
 
+    ${hasTradeBudgets(p) ? html`<section class="card"><div class="toolbar"><h3>Labour by trade</h3><span class="muted">From the approved daily reports at the Manpower Directory day pay. Budgets under Settings, This project.</span></div>${tradeTable(c)}</section>` : ''}
     <section class="card">
       <form data-form="entry" class="entry">
         <input type="date" name="date" value="${c.today}" required aria-label="Date">

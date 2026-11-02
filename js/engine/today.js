@@ -48,7 +48,7 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [] }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
   if (approver) {
@@ -62,6 +62,8 @@ export function needsYou({ project, flags, requests = [], others = [], approver 
     if (decide.length) out.push({ sev: 'warn', kind: 'Expenses', title: `${decide.length} expense${decide.length > 1 ? 's' : ''} to approve`, detail: decide.some(r => r.status === 'gm') ? 'Some are above the limit and wait for the GM' : 'Asked for by the site or the office', link: 'requests', projectId: project.id, project: project.name });
     if (toPay.length) out.push({ sev: 'info', kind: 'Expenses', title: `${toPay.length} approved expense${toPay.length > 1 ? 's' : ''} to pay`, detail: 'Mark each paid with the method and the bank reference', link: 'requests', projectId: project.id, project: project.name });
   }
+  // v0.63.0: trades at 90 % or more of their labour budget
+  for (const l of trades) out.push({ sev: l.level === 'over' ? 'high' : 'warn', kind: 'Labour budget', title: `${l.trade}: ${l.level === 'over' ? 'over' : 'near'} its labour budget`, detail: [l.pctDays != null ? `${l.pctDays} % of the man-days` : '', l.pctCost != null ? `${l.pctCost} % of the amount` : ''].filter(Boolean).join(', '), link: 'ledger', projectId: project.id, project: project.name });
   for (const s of others) {
     const waiting = +s.waiting || 0, alerts = +s.unseen || 0;
     if (!waiting && !alerts) continue;

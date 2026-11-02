@@ -46,6 +46,8 @@ import { STATUSES, statusLabel, activitiesOf, parseList, isLimited, assignedUser
 import { money, num, fmtFull } from '../core/util.js';
 import { PAY_PERIODS, payPeriodOf, weekStartOf } from '../engine/attendance.js';
 import { monthlyRolesOf, directoryPay } from '../engine/crewpay.js';
+import { tradeActuals, tradeLines } from '../engine/tradebudget.js';
+import { tradeChoices } from '../engine/positions.js';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ROLES = [['office', 'Office: works from the office, on the projects ticked'], ['site', 'Site: works on site, on the projects ticked (active ones only)']];
@@ -86,6 +88,23 @@ let linkTab = 'field';
 let who = null;                 // the email of the person open on the People tab
 const tabStrip = (list, now, act) => html`<div class="emp-tabs set-tabs" role="tablist">${list.map(([k, label, n]) => html`
   <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="${act}" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>`;
+/** v0.63.0 (Phase B3): a budget in man-days and money for each trade; the actual so far beside it. */
+function tradeBudgetBox(c) {
+  const p = c.project, cur = p.payCurrency || p.currency;
+  const lines = tradeLines(p, tradeActuals(c.ws, p, c.company.staff));
+  const team = [...new Set((c.ws.team || []).map(m => m.role).filter(Boolean))];
+  const shown = [...new Set([...lines.map(l => l.trade), ...team])];
+  const add = tradeChoices().filter(t => !shown.some(x => x.toLowerCase() === t.toLowerCase()));
+  const b = t => (p.tradeBudgets || {})[t] || {};
+  return html`<p class="muted small">Leave a trade empty to keep it on the one labour line. The actual comes from the approved daily reports at the trade's day pay (Manpower Directory).</p>
+    <table class="table compact"><thead><tr><th>Trade</th><th class="r">Man-days</th><th class="r">Amount</th><th class="r">So far</th></tr></thead>
+    <tbody>${shown.map(t => { const l = lines.find(x => x.trade === t); return html`<tr><td>${t}</td>
+      <td class="r"><input class="price" type="number" min="0" step="any" data-chg="tradeBudget" data-t="${t}" data-f="days" value="${b(t).days || ''}" aria-label="Man-days for ${t}"></td>
+      <td class="r"><input class="price" type="number" min="0" step="any" data-chg="tradeBudget" data-t="${t}" data-f="amount" value="${b(t).amount || ''}" aria-label="Amount for ${t}"></td>
+      <td class="r nowrap muted">${l ? `${l.days} days · ${money(l.cost, cur)}` : '—'}</td></tr>`; })}</tbody></table>
+    ${add.length ? html`<label>Add a trade <select data-chg="tradeAdd"><option value="">Choose…</option>${options(add.map(t => [t, t]), null)}</select></label>` : ''}`;
+}
+
 const box = (id, title, body, sub = '') => html`<section class="card set-box" id="panel-${id}"><h3>${title}${sub ? html` <span class="muted">${sub}</span>` : ''}</h3>${body}</section>`;
 /** A row of tick boxes drawn as small pills. */
 const pills = list => html`<div class="pills">${list}</div>`;
@@ -568,6 +587,7 @@ function projectPage(c) {
           <label>Contract value <input type="number" min="0" step="any" data-chg="project" data-f="contractValue" data-fk="pj-contract" value="${p.contractValue}"></label>
           <label title="The labour line of the budget: crew and staff pay. Printed on the labour cost sheet (Payments).">Labour budget <input type="number" min="0" step="any" data-chg="project" data-f="labourBudget" data-fk="pj-labour" value="${p.labourBudget || ''}"></label>
         </div>`)}
+      ${box('tradebudget', 'Labour budget per trade', tradeBudgetBox(c), `in ${p.payCurrency || p.currency}`)}
     </div>
     <div class="actions left"><button class="btn danger" data-act="deleteProject">Delete this project</button></div>`;
 
@@ -921,6 +941,19 @@ export const actions = {
 };
 
 export const changes = {
+  /** v0.63.0: a trade's budget in man-days or money; both empty = off the per-trade list. */
+  tradeBudget(el) {
+    const t = el.dataset.t, f = el.dataset.f, v = Math.max(0, +el.value || 0);
+    store.updateProject(p => {
+      const all = { ...(p.tradeBudgets || {}) }, one = { ...(all[t] || {}), [f]: v };
+      if (!one.days && !one.amount) delete all[t]; else all[t] = one;
+      p.tradeBudgets = all;
+    });
+  },
+  tradeAdd(el) {
+    const t = el.value;
+    if (t) store.updateProject(p => { p.tradeBudgets = { ...(p.tradeBudgets || {}), [t]: { days: 0, amount: 0, ...((p.tradeBudgets || {})[t] || {}) } }; });
+  },
   ...binChanges,
   ...fieldsetup.changes,
   ...fieldprojects.changes,

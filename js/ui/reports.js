@@ -27,6 +27,7 @@ import { fieldSpotlight } from '../sync/fieldreport.js';
 import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';
 import { fromField } from '../engine/spotlight.js';
 import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
+import { frPdf } from './frpdf.js';
 
 /** v0.49.0: the report's engagement (5 points), for the office only: never on the client's copy. */
 const engChip = (r, c) => { const e = r.source === 'field' && engagementOf(r, c?.project?.crewStart); return e ? html`<span class="chip ${e.v >= 4 ? 'ok' : e.v >= 2 ? 'warn' : 'high'}" title="${Object.entries(ENGAGE_WORDS).map(([k, w]) => `${e.parts[k] ? '✓' : '✗'} ${w}`).join(' · ')}">Engagement ${e.v}/5</span>` : ''; };
@@ -387,7 +388,7 @@ export function render(c) {
                 <td>${r.name}${r.qtyTotal ? html`<span class="muted note">${num(r.qtyTotal - r.qtyDone)} of ${num(r.qtyTotal)} ${r.unit || ''} remaining</span>` : ''}</td>
                 <td class="r nowrap">${r.qtyTotal
                   ? html`<input class="narrow" type="number" name="q_${r.id}" min="0" step="any" placeholder="0" value="${entry(r.id)?.qty || suggested[r.id]?.qty || ''}" title="Quantity installed that day" aria-label="Quantity installed, ${r.name}"> <span class="muted unit">${r.unit || ''}</span>`
-                  : html`<input class="narrow" type="number" name="p_${r.id}" min="0" max="100" value="${reported[r.id]?.pct ?? r.progress}" title="Percent complete so far" aria-label="Percent done, ${r.name}"> <span class="muted unit">%</span>`}</td>
+                  : html`<input class="narrow" type="number" name="p_${r.id}" min="0" max="100" value="${entry(r.id)?.progress ?? reported[r.id]?.pct ?? r.progress}" title="Percent complete so far" aria-label="Percent done, ${r.name}"> <span class="muted unit">%</span>`}</td>
                 <td class="r"><input class="narrow" type="number" name="d_${r.id}" min="0" step="any" value="${entry(r.id)?.delayDays || reported[r.id]?.delayDays || 0}" aria-label="Delay days, ${r.name}"></td>
                 <td><input name="n_${r.id}" value="${entry(r.id)?.note || suggested[r.id]?.note || ''}" aria-label="Note, ${r.name}"></td>
               </tr>`)}</tbody>
@@ -525,11 +526,14 @@ function pdfCard(r, c) {
   if (f.nowork) return html`<section class="card"><h3>No work this day</h3><p class="muted">${f.reason || ''}${f.note ? ` (${f.note})` : ''}</p></section>`;
   if (isSiteUser(c)) return '';
   const x = fileOf(c.ws, r);
+  // v0.54.0 (20b): the same PDF as Field Report, drawn here by its own builder (ui/frpdf.js), and the client copy
+  const same = r.source === 'field' ? html`<button class="btn small" data-act="frPdf" data-id="${r.id}" title="Field Report's PDF, made here from the report Field Report 2.23.0 keeps in the database">Same PDF here</button>
+    <button class="btn small" data-act="frClient" data-id="${r.id}" title="The client copy: no photo times and no time under the signatures">Client copy</button>` : '';
   if (!x.pdfId) {
-    return html`<section class="card"><h3>Report PDF</h3><p class="muted">${r.source === 'field' ? 'No PDF came with this report.' : 'This report was typed in Central Hub, so there is no Field Report PDF.'}</p></section>`;
+    return html`<section class="card"><div class="toolbar"><h3>Report PDF</h3><span class="grow"></span>${same}</div><p class="muted">${r.source === 'field' ? 'No PDF came with this report.' : 'This report was typed in Central Hub, so there is no Field Report PDF.'}</p></section>`;
   }
   return html`<section class="card">
-    <div class="toolbar"><h3>Field Report PDF, ${fmtDate(r.date)}</h3><span class="grow"></span>
+    <div class="toolbar"><h3>Field Report PDF, ${fmtDate(r.date)}</h3><span class="grow"></span>${same}
       <a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(x, f)}</div>
     <iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
     <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
@@ -680,7 +684,8 @@ export const submits = {
       return false;
     }
     store.update(ws => {
-      ws.reports.push({ id: uid('r'), date, by, weather: fd.get('weather'), manpower, entries, issue, field });
+      // v0.54.0 (owner, 20b): a report typed here, when the site did not send one from Field Report, waits for the PM or GM like the others
+      ws.reports.push({ id: uid('r'), date, by, weather: fd.get('weather'), manpower, entries, issue, field, source: 'hub', review: 'pending' });
       if (issue) {
         ws.items.push({
           id: uid('i'), type: 'site_request', title: urgent ? `URGENT: ${issue}` : issue, owner: by, created: date,
@@ -688,7 +693,7 @@ export const submits = {
         });
       }
     });
-    notice = `Report for ${fmtDate(date)} saved. Schedule, ledger and follow-ups are updated.`;
+    notice = `Report for ${fmtDate(date)} saved. It counts in the schedule, attendance and costs once the PM or GM approves it.`;
   },
 };
 
@@ -707,6 +712,8 @@ export const changes = {
 };
 
 export const actions = {
+  frPdf(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r); },
+  frClient(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, true); },
   ...spotActions,
   spotToneSet(el) { spot.tone = el.dataset.v || ''; },   // v0.34.0: the filter chips on Spotlight
   async sigDraw() { await openPad('Checked by: your signature'); store.notify(); },

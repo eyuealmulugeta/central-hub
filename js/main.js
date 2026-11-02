@@ -67,6 +67,7 @@ import * as diagnostics from './core/diagnostics.js';
 import { APP_VERSION } from './version.js';
 import { describePaper, makePdf, canShareFile, shareFile, whatsappUrl, TELEGRAM_URL, downloadFile, sizeLabel } from './sync/share.js';
 import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
+import { onSwipe } from './core/swipe.js';
 
 const APP = 'Central Hub';
 const VIEWS = { home, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
@@ -118,6 +119,8 @@ const UNDO_MS = 60 * 1000;   // the Undo stays a minute unless used or replaced
 
 const $ = sel => document.querySelector(sel);
 const root = $('#view');
+// v0.56.0: on a phone, slide left or right for the next or previous tab of the bottom bar (More is left out)
+onSwipe(root, () => document.querySelectorAll('#phone-tabs a.ptab'));
 $('#app-version').textContent = APP_VERSION;
 
 /**

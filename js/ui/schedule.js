@@ -149,7 +149,7 @@ export function render(c) {
               <i class="dot ${r.status}"></i>
               <span class="g-title ${r.critical ? 'crit' : ''}">${r.name}</span>
               ${who.has(r.assigneeId) ? html`<small class="who" title="Assigned to ${who.get(r.assigneeId)}">${who.get(r.assigneeId)}</small>` : ''}
-              <span class="muted">${r.milestone ? '◆' : r.progress + '%'}</span>
+              <span class="muted">${r.milestone ? '◆' : Math.round(r.progress) + '%'}</span>
             </div>
             <div class="g-track" style="width:${W}px">
               <i class="g-plan" style="left:${x(r.planEs)}px;width:${(r.planEf - r.planEs + 1) * D}px"></i>

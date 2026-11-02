@@ -253,7 +253,8 @@ export function buildPdf(JsPDF, d) {
   const pos = lines(profile.position || '', ow * 0.45)[0] || '', px = ox + Math.min(doc.getTextWidth(pos), ow * 0.45) + 8;
   doc.text(pos, ox, ry + 37);
   const lx2 = ox + ow;
-  if (d.sig) { try { doc.addImage(d.sig, 'PNG', px, ry + 12, Math.min(lx2 - px, 90), 26); } catch { /* a bad signature image leaves the line blank */ } }
+  // 2.26.0: the signature sits under the name (it covered the name's last letters)
+  if (d.sig) { try { doc.addImage(d.sig, 'PNG', px, ry + 19, Math.min(lx2 - px, 66), 19); } catch { /* a bad signature image leaves the line blank */ } }
   color(INK, 'draw'); doc.setLineWidth(0.6); doc.line(px, ry + 38, lx2, ry + 38);
   if (!d.client) { font(7, 'normal', MUTED); doc.text(`${dayLabel(r.date)} ${d.signedAt || ''}`.trim(), lx2 - 2, ry + 46, { align: 'right' }); }
   y = Math.max(safeEnd, ry + 50);

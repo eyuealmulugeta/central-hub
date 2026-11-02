@@ -498,6 +498,7 @@ export const store = {
   /** v0.44.0: one collection, read once (Compare). */
   async listCol(path) { return api ? api.list(path) : []; },
   async getDoc(path) { return api ? api.get(path) : null; },   // v0.54.0: one record read once (a Field Report report's whole text)
+  async setDoc(path, data) { if (api) await api.set(path, data); },   // v0.55.0: an office version of a Field Report report
   /** v0.37.0: called with the fieldPing records whenever Field Report signals a change. Returns the way to stop. */
   onFieldPing(fn) { pingFns.add(fn); return () => pingFns.delete(fn); },
   /** Admin only: one switch; moving it back is the rollback. */

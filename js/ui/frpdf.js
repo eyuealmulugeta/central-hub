@@ -29,8 +29,9 @@ const asDataUrl = url => fetch(url).then(x => (x.ok ? x.blob() : null)).then(b =
 const sizeOf = src => new Promise(ok => { const i = new Image(); i.onload = () => ok({ w: i.naturalWidth || 4, h: i.naturalHeight || 3 }); i.onerror = () => ok({ w: 4, h: 3 }); i.src = src; });
 
 /** Draws and downloads the PDF (or the client copy) of report `r`. */
-export async function frPdf(c, r, client = false) {
-  const rec = await savedReport(c, r);
+export async function frPdf(c, r, client = false, v = 0) {
+  // v0.55.0: an older version is read from where it is kept (projects/<id>/fieldVersions/<date>_v<n>)
+  const rec = v ? await store.getDoc(`projects/${c.project.id}/fieldVersions/${r.date}_v${v}`).catch(() => null) : await savedReport(c, r);
   if (!rec?.full?.r) {
     tell('This report was sent before Field Report 2.23.0 (or not by the Both data route), so only its Drive PDF exists. Open it from the report.');
     return;

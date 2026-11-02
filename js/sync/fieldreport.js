@@ -195,7 +195,8 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
   let added = 0, updated = 0;
   movePdfIds(ws);
   // v0.44.2: a report approved in Field Report is approved here too (no longer "Awaiting approval")
-  const approvedHere = (old, meta) => (meta.status === 'approved' && (!old || old.review !== 'done') ? {
+  // v0.55.0: a report the office is correcting stays To approve until approved here again
+  const approvedHere = (old, meta) => (meta.status === 'approved' && (!old || old.review !== 'done') && !old?.officeOpen ? {
     review: 'done', approvedBy: meta.reviewedBy || meta.checked?.by || 'Field Report', approvedAt: meta.checked?.at || new Date().toISOString(),
     approval: { by: meta.reviewedBy || meta.checked?.by || 'Field Report', email: '', title: '', at: meta.checked?.at || '', sig: meta.checked?.sig || '', from: 'field' },
   } : {});
@@ -460,6 +461,13 @@ export async function fieldUsers() {
   return { people: out.people || [], catalog: out.catalog || [], devices: out.devices || [], inbox: out.inbox || [], signups: out.signups || [], crewReqs: out.crewReqs || [] };
 }
 /** v0.23.1: one site photo from Drive (script 7.31.0), as base64 JPEG. proj = Field Report code, report = the PDF name. */
+/** v0.55.0: a photo from the gallery into the report's Drive folder (script photoPut), for an office version. */
+export async function fieldPhotoPut(proj, report, id, data) {
+  const out = await post({ action: 'photoPut', proj, report, id, data });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not keep the photo.');
+  return out.fileId;
+}
+
 export async function fieldPhoto(proj, report, id) {
   const out = await post({ action: 'photoGet', proj, report, id });
   if (!out.ok) throw new Error(out.error || 'Field Report would not give the photo.');

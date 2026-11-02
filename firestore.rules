@@ -381,7 +381,9 @@ service cloud.firestore {
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
         allow create: if isOwner()
-          || (officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove()))
+          || (officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
+            // v0.55.0: an office version of a Field Report report is written by approvers only
+            && (!(section in ['fieldReports', 'fieldVersions']) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
           // with Costs ticked a Site person enters costs; with Invoices and documents, drafts (never issued)
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
@@ -395,7 +397,9 @@ service cloud.firestore {
           // v0.38.0: a Field Report phone writes a request of its project as a draft, in its own name
           || (section == 'requests' && fieldOn(pid) && request.resource.data.get('site', false) == true && request.resource.data.status == 'draft' && request.resource.data.by == me());
         allow update: if isOwner()
-          || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove()))
+          || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
+            // v0.55.0: a kept version is never changed; the newest is changed by approvers only
+            && section != 'fieldVersions' && (section != 'fieldReports' || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
           || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data) && !isIssued(resource.data))

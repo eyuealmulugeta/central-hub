@@ -28,6 +28,7 @@ import { hubNotes, actions as spotActions, changes as spotChanges, submits as sp
 import { fromField } from '../engine/spotlight.js';
 import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
 import { frPdf } from './frpdf.js';
+import { photoEditor, photoChanges, photoActions, changeList, saveOfficeVersion, photosAfter, draftOf, dropDraft, olderVersions, FR_WEATHER } from './officever.js';   // v0.55.0
 
 /** v0.49.0: the report's engagement (5 points), for the office only: never on the client's copy. */
 const engChip = (r, c) => { const e = r.source === 'field' && engagementOf(r, c?.project?.crewStart); return e ? html`<span class="chip ${e.v >= 4 ? 'ok' : e.v >= 2 ? 'warn' : 'high'}" title="${Object.entries(ENGAGE_WORDS).map(([k, w]) => `${e.parts[k] ? '✓' : '✗'} ${w}`).join(' · ')}">Engagement ${e.v}/5</span>` : ''; };
@@ -322,7 +323,9 @@ export function render(c) {
   const lead = ws.team.find(m => /site|engineer|foreman/i.test(m.role)) || ws.team[0];
   const reports = [...ws.reports].sort((a, b) => b.date.localeCompare(a.date));
   const pending = reports.filter(r => r.review === 'pending');
-  const weather = cur?.weather && !WEATHER.includes(cur.weather) ? [cur.weather, ...WEATHER] : WEATHER;
+  // v0.55.0: a site report is corrected with Field Report's own weather words, so its PDF picture fits
+  const words = cur?.source === 'field' ? FR_WEATHER : WEATHER;
+  const weather = cur?.weather && !words.includes(cur.weather) ? [cur.weather, ...words] : words;
   const last = reports.find(r => r.field?.hours?.start)?.field.hours || { start: '08:00', end: '17:00' };
   const equipment = Array(eqRows).fill('');
   const mpShown = t => shownTrades.has(t) || Number(crew.get(t)?.count) > 0 || Number(crew.get(t)?.ot) > 0;
@@ -354,6 +357,7 @@ export function render(c) {
         ${cur ? checkStrip(cur, c) : ''}
         ${cur ? sheet(cur, c, { reviewing: true }) : ''}
         ${cur ? html`<h3 class="rep-edit">Check the figures before approving</h3><p class="muted">Approving puts these quantities in the schedule and counts the day's attendance, pay and labour cost. Correct any figure here first.</p>` : ''}
+        ${cur?.source === 'field' && cur.field?.pdf ? photoEditor(cur) : ''}
         <div class="grid4">
           <label>Date <input type="date" name="date" value="${cur?.date || c.today}" max="${c.today}" required ${cur ? 'readonly' : ''}></label>
           <label>Prepared by <input name="by" list="team-names" value="${cur?.by || lead?.name || ''}" required>
@@ -537,8 +541,18 @@ function pdfCard(r, c) {
       <a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(x, f)}</div>
     <iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
     <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
-    ${olderList(r, c)}
+    ${olderList(r, c)}${versionList(r)}
   </section>`;
+}
+
+/** v0.55.0: the office versions of a site report; the one shown is the newest, each older one opens as its PDF. */
+function versionList(r) {
+  const list = olderVersions(r), o = r.field?.office;
+  if (!list.length && !o) return '';
+  return html`<div class="older-reports"><h4>Versions</h4>
+    ${o ? html`<p class="muted">Newest: version ${o.v || '?'}, corrected by the office (${o.by}${o.at ? `, ${at(o.at)}` : ''}): ${(o.changes || []).join('; ')}</p>` : ''}
+    <ul>${list.map(v => html`<li>Version ${v.v} · ${v.office ? `corrected by the office (${v.by})` : `from the site (${v.by})`}${v.at ? ` · ${at(v.at)}` : ''}
+      <button class="btn small" data-act="frPdf" data-id="${r.id}" data-v="${v.v}">PDF</button> <button class="btn small" data-act="frClient" data-id="${r.id}" data-v="${v.v}">Client copy</button></li>`)}</ul></div>`;
 }
 
 /** v0.24.0: the other reports of the same day, older than the one shown: never discarded, each can be opened. */
@@ -558,8 +572,10 @@ function readCard(r, c) {
   return html`<section class="card">
     <div class="toolbar"><h2>Field report, ${fmtDate(r.date)}</h2>${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${engChip(r, c)}${r.field?.replaced ? chip(`Replaced an older report${r.field.replaced !== '?' ? ` No. ${r.field.replaced}` : ''}`, 'warn') : ''}<span class="grow"></span>
       ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
+      ${r.source === 'field' && r.review === 'done' && r.field?.pdf && store.canApprove ? html`<button class="btn small" data-act="officeCorrect" data-id="${r.id}" title="Back to To approve; your corrections become a new office version">Correct</button>` : ''}
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin">Delete</button></div>
     ${offlineSent(r.field) ? html`<p class="notice warn no-print">${offlineSent(r.field)}</p>` : ''}${approvalLine(r)}
+    ${(r.pastApprovals || []).map(a => html`<p class="muted no-print">Earlier approval of version ${a.v}: ${a.by}${a.at ? `, ${at(a.at)}` : ''}</p>`)}
     ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
     ${sheet(r, c)}
   </section>`;
@@ -628,7 +644,12 @@ export const submits = {
       // the site's own entries stay as written; the approver adds the progress and may correct the crew
       const hrs = new Map((cur.manpower || []).map(m => [m.trade, m.hrs]));
       const who = store.profile.name || store.user?.name || store.user?.email || 'Admin';
+      // v0.55.0 (20b part 2): what the office corrected becomes an office version (ui/officever.js)
+      const draft = draftOf(cur.id);
+      const officeChanges = cur.source === 'field' && cur.field?.pdf ? changeList(cur, { weather: fd.get('weather'), manpower, entries, reported: reportedByTask(cur.field, billingOf(c.project).hoursPerDay),
+        taskName: id => c.ws.tasks.find(t => t.id === id)?.name || 'a task', draft }) : [];
       store.update(ws => Object.assign(underReview(ws), {
+        officeOpen: false, ...(officeChanges.length ? { field: { ...cur.field, photoFiles: photosAfter(cur.field.photoFiles, draft) } } : {}),
         by, weather: fd.get('weather'), entries, review: 'done', approvedBy: who, approvedAt: new Date().toISOString(),
         // v0.26.0: who approved and signed "Checked by", and when (kept in the history here, not on the PDF)
         approval: { by: who, email: store.user?.email || '', title: store.profile.title || '', at: new Date().toISOString(), sig, from: fieldSig(cur) ? 'field' : 'hub' },
@@ -642,12 +663,22 @@ export const submits = {
       if (cur.source !== 'field' || !cur.field?.pdf) { notice = done; replyNotice = ''; return; }
       // the site is told after the figures are in: if it cannot be reached, the approval here stands and can be sent again
       replyNotice = `${done} Telling the site in the background…`;
-      const id = cur.id, projectId = c.project.id;
+      const id = cur.id, projectId = c.project.id, msg = pinsMessage(cur.pins, (fd.get('msg') || '').trim());
       sending.add(id);
-      reviewFieldReport({ name: cur.field.pdf, decision: 'approve', text: pinsMessage(cur.pins, (fd.get('msg') || '').trim()) })
+      let officeLine = '';
+      const office = !officeChanges.length ? Promise.resolve('') : saveOfficeVersion({ pid: projectId, code: c.project.fieldCode || '', cur, changes: officeChanges, draft, weather: fd.get('weather'), who: { name: who, email: store.user?.email || '' } })
+        .then(out => {
+          dropDraft(id);
+          if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (!rec) return;
+            rec.field = { ...rec.field, office: out.office };
+            rec.versions = [...(rec.versions || []).filter(v => v.v !== out.before?.v && v.v !== out.v), ...(out.before ? [out.before] : []), ...(out.v ? [{ v: out.v, by: out.office.by, at: out.office.at, office: true }] : [])]; });
+          return `Office version${out.v ? ` ${out.v}` : ''} saved (${officeChanges.length} change${officeChanges.length === 1 ? '' : 's'}).`;
+        })
+        .catch(err => `The office version was not saved (${err.message}); the approval stands.`);
+      office.then(line => { officeLine = line; return reviewFieldReport({ name: cur.field.pdf, decision: 'approve', text: msg }); })
         .then(view => {
           if (store.project?.id === projectId) store.update(ws => { const rec = ws.reports.find(x => x.id === id); if (rec) { rec.field = { ...rec.field, status: view.status, comments: view.comments || [], reviewedBy: view.reviewedBy || '', history: view.history || rec.field.history || [] }; delete rec.tellSite; } });
-          replyNotice = `${done} The site is notified and the report is locked in Field Report.`;
+          replyNotice = `${done} ${officeLine ? `${officeLine} ` : ''}The site is notified and the report is locked in Field Report.`;
         })
         .catch(err => { replyNotice = `${done} The site was not told yet (${err.message}). Central Hub tries again every 2 minutes, or press Approve under the report.`; })
         .finally(() => { sending.delete(id); store.notify(); });
@@ -699,6 +730,7 @@ export const submits = {
 
 export const changes = {
   ...spotChanges,
+  ...photoChanges,   // v0.55.0
   withAtt(el) { withAtt = el.checked; },
   spotTone(el) { spot.tone = el.value; },
   spotAbout(el) { spot.about = el.value; },
@@ -712,8 +744,19 @@ export const changes = {
 };
 
 export const actions = {
-  frPdf(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r); },
-  frClient(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, true); },
+  frPdf(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, false, +el.dataset.v || 0); },
+  frClient(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, true, +el.dataset.v || 0); },
+  ...photoActions,
+  /** v0.55.0: correct an approved site report: it goes back to To approve; the old approval stays with the old version. */
+  officeCorrect(el, c) {
+    const r = c.ws.reports.find(x => x.id === el.dataset.id);
+    if (!r || !store.canApprove || r.review !== 'done') return;
+    if (!confirm(`Correct the approved report of ${fmtDate(r.date)}?\n\nIt goes back to "To approve" until it is approved again. Your corrections become a new office version; the old approval stays with the old version.`)) return;
+    store.update(ws => { const x = ws.reports.find(y => y.id === r.id); if (!x) return;
+      x.pastApprovals = [...(x.pastApprovals || []), { by: x.approval?.by || x.approvedBy || '', at: x.approval?.at || x.approvedAt || '', v: x.field?.office?.v || x.field?.version || 1 }];
+      x.review = 'pending'; x.officeOpen = true; });
+    reviewing = r.id; viewing = null;
+  },
   ...spotActions,
   spotToneSet(el) { spot.tone = el.dataset.v || ''; },   // v0.34.0: the filter chips on Spotlight
   async sigDraw() { await openPad('Checked by: your signature'); store.notify(); },

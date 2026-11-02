@@ -11,7 +11,7 @@ const cache = new Map();   // "proj|report|id" -> Promise<data URL, or '' when i
 /** The photos Field Report kept in Drive for this report (older reports have none). */
 export const photoList = r => (r?.field?.photoFiles || []).filter(p => p && p.id);
 
-const label = p => [p.time, p.zone, p.task, p.caption].filter(Boolean).join(' · ');
+const label = p => [p.time, p.zone, p.task, p.caption, p.gallery ? 'From gallery' : ''].filter(Boolean).join(' · ');   // v0.55.0: a photo the office added
 
 /** The photos, perPage to a block (a printed page); each picture is filled in by fillPhotos(). '' when there are none. */
 export function photoGrid(r, c, { perPage = 0, cls = '' } = {}) {

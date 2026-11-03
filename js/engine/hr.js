@@ -4,7 +4,7 @@
 import { toDay, sum } from '../core/util.js';
 import { convert } from './pricing.js';
 import { ratingsOf } from './evaluation.js';
-import { normDepartment } from './positions.js';
+import { normDepartment, departmentOf } from './positions.js';
 import { needsAgreement } from './manpower.js';
 
 export const AGREEMENT_TYPES = [
@@ -85,7 +85,7 @@ export function filterStaff(people, f = {}, evaluations = []) {
   const status = f.status || 'active';
   return people.filter(p => (status === 'all' || (status === 'left' ? p.status === 'left' : p.status !== 'left'))
     && (!f.position || p.title === f.position)
-    && (!f.department || normDepartment(p.department) === f.department)
+    && (!f.department || departmentOf(p) === f.department)   // v0.78.0: as the Manpower Directory shows it
     && (!f.project || p.projectId === f.project || (p.assignments || []).some(a => a.active !== false && a.projectId === f.project))
     && (!f.rating || RATING_TESTS[f.rating](ratingOf(p, evaluations)))
     && (!text || [p.name, p.title, p.department, p.phone, p.email].some(v => String(v || '').toLowerCase().includes(text))));

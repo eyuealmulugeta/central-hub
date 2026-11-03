@@ -100,7 +100,8 @@ export function stepStatus(r, id) {
     }
     case 'crew': {
       const t = totals(r.crew, r.start.start, r.start.end);
-      if (!r.crew.done) return { state: r.crew.rows.length ? 'half' : 'no', line: 'Who is here today' };
+      // 2.39.0 (owner): red until someone is marked, not when the list only opened
+      if (!r.crew.done) return { state: r.crew.rows.some(x => x.markAt) ? 'half' : 'no', line: 'Who is here today' };
       return { state: 'ok', line: `${t.present} present · ${t.manHours} man-hours` };
     }
     case 'work': {

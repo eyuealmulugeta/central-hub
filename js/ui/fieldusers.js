@@ -144,11 +144,18 @@ function crewCard() {
     <p class="muted small">Names, trades and daily wages the site sent from Field Report. Approve puts the person on the crew of that project only, with the daily wage. A wage that is not the trade's daily wage is kept but flagged "Wage to review" on Payments until you clear it.</p>
     ${[...by].map(([code, list]) => { const pj = projectOf(code); return html`<h5>${code} · ${pj ? pj.name : 'no project in Central Hub has this Field Report code'}</h5>
       <ul class="list fu-devs">${list.map(r0 => { const r = { ...r0, ...(crewEdits[r0.id] || {}) }; return html`<li class="fu-dev"><div>${crewEditing === r.id ? html`<input value="${r.name}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="name" aria-label="Name"> <input value="${r.trade || ''}" data-chg="fuCrewEdit" data-id="${r.id}" data-f="trade" aria-label="Trade" placeholder="Trade">` : html`<b>${r.name}</b>`} <span class="muted">${crewEditing === r.id ? '' : r.trade || 'No trade'} · ${r.wage || r.tradeWage || 0} a day</span>${r.at ? html` <span class="muted">· sent${r.by ? ` by ${r.by}` : ''} ${new Date(r.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>` : ''}${crewEdits[r.id] ? html` ${chip('Corrected here', 'info')}` : ''}
-        ${wageDiffers(r) ? chip(`Not the trade wage (${r.tradeWage})`, 'warn') : ''} <span class="muted note">sent by ${r.by || 'the site'} · ${when(r.at)}</span></div>
+        ${wageDiffers(r) ? chip(`Not the trade wage (${r.tradeWage})`, 'warn') : ''}${elsewhere(r, pj)} <span class="muted note">sent by ${r.by || 'the site'} · ${when(r.at)}</span></div>
         <div class="entry"><button class="btn small primary" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="approve" ${busy || !pj ? 'disabled' : ''}>Approve</button>
           <button class="btn small ghost" type="button" data-act="fuCrewOpen" data-id="${r.id}">${crewEditing === r.id ? 'Done' : 'Edit'}</button>
           <button class="btn small ghost" type="button" data-act="fuCrew" data-p="${code}" data-id="${r.id}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button></div></li>`; })}</ul>
       ${list.length > 1 && pj ? html`<div class="actions left"><button class="btn small" type="button" data-act="fuCrew" data-p="${code}" data-v="approve" ${busy ? 'disabled' : ''}>Approve all ${list.length}</button></div>` : ''}`; })}`;
+}
+/** v0.78.0: a name already on another project in the Manpower Directory: approving puts them on this one too. */
+function elsewhere(r, pj) {
+  if (!pj) return '';
+  const n = String(r.name || '').trim().toLowerCase(), p = (store.company?.staff || []).find(x => String(x.name || '').trim().toLowerCase() === n);
+  const on = p ? (p.assignments || []).filter(a => a.active !== false && a.projectId !== pj.id).map(a => store.projects.find(x => x.id === a.projectId)?.name).filter(Boolean) : [];
+  return on.length ? html` ${chip(`On ${on.join(', ')} in the Manpower Directory: approving adds ${pj.name}`, 'warn')}` : '';
 }
 async function crewDecide(code, yes, list, quiet = false) {
   if (!list.length || busy) return;
@@ -160,10 +167,15 @@ async function crewDecide(code, yes, list, quiet = false) {
   try {
     let ws = null;
     let into = null;
-    if (yes) ws = await store.updateOther(pj.id, w => { approveCrew(w, list, () => uid('m'), new Date().toISOString()); into = fromTeam(w, store.company?.staff || [], pj.id, () => uid('st')); });
+    let made = [];
+    if (yes) ws = await store.updateOther(pj.id, w => { made = approveCrew(w, list, () => uid('m'), new Date().toISOString()); into = fromTeam(w, store.company?.staff || [], pj.id, () => uid('st')); });
+    // v0.78.0: a person of the directory switched back on here is put on this project there too, so both agree
+    const linked = made.filter(m => m.personId);
+    if (linked.length) store.updateCompany(co => { for (const m of linked) { const x = co.staff.find(y => y.id === m.personId); if (!x) continue; const a = (x.assignments || []).find(y => y.projectId === pj.id); if (a) a.active = true; else x.assignments = [...(x.assignments || []), { projectId: pj.id, role: m.role || x.title || '', dayRate: 0, active: true }]; } });
     // v0.46.0: approved crew is in the Manpower Directory too: linked to the person of the same name, else new
     if (into && (into.created.length || into.updated.length)) store.updateCompany(co => {
-      const by = addedStamp(`${addedName(list[0].byName || list[0].by, store.company?.staff, store.users) || 'Site'} (Field Report)`, new Date().toISOString().slice(0, 10));
+      // v0.78.0 (owner): who sent it and who approved it, by name
+      const by = addedStamp(`${addedName(list[0].byName || list[0].by, store.company?.staff, store.users) || 'Site'} (Field Report), approved by ${store.signature?.split(',')[0] || store.profile?.name || addedName(store.user?.email || '', store.company?.staff, store.users)}`, new Date().toISOString().slice(0, 10));
       for (const p of into.created) co.staff.push({ ...p, ...by });
       for (const u of into.updated) { const i = co.staff.findIndex(x => x.id === u.id); if (i >= 0) co.staff[i] = u; }
     });

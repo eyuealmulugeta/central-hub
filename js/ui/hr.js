@@ -20,7 +20,7 @@ import { readFayda } from '../engine/crewform.js';
 import { divOf, stamp, TRADING, INSTALLATION } from '../core/division.js';
 import { scanInto, scanButton } from './ocr.js';
 import { TITLES, GROUPS, titleOf, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
-import { positionGroups, departmentChoices, nationalityChoices, normDepartment, tierOfPosition } from '../engine/positions.js';
+import { positionGroups, departmentChoices, nationalityChoices, normDepartment, tierOfPosition, departmentOf } from '../engine/positions.js';
 import { chooseOptions, chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { ownerFromStaff } from '../engine/owners.js';
 import { paperHtml } from '../sync/mail.js';
@@ -78,7 +78,9 @@ export function render(c) {
 function wall(sum, c, cur) {
   const projectName = id => store.projects.find(p => p.id === id)?.name || '';
   const staff = c.company.staff, evals = c.company.evaluations;
-  const used = key => [...new Set(staff.map(p => (key === 'department' ? normDepartment(p[key]) : p[key])).filter(Boolean))].sort();
+  const used = key => [...new Set(staff.map(p => (key === 'department' ? departmentOf(p) : p[key])).filter(Boolean))].sort();
+  // v0.78.0 (owner): the projects of the Manpower Directory (the assignments), not the old single project
+  const projectsOf = p => { const on = activeProjects(p).map(projectName).filter(Boolean); return on.length ? on.join(', ') : projectName(p.projectId); };
   const pass = new Set(filterStaff(staff, filt, evals));
   const shown = sum.rows.filter(({ p }) => pass.has(p));
   const sel = (f, label, list) => html`<select data-chg="filt" data-f="${f}" data-fk="hr-f-${f}" aria-label="${label}">${options(list, filt[f])}</select>`;
@@ -114,7 +116,7 @@ function wall(sum, c, cur) {
           <span class="emp-text">
             <b>${p.name || 'New employee'}</b>
             <span>${p.title || 'No job position'}</span>
-            <span class="muted">${[normDepartment(p.department), projectName(p.projectId)].filter(Boolean).join(' · ') || 'Head office'}</span>
+            <span class="muted">${[departmentOf(p), projectsOf(p)].filter(Boolean).join(' · ') || 'Head office'}</span>
             ${(r => (r == null ? html`<span class="muted emp-stars">Not rated yet</span>` : html`<span class="emp-stars" title="${scaleLabel(r)}">${stars(r)} ${score(r)}</span>`))(ratingOf(p, evals))}
             ${p.email ? html`<span class="muted">${p.email}</span>` : ''}
             ${p.phone ? html`<span class="muted">${p.phone}</span>` : ''}

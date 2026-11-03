@@ -32,6 +32,25 @@ export function blocksOf({ ws, devices = [], inbox = [], today }) {
   };
 }
 
+/**
+ * v0.78.0 (owner): a circle with the number of notifications waiting, over every page (the Admin's), only while there
+ * are some. A tap opens Notifications; Clear hides it until a new one comes. Answered ones leave the number.
+ */
+const CLEARED = 'hub:notifCleared';
+const cleared = () => { try { return Number(localStorage.getItem(CLEARED)) || 0; } catch { return 0; } };
+export function fab(c) {
+  const n = pendingCount(c);
+  if (n < cleared()) { try { localStorage.setItem(CLEARED, String(n)); } catch { /* not kept */ } }
+  if (!n || n <= cleared()) return '';
+  return html`<div class="notif-fab"><a href="#notifications" aria-label="Notifications: ${n}">🔔<i>${n}</i></a><button type="button" data-notif-clear="${n}" aria-label="Clear">✕</button></div>`;
+}
+globalThis.document?.addEventListener('click', e => {
+  const b = e.target.closest?.('[data-notif-clear]');
+  if (!b) return;
+  try { localStorage.setItem(CLEARED, b.dataset.notifClear); } catch { /* not kept */ }
+  b.parentElement.remove();
+});
+
 /** Pending lines in all, for the menu badge. */
 export const pendingCount = c => {
   const f = fieldusers.current();

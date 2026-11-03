@@ -298,6 +298,8 @@ function renderSidebar(name, summaries) {
   // the counts that are only counts can be marked as read; alerts, chat and meetings remember what was opened
   const key = { setup: `${p?.id}:setup`, requests: `${p?.id}:requests`, trade: `${division}:trade`, contracts: `${division}:contracts`, hr: `${division}:hr`, access: 'access' };
   lastCounts = { raw, key };
+  const fab = $('#notif-fab');   // v0.78.0: the floating notifications circle
+  if (fab) fab.innerHTML = ctx && store.isAdmin && name !== 'notifications' ? String(notifications.fab(ctx)) : '';
   const settled = !store.loading && store.settled;   // while records are still arriving, a low count says nothing
   const count = Object.fromEntries(Object.entries(raw).map(([page, n]) => [page, key[page] ? badges.shown(key[page], n, settled) : n]));
   lastShown = count;

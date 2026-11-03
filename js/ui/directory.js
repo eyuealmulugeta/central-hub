@@ -7,7 +7,7 @@ import { store } from '../core/store.js';
 import { html, options, chip } from './dom.js';
 import { uid, money } from '../core/util.js';
 import { stamp } from '../core/division.js';
-import { positionGroups, ROLES, ROLE_GROUPS, normRole, setExtraPositions, linkTrades } from '../engine/positions.js';
+import { positionGroups, ROLES, ROLE_GROUPS, normRole, setExtraPositions, linkTrades, departmentOf } from '../engine/positions.js';
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
 import { ratingOf } from '../engine/hr.js';
@@ -40,7 +40,8 @@ const full = () => store.role === 'owner';
 
 // v0.74.0: crew corrected in Field Report by the project's SE, PE or GM (v0.75.0: not in Central Hub)
 /** Who changed a crew member last, and when, for the lists. */
-export const editedLine = m => (m.editedBy && m.editedAt ? `Changed by ${m.editedBy} · ${String(m.editedAt).slice(0, 10)}` : '');
+// v0.78.0 (owner): the person's name, not their email
+export const editedLine = m => (m.editedBy && m.editedAt ? `Changed by ${addedName(m.editedBy, store.company?.staff, store.users)} · ${String(m.editedAt).slice(0, 10)}` : '');
 
 export function render(c) {
   return full() ? manpower(c) : teamList(c);
@@ -92,7 +93,7 @@ function row(p, i, c, edit) {
     <td><select data-chg="mpTitle" data-id="${p.id}" aria-label="Position of ${p.name}" ${dis}>${chooseGroups(positionGroups(p.title), normRole(p.title), 'No position')}</select>
       ${more.map(w => html`<span class="chip">${w}${edit ? html` <button type="button" class="mini" data-act="mpDropPos" data-id="${p.id}" data-w="${w}" aria-label="Remove ${w} from ${p.name}">✕</button>` : ''}</span>`)}
       ${edit && p.title ? html`<select data-chg="mpAddPos" data-id="${p.id}" aria-label="Another position for ${p.name}">${chooseGroups(positionGroups(), '', '+ Another position')}</select>` : ''}
-      ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}</td>
+      ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}${departmentOf(p) ? html`<br><span class="muted small">${departmentOf(p)}</span>` : ''}</td>
     <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
     <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
     <td class="nowrap mp-pay">${edit ? payCells(p, c) : pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>

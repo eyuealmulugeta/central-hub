@@ -34,7 +34,8 @@ export function laborRows(ws, project) {
 export const costsOf = ws => [...(ws.ledger || []), ...(ws.paycosts || [])];
 
 export function summarize(ws, project, global, sched) {
-  const rows = [...costsOf(ws), ...laborRows(ws, project)]
+  // v0.78.0 (owner): no automatic labour lines from the daily reports; labour is what Payments pays
+  const rows = [...costsOf(ws)]
     .map(r => ({ ...r, base: convert(r.amount, r.currency, project.currency, global.fx) }))
     .sort((a, b) => b.date.localeCompare(a.date));
 

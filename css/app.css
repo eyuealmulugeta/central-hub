@@ -807,7 +807,8 @@ a.brand:hover .logo { box-shadow: 0 0 0 2px var(--brand-2); }
 .view-hr:has(.emp-form) { display: grid; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr); }
 .view-hr > .toolbar { margin: 0; padding: 0 4px; }
 .view-hr .search { flex: 0 1 300px; min-width: 160px; }
-.emp-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; align-content: start; overflow: auto; min-height: 0; padding: 2px; }
+/* v0.78.0 (owner): four employees in a row on a wide screen */
+.emp-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, max(260px, calc((100% - 36px) / 4))), 1fr)); gap: 12px; align-content: start; overflow: auto; min-height: 0; padding: 2px; }
 .emp-card { display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 1px solid transparent; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .12s, transform .08s; }
 .emp-card:hover { border-color: var(--primary); }
 .emp-card:active { transform: scale(.99); }
@@ -1560,7 +1561,17 @@ body.side-narrow .side-health { display: none; }
   .side-link { min-height: 32px; }
 }
 /* v0.31.0: Manpower on site as one table */
+/* v0.78.0: the floating notifications circle */
+.notif-fab { position: fixed; right: 18px; bottom: 84px; z-index: 40; display: flex; align-items: center; gap: 4px; }
+.notif-fab a { position: relative; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 22px; text-decoration: none; box-shadow: 0 6px 16px rgb(0 0 0 / .25); }
+.notif-fab a i { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--bad, #b3261e); color: #fff; font: 700 12px/20px system-ui, sans-serif; font-style: normal; }
+.notif-fab button { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); cursor: pointer; }
 .mp-table { max-width: 520px; }
+/* v0.78.0 (owner): the No., photo and name stay in place while the directory scrolls sideways */
+.table-wrap > .table.mp-table :is(th, td):nth-child(-n+3) { position: sticky; z-index: 1; background: var(--surface); box-sizing: border-box; }
+.table-wrap > .table.mp-table :is(th, td):nth-child(1) { left: 0; width: 40px; min-width: 40px; }
+.table-wrap > .table.mp-table :is(th, td):nth-child(2) { left: 40px; width: 64px; min-width: 64px; }
+.table-wrap > .table.mp-table :is(th, td):nth-child(3) { left: 104px; min-width: 170px; box-shadow: 2px 0 0 var(--line); }
 .mp-table td, .mp-table th { padding: 4px 8px; }
 .mp-table .num { text-align: right; width: 120px; }
 .mp-table input { width: 90px; text-align: right; }

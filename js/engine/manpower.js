@@ -89,7 +89,7 @@ export function addedName(by, staff = [], users = []) {
     const p = (staff || []).find(x => String(x.accountEmail || x.email || '').toLowerCase() === low);
     const u = (users || []).find(x => String(x.email || '').toLowerCase() === low);
     return p?.name || u?.name || u?.signature || e;
-  });
+  }).replace(/^([A-Z0-9]+_[A-Z0-9_]+) \(Field Report\)$/, 'Field Report, project $1');   // v0.78.0: before v0.78.0 only the project code was kept
 }
 
 // ---- v0.57.0 (owner, 2 Nov): the Manpower Directory is the one source of each person's position, tier and title ----

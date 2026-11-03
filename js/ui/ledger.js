@@ -165,7 +165,7 @@ function entries(c) {
             <td class="muted">${r.vendor || ''}</td>
             <td class="r nowrap">${money(r.amount, r.currency)}</td>
             <td class="r nowrap ${r.type === 'income' ? 'ok' : ''}">${r.type === 'income' ? '+' : '−'}${money(r.base, cur)}</td>
-            <td class="r">${r.auto || r.payId ? '' : html`<button class="btn ghost small" data-act="remove" data-id="${r.id}">Delete</button>`}</td>
+            <td class="r nowrap">${r.payId ? (store.seesPay ? html`<a class="btn ghost small" href="#payments">Edit</a><button class="btn ghost small" data-act="removePay" data-id="${r.payId}">Delete</button>` : '') : r.auto ? '' : html`<button class="btn ghost small" data-act="remove" data-id="${r.id}">Delete</button>`}</td>
           </tr>`)}</tbody>
       </table>
       ${store.seesPay ? '' : html`<p class="muted">Crew pay is not shown to you. The Admin and office people with Costs or Payments see it here.</p>`}
@@ -203,6 +203,11 @@ export const changes = {
 };
 
 export const actions = {
+  // v0.78.0 (owner): a crew payment deleted from Expenses, as on Payments (the payment and its labour cost)
+  removePay(el) {
+    if (!store.seesPay || !confirm('Delete this crew payment? It leaves Payments and the costs.')) return;
+    store.update(ws => { ws.payments = (ws.payments || []).filter(x => x.id !== el.dataset.id); ws.paycosts = (ws.paycosts || []).filter(x => x.payId !== el.dataset.id); });
+  },
   ...bankActions,
   ...billActions,
   view(el) { view = el.dataset.v; notice = ''; },

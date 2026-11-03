@@ -56,6 +56,19 @@ const OLD_DEPARTMENTS = {
   'finance and accounts': DEPARTMENTS[4], administration: DEPARTMENTS[4], sales: DEPARTMENTS[5],
 };
 export const normDepartment = d => OLD_DEPARTMENTS[String(d || '').trim().toLowerCase()] || String(d || '').trim();
+/**
+ * v0.78.0 (owner: Employee data and the Manpower Directory agree, departments too): a person's department is the one
+ * written on their record, else the one of their position.
+ */
+const DEPT_OF_ROLE = [[/general manager|managing director|\bgm\b|executive|\bceo\b|owner/i, 0], [/site engineer|project engineer|project manager|foreman|supervis|site|labou?r|welder|fitter|rigger|erector|mason|carpenter|electrician|plumber|painter|helper|technician|operator|driver|guard|security/i, 1],
+  [/procure|logistic|store|supply|purchas/i, 3], [/financ|account|cashier|\bhr\b|admin|secretar|human/i, 4], [/sales|commercial|trade|marketing/i, 5], [/engineer|architect|\bqs\b|quantity|design|draft|surveyor/i, 2]];
+export function departmentOf(p) {
+  const d = normDepartment(p?.department);
+  if (d) return d;
+  const role = [p?.title, ...(p?.titles || [])].map(normRole).filter(Boolean)[0] || '';
+  const hit = role && DEPT_OF_ROLE.find(([re]) => re.test(role));
+  return hit ? DEPARTMENTS[hit[1]] : '';
+}
 /** Departments whose people work on site (the others are office people). */
 export const SITE_DEPARTMENTS = [DEPARTMENTS[1], DEPARTMENTS[2]];
 

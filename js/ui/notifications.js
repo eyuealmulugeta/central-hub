@@ -5,6 +5,7 @@
 
 import { store } from '../core/store.js';
 import * as fieldusers from './fieldusers.js';
+import { urgentBox, urgentActions, urgentChanges, urgentSubmits } from './urgent.js';
 import { html } from './dom.js';
 import { fmtDate } from '../core/util.js';
 
@@ -83,6 +84,7 @@ export function render(c) {
       <div class="seg">${FILTERS.map(([k, label]) => html`<button type="button" class="${filter === k ? 'on' : ''}" data-act="notifFilter" data-v="${k}">${label}</button>`)}</div>
       <button class="btn small" type="button" data-act="fuLoad" ${fieldusers.isBusy() ? 'disabled' : ''}>${fieldusers.isBusy() ? 'Reading…' : 'Refresh'}</button>
     </section>
+    ${urgentBox(c)}
     <div class="notif-grid">
       ${block('New sign-ins to Field Report', b.devices, deviceLine, filter === 'done' ? 'No device decided in the last two weeks.' : 'No new device is waiting.', 'Also under Settings, Field Report and import, Field Report users.')}
       ${block(`Requests from site · ${c.project.name}`, b.requests, requestLine, filter === 'done' ? 'No request decided in the last two weeks.' : 'No request from site is waiting.', 'Material, manpower and tool requests sent with the Field Report. Approve or reject them here; they stay on the overview as follow-ups. Shown for the open project.')}
@@ -91,8 +93,12 @@ export function render(c) {
     </div>`;
 }
 
+export const changes = { ...urgentChanges };
+export const submits = { ...urgentSubmits };
+
 export const actions = {
   ...fieldusers.actions,
+  ...urgentActions,
   notifFilter(el) { filter = el.dataset.v; },
   /** Approve or reject a request from site. A rejected one is closed; an approved one stays open until it is delivered. */
   reqDecide(el, c) {

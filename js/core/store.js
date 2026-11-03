@@ -47,6 +47,7 @@ let company = emptyCompany();   // company-wide records (shipments, ...), not ti
 export const ROUTES = ['script', 'read', 'both'];   // v0.44.0: Both (E3a)
 const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Report's "something changed")
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
+let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
 const subscribers = new Set();
@@ -332,6 +333,8 @@ export const store = {
 
     // v0.65.0: one-to-one messages are read only by the two people in them (not the Admin): the query says so
     shared.push(api.watchCol(`${COMPANY_PATH}/direct`, docs => { company.direct = sectionFromDocs('direct', docs); emit(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
+    // v0.72.0: urgent notices from the GM: the Admin reads them all (the log), everyone else those sent to them
+    shared.push(api.watchCol('urgent', docs => { urgent = docs; emit(); }, () => {}, role === 'owner' ? undefined : ['emails', 'array-contains', String(me.email).toLowerCase()]));
     // evaluations are read only by whoever wrote them (the Admin reads all): the query says so, or the database refuses it
     if (role !== 'owner' && ranks.length) {
       shared.push(api.watchCol(`${COMPANY_PATH}/evaluations`, docs => { company.evaluations = sectionFromDocs('evaluations', docs); emit(); }, () => {}, ['by', '==', me.email]));
@@ -514,6 +517,18 @@ export const store = {
   },
   /** Settings of the public booking page. Null until the Admin changes something: the page then uses its defaults. */
   get booking() { return booking; },
+  get urgent() { return urgent; },
+  /** v0.72.0: send an urgent notice (engine/urgent.js urgentRecord). */
+  async sendUrgent(rec) {
+    if (!api) { urgent = [...urgent, rec]; emit(); return; }
+    await api.set(`urgent/${rec.id}`, rec);
+  },
+  /** v0.72.0: this person's answer to a notice: { kind: 'read' | 'reply', text, at, name }. */
+  async answerUrgent(id, ans) {
+    const e = String(me?.email || '').toLowerCase();
+    if (!api) { urgent = urgent.map(n => (n.id === id ? { ...n, answers: { ...(n.answers || {}), [e]: ans } } : n)); emit(); return; }
+    await api.merge(`urgent/${id}`, { answers: { [e]: ans } });
+  },
   /** Admin only: change the booking page. `full` is the complete settings object. */
   setBooking(patch) {
     if (viewOnly()) return;

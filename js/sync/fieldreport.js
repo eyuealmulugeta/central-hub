@@ -89,6 +89,13 @@ export async function fetchFieldReports({ proj, since }) {
  *   comment  a remark only (text required)
  *   reopen   unlock a report that was approved
  */
+/** v0.72.0: the phone notification of an urgent notice to the Field Report accounts among `emails` (script 7.44.0). */
+export async function pushUrgent({ id, title, text, emails }) {
+  const out = await post({ action: 'urgentPush', id, title, text, emails });
+  if (!out.ok) throw new Error(out.error || out.skipped || 'The phone notification was not sent.');
+  return out;
+}
+
 export async function reviewFieldReport({ name, decision, text }) {
   if (!name) throw new Error('This report has no Field Report file name yet. Click "Check now" once, then try again.');
   const out = await post({ action: 'review', name, decision, text: text || '' });

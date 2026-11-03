@@ -51,6 +51,7 @@ export async function connectCloud(config) {
 
     async get(path) { const snap = await F.getDoc(ref(path)); return snap.exists() ? snap.data() : null; },
     set: (path, data) => F.setDoc(ref(path), data),
+    merge: (path, data) => F.setDoc(ref(path), data, { merge: true }),   // v0.72.0: one person's answer to an urgent notice
     remove: path => F.deleteDoc(ref(path)),
     async list(path) { return (await F.getDocs(F.collection(db, path))).docs.map(d => d.data()); },
 

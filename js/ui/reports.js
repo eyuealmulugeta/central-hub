@@ -526,10 +526,14 @@ export function render(c) {
     ${now === 'enter' || back ? formCard : listCard}</div>`;
 }
 
+/** v0.80.0: the screen's style rules of the report sheet (colours, sections, photos), for the consultant's copy. */
+const sheetCss = () => [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch { return []; } })
+  .map(x => x.cssText).filter(t => !t.startsWith('@') && /^:root|dsr|\.paper|ph-|photo/.test(t.slice(0, 160))).join('\n');
+
 /** v0.80.0: the consultant's part of an approved report: Send to sign, the link again, or the answer. */
 function diaryButton(r, c) {
   const con = consultantOf(c.project), d = r.diary;
-  if (!con.on || !r.approvedBy) return '';
+  if (!con.on || r.review === 'pending') return '';   // approved, or entered in Central Hub
   if (d?.status && d.status !== 'sent') return chip(`${DIARY_STATUS[d.status]}${d.consultant?.name ? `: ${d.consultant.name}` : ''}`, DIARY_TONE[d.status]);
   if (!maySendDiary(store.role, store.ranks)) return d ? chip(DIARY_STATUS.sent, 'warn') : '';
   return d ? html`${chip(DIARY_STATUS.sent, 'warn')}<button class="btn" data-act="diarySend" data-id="${r.id}" data-again>Send the link again</button>`
@@ -782,7 +786,8 @@ export const actions = {
     if (!('again' in el.dataset) || !link) {
       if (!confirm(`Send the daily report of ${fmtDate(r.date)} to ${con.name} to sign? The consultant's copy does not change after sending.`)) return;
       const paper = document.querySelector('.paper');
-      const page = paper ? diaryPage(await paperHtml(paper, `Daily site report ${r.date}`)) : '';
+      // the report's own look (the page's rules for the sheet) goes with the copy
+      const page = paper ? diaryPage((await paperHtml(paper, `Daily site report ${r.date}`)).replace('</style>', `${sheetCss()}</style>`)) : '';
       if (!page) return tell('The report is too large to send this way. Use Email as PDF instead.');
       link = randomKey(30);
       try { await store.writeDoc(`company/main/silinks/${link}`, diaryLink(r, c.project, link, store.user?.email || '', page)); }

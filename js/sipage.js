@@ -50,6 +50,7 @@ async function start() {
   // v0.80.0: a daily report (site diary): the report as a page, shown without scripts
   const diary = x.kind === 'diary', what = diary ? 'report' : 'instruction';
   WHAT = what;
+  if (diary) { document.querySelector('header span').textContent = 'Daily site report'; document.title = `Daily site report · ${x.date}`; }
   const facts = [['Project', x.project], ['Date', x.date], ['From', x.from], ['To', x.to], ['Location', x.zone], ['Reply by', x.dueBy], ['Changes cost or time', x.costTime ? 'Yes' : 'No']].filter(([, v]) => v);
   app.innerHTML = diary ? `
     <div class="card"><h1>Daily site report</h1><p class="muted">${esc([x.project, x.date, x.no].filter(Boolean).join(' · '))}</p>

@@ -856,6 +856,12 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .side.settings > * { flex: none; }
 .callout { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 4px; padding: 9px 12px; border: 1px solid; border-radius: 10px; font-size: 13px; line-height: 1.45; }
 .callout > b { flex: none; }
+/* v0.77.0 Site instructions */
+.si-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.si-photos img { width: 120px; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.si-photos span { display: flex; flex-direction: column; gap: 4px; }
+.si-photos.print img { width: 31%; height: auto; }
+.si-detail .pre { white-space: pre-wrap; }
 .callout.ok { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
 .callout.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .callout.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }

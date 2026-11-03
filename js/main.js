@@ -28,6 +28,7 @@ import * as directory from './ui/directory.js';
 import { setExtraPositions } from './engine/positions.js';
 import * as letters from './ui/letters.js';
 import * as logsheet from './ui/logsheet.js';
+import * as siteinstr from './ui/siteinstr.js';
 import * as requests from './ui/requests.js';
 import * as payroll from './ui/payroll.js';
 import * as cashflow from './ui/cashflow.js';
@@ -73,7 +74,7 @@ import { offerInstall } from './core/install.js';   // v0.70.0
 import { watchUrgent } from './ui/urgent.js';   // v0.72.0
 
 const APP = 'Central Hub';
-const VIEWS = { home, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
@@ -81,7 +82,7 @@ const COMPANY_VIEWS = { home: 'What needs you, across all projects', notificatio
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
 const TITLES = { mine: 'My settings', home: 'Today', quick: '+ Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
-Object.assign(TITLES, { logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
+Object.assign(TITLES, { siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
 let division = (() => { try { return localStorage.getItem('sf:division') || 'installation'; } catch { return 'installation'; } })();
@@ -293,7 +294,7 @@ function renderSidebar(name, summaries) {
   const asked = ctx && store.role !== 'site' ? ctx.ws.requests.filter(r => r.status === 'requested').length : 0;
   // what the project still needs before it runs smoothly: the essentials left on its checklist
   const toSet = ctx && store.isAdmin ? setup.itemsOf(ctx).remaining : 0;
-  const raw = { setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
+  const raw = { siteinstr: ctx ? siteinstr.pendingCount(ctx) : 0, setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
   // the counts that are only counts can be marked as read; alerts, chat and meetings remember what was opened
   const key = { setup: `${p?.id}:setup`, requests: `${p?.id}:requests`, trade: `${division}:trade`, contracts: `${division}:contracts`, hr: `${division}:hr`, access: 'access' };
   lastCounts = { raw, key };

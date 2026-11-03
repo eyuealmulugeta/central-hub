@@ -32,7 +32,7 @@ const COMPANY_PATH = 'company/main';
 const VERSION = 1;
 // What a Site user may read. Must match firestore.rules.
 const SUMMARY_REPEAT_MS = 10 * 60 * 1000;
-const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance'];
+const SITE_SECTIONS = ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'];
 
 const ls = () => globalThis.localStorage;
 const read = key => { try { return JSON.parse(ls().getItem(key)); } catch { return null; } };
@@ -594,6 +594,15 @@ export const store = {
    * Change the workspace of any project, open or not, and get that workspace back.
    * In the cloud a project that is not open is read once for this, so use it sparingly.
    */
+  /** v0.77.0: one record outside the workspace (a site instruction's link and answer); this browser's copy in local mode. */
+  async readDoc(path) {
+    if (!api) { try { return JSON.parse(ls().getItem(`sf:doc:${path}`)); } catch { return null; } }
+    return api.get(path);
+  },
+  async writeDoc(path, data) {
+    if (!api) { write(`sf:doc:${path}`, data); return; }
+    await api.set(path, data);
+  },
   /** The tasks of any project this person can open, without opening it (the Schedule's Import). */
   async readTasks(id) {
     if (id === this.project?.id) return structuredClone(this.ws.tasks);

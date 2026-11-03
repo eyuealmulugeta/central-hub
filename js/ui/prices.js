@@ -1,3 +1,4 @@
+import { approvalLimits } from '../engine/expenses.js';
 import { store } from '../core/store.js';
 import { isForeign, foreignSummary, convertGlobal, convertProject, convertCompany } from '../engine/currencies.js';
 import { uid } from '../core/util.js';
@@ -500,6 +501,17 @@ function crewTab(c) {
   </section>`;
 }
 
+/** v0.69.0 (Phase F2): who approves an expense up to how much. The GM has no limit; 0 = always the GM. */
+function limitsBox() {
+  const L = approvalLimits(store.global);
+  const cell = (rank, cur) => html`<input class="price" type="number" min="0" step="any" data-chg="approvalLimit" data-r="${rank}" data-cur="${cur}" value="${L[rank][cur]}" aria-label="${rank} ${cur}">`;
+  return html`<table class="table compact"><thead><tr><th>Approver</th><th class="r">ETB</th><th class="r">USD</th></tr></thead><tbody>
+    <tr><td>Site Engineer</td><td class="r">${cell('site_engineer', 'ETB')}</td><td class="r">${cell('site_engineer', 'USD')}</td></tr>
+    <tr><td>Project Engineer</td><td class="r">${cell('project_manager', 'ETB')}</td><td class="r">${cell('project_manager', 'USD')}</td></tr>
+    <tr><td>GM</td><td class="r muted">No limit</td><td class="r muted">No limit</td></tr></tbody></table>
+    <p class="muted">An expense above a person's limit goes to the next one up; 0 means it always goes to the GM. Nobody below the GM approves their own expense.</p>`;
+}
+
 function youTab() {
   return html`
     <div class="set-cols">
@@ -518,6 +530,7 @@ function youTab() {
           <button class="btn primary">Make Executive Partner</button>
         </form>
         ${coOwnerNotice ? html`<p class="${coOwnerBad ? 'bad' : 'ok'}">${coOwnerNotice}</p>` : ''}`) : ''}
+      ${box('limits', 'Approval limits', limitsBox(), 'expenses')}
       ${box('rules', 'Database rules', html`
         <p class="muted">The database enforces who may read, change and delete. After an update, paste the rules in the Firebase console: Firestore Database, Rules, then Publish.</p>
         <div class="actions left">
@@ -941,6 +954,11 @@ export const actions = {
 };
 
 export const changes = {
+  /** v0.69.0: an approval limit (Admin). */
+  approvalLimit(el) {
+    const v = Math.max(0, +el.value || 0), r = el.dataset.r, cur = el.dataset.cur;
+    store.updateGlobal(g => { g.approvalLimits = { ...(g.approvalLimits || {}), [r]: { ...((g.approvalLimits || {})[r] || {}), [cur]: v } }; });
+  },
   /** v0.63.0: a trade's budget in man-days or money; both empty = off the per-trade list. */
   tradeBudget(el) {
     const t = el.dataset.t, f = el.dataset.f, v = Math.max(0, +el.value || 0);

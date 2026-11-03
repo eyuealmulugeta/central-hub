@@ -2,6 +2,7 @@
 // project with its health, then what needs them most urgent first, this week, and what they wait on others for.
 // Pure: the screen (ui/home.js) passes in the project summaries and the open project's derived figures.
 
+import { mayApprove, LEVEL_NAME } from './expenses.js';
 import { toDay, fromDay } from '../core/util.js';
 
 const SEV = { high: 0, warn: 1, info: 2 };
@@ -48,20 +49,20 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, bills = [] }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, bills = [], level = 0, me = '', settings = null }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
   if (approver) {
     const asked = requests.filter(r => r.status === 'requested' && r.kind !== 'expense');
     const urgent = asked.filter(r => /urgent|high/i.test(r.priority || ''));
     if (asked.length) out.push({ sev: urgent.length ? 'high' : 'warn', kind: 'Requests', title: `${asked.length} site request${asked.length > 1 ? 's' : ''} waiting for an answer`, detail: urgent.length ? `${urgent.length} marked urgent` : 'Material, manpower or equipment', link: 'requests', projectId: project.id, project: project.name });
-    // v0.61.0: expenses waiting for this person (the PM; the GM also those above the limit), and approved ones to pay
-    const ex = requests.filter(r => r.kind === 'expense');
-    const decide = ex.filter(r => r.status === 'requested' || (gm && r.status === 'gm'));
-    const toPay = ex.filter(r => r.status === 'approved');
-    if (decide.length) out.push({ sev: 'warn', kind: 'Expenses', title: `${decide.length} expense${decide.length > 1 ? 's' : ''} to approve`, detail: decide.some(r => r.status === 'gm') ? 'Some are above the limit and wait for the GM' : 'Asked for by the site or the office', link: 'requests', projectId: project.id, project: project.name });
+    // v0.61.0: approved expenses to pay (the office)
+    const toPay = requests.filter(r => r.kind === 'expense' && r.status === 'approved');
     if (toPay.length) out.push({ sev: 'info', kind: 'Expenses', title: `${toPay.length} approved expense${toPay.length > 1 ? 's' : ''} to pay`, detail: 'Mark each paid with the method and the bank reference', link: 'requests', projectId: project.id, project: project.name });
   }
+  // v0.69.0: expenses this person may approve (by position and amount; a Site Engineer too)
+  const decide = requests.filter(r => r.kind === 'expense' && mayApprove(r, { level, me }, settings));
+  if (decide.length) out.push({ sev: 'warn', kind: 'Expenses', title: `${decide.length} expense${decide.length > 1 ? 's' : ''} to approve`, detail: level === 3 ? 'Above the engineers\' limits, in USD, or waiting for the GM' : `Within your limit as ${LEVEL_NAME[level]}`, link: 'requests', projectId: project.id, project: project.name });
   // v0.68.0: supplier bills overdue or due within 7 days
   const overdueBills = bills.filter(b => b.status === 'overdue'), dueBills = bills.filter(b => b.status === 'due');
   if (overdueBills.length) out.push({ sev: 'high', kind: 'Supplier bills', title: `${overdueBills.length} supplier bill${overdueBills.length > 1 ? 's' : ''} overdue`, detail: overdueBills.map(b => b.supplier).join(', '), link: 'ledger', projectId: project.id, project: project.name });

@@ -13,6 +13,7 @@ import { html, options, chip } from './dom.js';
 import { docHead, docSec, footText, signoff } from './print.js';
 import { docRef } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
+import { levelOf, expenseWaiting, isWaiting, approvalLimits, LEVEL_SHORT } from '../engine/expenses.js';
 import { isExpense, expenseMoves, expenseStatus, expenseStep, checkExpense, expenseTitle, costOf, isGM, limitOf, overLimit, EXPENSE_CATEGORIES, PAY_METHODS, RECEIPT } from '../engine/expenses.js';
 import { pictureFor, tell } from '../core/image.js';
 import { money } from '../core/util.js';
@@ -30,8 +31,9 @@ const find = ws => ws.requests.find(r => r.id === selected);
 const STATUS_CLASS = { requested: 'warn', approved: 'info', arranging: 'info', fulfilled: 'ok', rejected: 'high', cancelled: '', gm: 'warn', paid: 'ok' };
 // v0.61.0: an expense has its own steps and words (engine/expenses.js)
 const gm = () => isGM({ role: store.role, ranks: store.ranks });
-const movesOf = (r, c) => (isExpense(r) ? expenseMoves(r, { approver: approver(), gm: gm(), company: c.company }) : moves(r.status, approver()));
-const labelOf = r => (isExpense(r) ? expenseStatus(r.status) : statusLabel(r.status));
+const level = () => levelOf({ role: store.role, ranks: store.ranks });
+const movesOf = (r, c) => (isExpense(r) ? expenseMoves(r, { approver: approver(), level: level(), me: me().email, settings: c.global }) : moves(r.status, approver()));
+const labelOf = r => (isExpense(r) ? (isWaiting(r) ? expenseWaiting(r, store.global) : expenseStatus(r.status)) : statusLabel(r.status));
 const titleFor = r => (isExpense(r) ? expenseTitle(r) : titleOf(r));
 let receipt = null;   // the receipt photo chosen for a new expense, made small
 
@@ -70,7 +72,7 @@ function list(c) {
       </form>
     </section>
     <section class="card">
-      <div class="toolbar"><h2>New expense</h2><span class="muted">The PM approves; above ${money(limitOf(c.company, 'ETB'), 'ETB')} or ${money(limitOf(c.company, 'USD'), 'USD')} the GM too. Approved expenses go into the Ledger costs.</span></div>
+      <div class="toolbar"><h2>New expense</h2><span class="muted">${(L => `The Site Engineer approves up to ${money(L.site_engineer.ETB, 'ETB')}, the Project Engineer up to ${money(L.project_manager.ETB, 'ETB')}; above that, and any USD amount, the GM.`)(approvalLimits(c.global))} Approved expenses go into the Ledger costs.</span></div>
       <form data-form="newExpense">
         <div class="grid2">
           <label>What it is for <input name="description" required placeholder="e.g. Diesel for the generator, 40 litres"></label>
@@ -161,9 +163,9 @@ function detail(r, c) {
 /** v0.61.0: one expense: its figures, receipt, steps, and paying it once approved. */
 function expenseDetail(r, c) {
   const edit = r.status === 'requested';
-  const over = overLimit(r, c.company);
-  const step = to => [...(r.log || [])].reverse().find(x => x.status === to);
-  const pm = step('gm') || (over ? null : step('approved')), gmStep = over ? step('approved') : null;
+  // v0.69.0: the approval steps as they happened, each with the approver's position
+  const approvals = (r.log || []).filter(x => x.status === 'approved' || x.status === 'gm');
+  const waitFor = isWaiting(r) ? expenseWaiting(r, c.global).replace('Waiting for the ', '') : '';
   return html`
     <div class="toolbar no-print">
       <button class="btn ghost" data-act="back">← Requests</button>
@@ -197,8 +199,8 @@ function expenseDetail(r, c) {
         <tbody>${r.log.map(x => html`<tr><td class="nowrap">${fmtFull(x.at.slice(0, 10))}</td><td>${expenseStep(x.status)}</td><td>${x.byName || x.by}</td><td>${x.note || ''}</td></tr>`)}</tbody></table>` : ''}
         ${r.paid ? html`<p>Paid on ${fmtFull(r.paid.date)} by ${PAY_METHODS.find(([k]) => k === r.paid.method)?.[1] || r.paid.method}${r.paid.ref ? `, reference ${r.paid.ref}` : ''}.</p>` : ''}
         ${signoff([{ label: 'Requested by', name: [r.byName || r.by, r.byTitle].filter(Boolean).join(', '), note: fmtFull(r.date) },
-          { label: 'Approved by (PM)', name: pm ? pm.byName || pm.by : '', note: pm ? fmtFull(pm.at.slice(0, 10)) : 'Date' },
-          ...(over ? [{ label: 'Approved by (GM)', name: gmStep ? gmStep.byName || gmStep.by : '', note: gmStep ? fmtFull(gmStep.at.slice(0, 10)) : 'Date' }] : [])])}`)}
+          ...approvals.map(x => ({ label: `Approved by (${x.level || 'PM'})`, name: x.byName || x.by, note: fmtFull(x.at.slice(0, 10)) })),
+          ...(waitFor ? [{ label: `Approved by (${waitFor})`, name: '', note: 'Date' }] : [])])}`)}
     </div></section>`;
 }
 
@@ -224,9 +226,10 @@ export const actions = {
     store.update(ws => {
       const x = find(ws);
       x.status = to;
-      x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: to, note: String(note).trim() }];
+      x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: to, note: String(note).trim(), ...(isExpense(x) && to === 'approved' ? { level: LEVEL_SHORT[level()] } : {}) }];
       if (isExpense(x)) {   // v0.61.0: approved = a Ledger cost, linked; sent back, withdrawn or reopened = the cost taken out again
-        if (to === 'approved' && !ws.ledger.some(l => l.requestId === x.id)) { const cost = costOf(x, uid('l'), c.today); ws.ledger.push(cost); x.costId = cost.id; }
+        // v0.69.0: a Site user (Site Engineer) cannot write the Ledger: the cost is added when the office marks it paid
+        if ((to === 'approved' && store.role !== 'site') || to === 'paid') if (!ws.ledger.some(l => l.requestId === x.id)) { const cost = costOf(x, uid('l'), c.today); ws.ledger.push(cost); x.costId = cost.id; }
         if (['rejected', 'cancelled', 'requested'].includes(to)) { ws.ledger = ws.ledger.filter(l => l.requestId !== x.id); delete x.costId; }
         return;
       }
@@ -292,7 +295,7 @@ export const submits = {
   newExpense(fd, c) {
     const who = me();
     const rec = {
-      id: uid('rq'), number: nextNumber(c.ws.requests), kind: 'expense', priority: 'normal', status: 'requested', date: c.today,
+      id: uid('rq'), number: nextNumber(c.ws.requests), kind: 'expense', priority: 'normal', status: 'requested', date: c.today, byLevel: level(),
       lines: [{ id: uid('rl'), description: String(fd.get('description') || '').trim(), qty: 1, unit: '', note: '' }],
       amount: +fd.get('amount') || 0, currency: fd.get('currency') === 'USD' ? 'USD' : 'ETB', category: fd.get('category') || 'overhead',
       vendor: String(fd.get('vendor') || '').trim(), purpose: String(fd.get('purpose') || '').trim(), receipt: receipt || '',
@@ -315,8 +318,10 @@ export const submits = {
       const x = find(ws);
       x.status = 'paid'; x.paid = paid;
       x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: 'paid', note: paid.ref ? `Reference ${paid.ref}` : '' }];
-      const cost = ws.ledger.find(l => l.requestId === x.id);
-      if (cost) Object.assign(cost, { method: paid.method, bankRef: paid.ref, paidOn: paid.date });
+      let cost = ws.ledger.find(l => l.requestId === x.id);
+      // v0.69.0: approved by a Site Engineer (who cannot write the Ledger): the cost is added now
+      if (!cost) { cost = costOf(x, uid('l'), c.today); ws.ledger.push(cost); x.costId = cost.id; }
+      Object.assign(cost, { method: paid.method, bankRef: paid.ref, paidOn: paid.date });
     });
     notice = `${r.number}: paid.`;
   },

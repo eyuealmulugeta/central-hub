@@ -10,6 +10,21 @@ export const MARK = { present: 'P', absent: 'A', sick: 'S', leave: 'L' };
 export const MARK_LABEL = { P: 'Present', A: 'Absent', S: 'Sick', L: 'On leave' };
 export const STATES = [['present', 'Present'], ['absent', 'Absent'], ['sick', 'Sick'], ['leave', 'On leave']];
 
+// v0.71.0 (owner, 3 Nov, Phase G2): Field Report shares each day's marks live (projects/<id>/fieldDay/<date>), and
+// the reporter confirms there that the attendance is correct. A day with no report yet shows those marks on the sheet
+// (not counted until the report comes); each day says whether the reporter confirmed it, or it changed after.
+/** The key Field Report gives a row (model/crew.js markKey). */
+export const fieldKey = x => String(x.id || x.name || '').toLowerCase().replace(/[.\/\[\]#$~*`]/g, '_');
+const ms = v => (typeof v === 'number' ? v : Date.parse(v) || 0);
+/** A Field Report day: { state: 'open' | 'ok' | 'changed', by, at }. */
+export function dayCheck(doc, fixes = []) {
+  const c = doc?.confirmed;
+  if (!c) return { state: 'open', by: '', at: 0 };
+  const at = ms(c.at);
+  const later = Object.values(doc.rows || {}).some(x => ms(x.at) > at) || fixes.some(f => f.date === doc.date && ms(f.at) > at);
+  return { state: later ? 'changed' : 'ok', by: c.by || '', at };
+}
+
 /** How often the crew of a project is paid; the attendance sheet shows the same period. */
 export const PAY_PERIODS = [['weekly', 'Weekly'], ['biweekly', 'Every two weeks'], ['monthly', 'Monthly']];
 export const payPeriodOf = project => (PAY_PERIODS.some(([k]) => k === project?.payPeriod) ? project.payPeriod : 'monthly');
@@ -110,7 +125,7 @@ export function withFixes(all, fixes) {
  * that are not working days, `heads` the number present each day, and each row is
  * { key, id, name, role, cells: { [date]: { mark, state, ot, fixed } }, present, absent, sick, leave, ot }.
  */
-export function register(project, ws, period, crew = []) {
+export function register(project, ws, period, crew = [], { live = false } = {}) {
   const { from, to } = typeof period === 'string' ? { from: `${period}-01`, to: monthEnd(period) } : period;
   const days = daysBetween(from, to);
   const cal = calendarOf(project, ws.reports);
@@ -139,10 +154,24 @@ export function register(project, ws, period, crew = []) {
       p.ot += +a.ot || 0;
     }
   }
+  // v0.71.0: Field Report's live marks on the days with no report yet, and the reporter's check of each day
+  const checks = {};
+  if (live) for (const doc of ws.fieldDays || []) {
+    const d = doc.date;
+    if (!d || d < from || d > to) continue;
+    checks[d] = dayCheck(doc, liveFixes(ws.attendance));
+    if (reportedDays.has(d)) continue;
+    const byKey = new Map([...people.values()].map(p => [fieldKey(p), p]));
+    for (const [k, x] of Object.entries(doc.rows || {})) {
+      if (!MARK[x.state]) continue;
+      const p = byKey.get(k) || (x.name ? personFor({ id: x.id || '', name: x.name }) : null);
+      if (p && !p.cells[d]) p.cells[d] = { mark: MARK[x.state], state: x.state, ot: +x.ot || 0, fixed: false, live: true };
+    }
+  }
   // a cell cleared by the office still shows that it was corrected
   for (const f of liveFixes(ws.attendance)) if (f.state === 'none' && f.date >= from && f.date <= to) { const p = people.get(f.key); if (p && !p.cells[f.date]) p.cells[f.date] = { mark: '', state: 'none', ot: 0, fixed: true }; }
   const rows = [...people.values()].sort((a, b) => a.name.localeCompare(b.name));
-  return { days, off, rows, reportedDays: reportedDays.size, heads };
+  return { days, off, rows, reportedDays: reportedDays.size, heads, checks };
 }
 
 /**

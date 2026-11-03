@@ -119,6 +119,15 @@ export const normTrade = t => OLD_TRADES[String(t || '').trim().toLowerCase()] |
 /** 2.15.0: the key a person's mark is shared under (their Central Hub id, else their name). */
 export const markKey = r => String(r.id || r.name || '').toLowerCase().replace(/[.\/\[\]#$~*`]/g, '_');
 
+/**
+ * 2.33.0 (owner, 3 Nov, Phase G2): the reporter confirms that today's attendance is correct; Central Hub shows it on
+ * its sheet. 'none' (not confirmed), 'ok', or 'changed' (a mark was changed after the confirmation).
+ */
+export function dayConfirm(marks, confirmed) {
+  if (!confirmed) return 'none';
+  return Object.values(marks || {}).some(x => Number(x.at) > Number(confirmed.at)) ? 'changed' : 'ok';
+}
+
 /** 2.15.0: today's marks from the project's other phones and computers: a newer mark wins, person by person. */
 export function applyMarks(rows, marks) {
   if (!marks) return rows;

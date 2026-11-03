@@ -215,6 +215,8 @@ function openWorkspace(id) {
       docs => { ws[section] = sectionFromDocs(section, docs); arrived(section); },
       err => { fail(err); arrived(section); }));
   }
+  // v0.71.0: Field Report's live attendance marks and the reporter's check; read only, never a saved section
+  opened.push(api.watchCol(`projects/${id}/fieldDay`, docs => { ws.fieldDays = docs; emit(); }, () => {}));
 }
 
 function setProjects(list) {

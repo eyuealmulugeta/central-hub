@@ -151,10 +151,18 @@ function officeSheet(c) {
       : html`<p class="empty">Everyone in the directory is on a project.</p>`}</section>`;
 }
 
+// v0.71.0: the reporter's check of each day in Field Report
+const CHECK = { ok: ['✓', 'Confirmed correct by'], changed: ['!', 'Changed after it was confirmed by'], open: ['…', 'Not confirmed by the reporter yet'] };
+function checkRow(r) {
+  if (!Object.keys(r.checks || {}).length) return '';
+  const cell = d => { const k = r.checks[d]; return k ? html`<th class="att-k att-k-${k.state}" title="${CHECK[k.state][1]}${k.by ? ` ${k.by}` : ''}">${CHECK[k.state][0]}</th>` : html`<th></th>`; };
+  return html`<tr class="att-check"><th class="att-name">Reporter's check</th>${r.days.map(cell)}<th colspan="5"></th></tr>`;
+}
+
 export function render(c) {
   if (office && (store.isAdmin || isHR())) return officeSheet(c);
   const p = periodOf(c);
-  const r = register(c.project, c.ws, p, crewOf(c));
+  const r = register(c.project, c.ws, p, crewOf(c), { live: true });
   const edit = mayEdit();
   const working = r.days.filter(d => !r.off.has(d)).length;
   const groups = groupRows(r.rows, perOf(c));
@@ -163,8 +171,8 @@ export function render(c) {
   const cellFor = (row, d) => {
     const cell = row.cells[d];
     const on = editing && editing.date === d && editing.key === row.key;
-    const cls = `att-c ${r.off.has(d) ? 'att-off' : ''} ${cell?.mark ? `att-${cell.mark}` : ''} ${cell?.fixed ? 'att-fixed' : ''} ${on ? 'att-on' : ''} ${edit && d <= c.today ? 'att-edit' : ''}`;
-    const tip = cell ? `${cell.mark ? MARK_LABEL[cell.mark] : 'Cleared'}${cell.ot ? `, ${cell.ot} h overtime` : ''}${cell.fixed ? ', corrected by the office' : ''}` : '';
+    const cls = `att-c ${r.off.has(d) ? 'att-off' : ''} ${cell?.mark ? `att-${cell.mark}` : ''} ${cell?.fixed ? 'att-fixed' : ''} ${cell?.live ? 'att-live' : ''} ${on ? 'att-on' : ''} ${edit && d <= c.today ? 'att-edit' : ''}`;
+    const tip = cell ? `${cell.mark ? MARK_LABEL[cell.mark] : 'Cleared'}${cell.ot ? `, ${cell.ot} h overtime` : ''}${cell.fixed ? ', corrected by the office' : ''}${cell.live ? ', live from Field Report (report not sent yet)' : ''}` : '';
     return html`<td class="${cls}" title="${tip}" ${edit && d <= c.today ? html`data-act="pick" data-d="${d}" data-k="${row.key}"` : ''}>${cell?.mark || ''}${cell?.ot ? html`<sup>${cell.ot}</sup>` : ''}</td>`;
   };
   // v0.33.0: the photo and the Fayda ID (or passport) of each person, from Employee data, the main record
@@ -195,6 +203,7 @@ export function render(c) {
         <thead>
           <tr><th class="att-name">Name</th>${r.days.map(d => html`<th class="${r.off.has(d) ? 'att-off' : ''}"><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}<th class="att-t">P</th><th class="att-t">A</th><th class="att-t">S</th><th class="att-t">L</th><th class="att-t">OT h</th></tr>
           ${photoRow(c, r)}
+          ${checkRow(r)}
         </thead>
         ${groups.map(g => html`<tbody>
           <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · by the month (Tiers 2, 3, 5): absent days go to Payroll as unpaid days' : ' · by the day (Tier 4): days and overtime make the crew pay'}</span></td></tr>

@@ -199,7 +199,7 @@ function expenseDetail(r, c) {
         <tbody>${r.log.map(x => html`<tr><td class="nowrap">${fmtFull(x.at.slice(0, 10))}</td><td>${expenseStep(x.status)}</td><td>${x.byName || x.by}</td><td>${x.note || ''}</td></tr>`)}</tbody></table>` : ''}
         ${r.paid ? html`<p>Paid on ${fmtFull(r.paid.date)} by ${PAY_METHODS.find(([k]) => k === r.paid.method)?.[1] || r.paid.method}${r.paid.ref ? `, reference ${r.paid.ref}` : ''}.</p>` : ''}
         ${signoff([{ label: 'Requested by', name: [r.byName || r.by, r.byTitle].filter(Boolean).join(', '), note: fmtFull(r.date) },
-          ...approvals.map(x => ({ label: `Approved by (${x.level || 'PM'})`, name: x.byName || x.by, note: fmtFull(x.at.slice(0, 10)) })),
+          ...approvals.map(x => ({ label: `Approved by (${x.level || 'PE'})`, name: x.byName || x.by, note: fmtFull(x.at.slice(0, 10)) })),
           ...(waitFor ? [{ label: `Approved by (${waitFor})`, name: '', note: 'Date' }] : [])])}`)}
     </div></section>`;
 }

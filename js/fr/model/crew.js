@@ -16,12 +16,13 @@ export function rowsFromStaff(staff) {
  * Brings saved rows in line with the office's current list: new people are added unmarked,
  * people the office removed stay only if they were marked today.
  */
-export function mergeStaff(rows, staff) {
+export function mergeStaff(rows, staff, gone = []) {
+  const off = new Set((gone || []).map(String));   // 2.41.0: deleted from the project: out of today's list even if marked
   const key = r => (r.id || r.name).toLowerCase();
   const have = new Map((rows || []).map(r => [key(r), r]));
   const out = rowsFromStaff(staff).map(r => ({ ...r, ...(have.get(key(r)) || {}), trade: r.trade || (have.get(key(r)) || {}).trade || '' }));
   const inList = new Set(out.map(key));
-  for (const r of rows || []) if (!inList.has(key(r)) && (r.state || r.ot || r.added)) out.push(r);
+  for (const r of rows || []) if (!inList.has(key(r)) && !(r.id && off.has(String(r.id))) && (r.state || r.ot || r.added)) out.push(r);
   return out;
 }
 
@@ -109,7 +110,7 @@ export function withTeam(p, team) {
   // 2.16.0: someone approved in Central Hub leaves the waiting list on every device at once, not at the next check
   const approved = new Set(team.filter(m => m.fromSite && m.active !== false).map(m => String(m.name || '').trim().toLowerCase()));
   const crewWait = (p.crewWait || []).filter(w => !approved.has(String(w.name || '').trim().toLowerCase()));
-  return { ...p, staff, crewWait };
+  return { ...p, staff, crewWait, gone: team.filter(m => m.active === false).map(m => m.id) };
 }
 
 /** 2.15.0: positions the owner merged: shown as the one they became (Central Hub js/engine/positions.js OLD_ROLES). */

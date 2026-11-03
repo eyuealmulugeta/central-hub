@@ -756,7 +756,7 @@ export const submits = {
         });
       }
     });
-    notice = `Report for ${fmtDate(date)} saved. It counts in the schedule, attendance and costs once the PM or GM approves it.`;
+    notice = `Report for ${fmtDate(date)} saved. It counts in the schedule, attendance and costs once the PE or GM approves it.`;
   },
 };
 

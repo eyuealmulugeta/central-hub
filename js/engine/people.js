@@ -78,7 +78,8 @@ export function memberFor(person, a, existing) {
   return {
     ...kept, id: existing?.id || memberId(person), personId: person.id,
     name: person.name || '', role: a?.role || person.title || '', contact: contactOf(person),
-    active: a?.active !== false, level: person.level || 'crew',
+    // v0.81.0: no place on this project in the directory keeps what the project says (a deleted person stayed coming back)
+    active: a ? a.active !== false : existing ? existing.active !== false : true, level: person.level || 'crew',
   };
 }
 
@@ -86,6 +87,7 @@ export function memberFor(person, a, existing) {
 export function assign(ws, person, a) {
   const i = ws.team.findIndex(m => m.personId === person.id);
   const next = memberFor(person, a, ws.team[i]);
+  if (next.active) delete next.dropOk;   // v0.81.0: put back on purpose
   if (i >= 0) ws.team[i] = next; else ws.team.push(next);
   if (a && 'dayRate' in a) setDayRate(ws, next.id, a.dayRate);
   return next;
@@ -111,7 +113,8 @@ export function syncPlan(team, staff, projectId, crewRates = null) {
     if (!person) continue;
     const want = memberFor(person, assignmentOf(person, projectId), m);
     // a blank name in the directory never wipes the name on the project
-    const patch = Object.fromEntries(FIELDS.filter(f => want[f] !== m[f] && !(f === 'name' && !want.name)).map(f => [f, want[f]]));
+    // v0.81.0: deleted from the site (Field Report, dropOk) stays off until the directory puts them back (assign)
+    const patch = Object.fromEntries(FIELDS.filter(f => want[f] !== m[f] && !(f === 'name' && !want.name) && !(f === 'active' && want.active && m.dropOk)).map(f => [f, want[f]]));
     const rate = +assignmentOf(person, projectId)?.dayRate || 0;
     if (crewRates && rate !== dayRateOf({ crewRates }, m.id)) patch.dayRate = rate;
     if (Object.keys(patch).length) out.push({ id: m.id, patch });

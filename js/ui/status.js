@@ -54,7 +54,7 @@ export function statusPaper(c) {
         : html`<p class="dsr-none">No milestones ahead in the schedule.</p>`)}
     </div>
 
-    ${signoff([{ label: 'Prepared by · Project engineer', name: '', note: fmtFull(c.today) }, { label: 'Approved by · Project manager' }], sealOf(`status:${c.project?.id}`))}
+    ${signoff([{ label: 'Prepared by · Project engineer', name: '', note: fmtFull(c.today) }, { label: 'Approved by · General manager' }], sealOf(`status:${c.project?.id}`))}
     ${docFoot(foot)}
   </div>`;
 }

@@ -46,7 +46,7 @@ const QUOTE_VALID_DAYS = 30;
 // v0.53.0: the sign-off boxes a person may sign with the stamp tick box (ui/seal.js); the client's box is never theirs
 const HOUSE_SIGN = ['Prepared by', 'Approved by'];
 const REPORT_SIGN = ['Prepared by · Project engineer', 'Approved by'];
-export const STATUS_SIGN = ['Prepared by · Project engineer', 'Approved by · Project manager'];
+export const STATUS_SIGN = ['Prepared by · Project engineer', 'Approved by · General manager'];   // v0.81.0 (owner): there is no Project manager
 const EMAIL_BUTTON = html`<button class="btn" data-act="email" title="Send this document by email, as a PDF">Email</button><button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>`;
 const emailed = doc => (doc.emails?.length
   ? html`<p class="muted no-print">Emailed to ${doc.emails.at(-1).to} on ${fmtFull(doc.emails.at(-1).at)}${doc.emails.length > 1 ? `, ${doc.emails.length} times in all` : ''}.</p>` : '');
@@ -410,7 +410,7 @@ function performancePaper(c) {
 
       <h3>Follow-ups</h3>
       <p>${r.itemsOpened} opened and ${r.itemsClosed} closed in the period. ${r.itemsOverdue} open and past due at the end of it.</p>
-      ${signoff([{ label: 'Prepared by · Project engineer' }, { label: 'Reviewed by · Project manager' }])}
+      ${signoff([{ label: 'Prepared by · Project engineer' }, { label: 'Reviewed by · General manager' }])}
       ${docFoot(footText(c, `${PERIODS[period][0]} performance report`, refOf(c, 'PERF', to), { note: 'internal' }))}
     </article>`;
 }

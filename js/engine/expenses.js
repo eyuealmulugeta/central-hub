@@ -91,4 +91,4 @@ export function expenseSummary(requests, { gm = false } = {}) {
 }
 
 /** The words for a step in an expense's history. */
-export const expenseStep = s => ({ requested: 'Asked', gm: 'Approved by the PM, to the GM', approved: 'Approved', paid: 'Paid', rejected: 'Sent back', cancelled: 'Withdrawn' }[s] || s);
+export const expenseStep = s => ({ requested: 'Asked', gm: 'Approved by the PE, to the GM', approved: 'Approved', paid: 'Paid', rejected: 'Sent back', cancelled: 'Withdrawn' }[s] || s);

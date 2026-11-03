@@ -17,6 +17,9 @@ export const stampPng = () => (store.company?.seals || []).find(s => s.id === 's
 /** Who may add them: whoever prints outgoing documents (the Admin and Office). */
 export const maySeal = () => store.isAdmin || store.role === 'office';
 const myName = () => store.profile?.name || store.user?.name || '';
+/** v0.81.0 (owner, 3 Nov): the Admin and the GM sign under General manager only, where a document has that box. */
+const topSigner = () => store.isAdmin || (store.ranks || []).includes('general_manager');
+export const signLabels = (labels, top = topSigner()) => { const gm = (labels || []).filter(l => /general manager/i.test(l)); return top && gm.length ? gm : labels || []; };
 
 /** What signoff() adds to the document `key`, or null while it is not ticked. */
 export function sealOf(key) {
@@ -27,6 +30,7 @@ export function sealOf(key) {
 /** The tick box and the box to sign, for the toolbar of the document `key`. `labels`: its sign-off labels. */
 export function sealBar(key, labels, info = {}) {
   if (!maySeal() || store.readOnly) return '';
+  labels = signLabels(labels);
   about.set(key, { ...info, labels });
   const stamp = stampPng(), sig = mySignature();
   const why = !stamp && !sig ? 'Add the company stamp (Settings, Company letterhead) or your signature (My settings) first'

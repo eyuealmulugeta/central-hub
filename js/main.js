@@ -69,6 +69,7 @@ import { APP_VERSION } from './version.js';
 import { describePaper, makePdf, canShareFile, shareFile, whatsappUrl, TELEGRAM_URL, downloadFile, sizeLabel } from './sync/share.js';
 import { phoneDigits, whatsappTo, telegramTo } from './engine/contacts.js';
 import { onSwipe } from './core/swipe.js';
+import { offerInstall } from './core/install.js';   // v0.70.0
 
 const APP = 'Central Hub';
 const VIEWS = { home, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
@@ -1077,3 +1078,4 @@ if (firebaseConfig && !new URLSearchParams(location.search).has('local')) {
   store.init();
   start();
 }
+if (!location.search.includes('local')) offerInstall('Central Hub');   // v0.70.0 (owner): offer to install the app

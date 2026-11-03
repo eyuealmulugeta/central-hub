@@ -1715,3 +1715,10 @@ body.side-narrow .side-health { display: none; }
 .wk-photos { grid-template-columns: repeat(3, 1fr); }
 /* v0.68.0: supplier bills */
 .bill-form { margin: 8px 0 12px; }
+
+/* v0.70.0: the install box (same in Field Report 2.32.0) */
+.install-box { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 900; max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: 14px; background: #0a3440; color: #fff; box-shadow: 0 8px 28px rgba(0,0,0,.25); font-size: 14px; }
+.install-box span { opacity: .9; }
+.install-box div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.install-box button { min-height: 36px; padding: 0 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: none; color: #fff; font: inherit; cursor: pointer; }
+.install-box button.primary { background: #fff; color: #0a3440; border-color: #fff; font-weight: 600; }

@@ -17,6 +17,7 @@ import { uid, fmtFull } from '../core/util.js';
 import { html, options, chip } from './dom.js';
 import { docHead, docSec, footText, signoff } from './print.js';
 import { docRef } from '../engine/docref.js';
+import { monthRating, monthTable, PARTS } from '../engine/crewratings.js';
 
 let selected = null;      // team member id
 let mode = 'rate';        // rate | note | view (history only)
@@ -72,7 +73,7 @@ export function render(c) {
       <p class="muted">${store.isAdmin ? 'As Admin you see every evaluation written. ' : 'You see only the evaluations you wrote. '}The person you rate never sees them.</p>
       ${notice ? html`<p class="ok">${notice}</p>` : ''}
       ${list.length ? html`<table class="table">
-        <thead><tr><th>Person</th><th>Tier</th><th class="r">Latest score</th><th class="r">Feedback stars</th><th></th></tr></thead>
+        <thead><tr><th>Person</th><th>Tier</th><th class="r">Latest score</th><th class="r">Feedback stars</th><th class="r" title="Field Report's rating of the daily reports they wrote this month">Report rating</th><th></th></tr></thead>
         <tbody>${list.map(m => {
           const s = summarise(all, m.id);
           return html`<tr class="${m.id === selected ? 'on' : ''}">
@@ -80,6 +81,7 @@ export function render(c) {
             <td>${tierName(levelOf(m))}</td>
             <td class="r nowrap">${s.latest ? html`${score(s.latest.overall)} <span class="muted">${scaleLabel(s.latest.overall)}</span>${s.trend != null && s.trend !== 0 ? html` ${chip(`${s.trend > 0 ? '+' : ''}${s.trend.toFixed(1)}`, s.trend > 0 ? 'ok' : 'high')}` : ''}` : html`<span class="muted">Not rated yet</span>`}</td>
             <td class="r nowrap">${s.stars == null ? html`<span class="muted">—</span>` : html`<span title="${s.notes.length} notes">${stars(s.stars)}</span>`}</td>
+            <td class="r nowrap">${rateCell(monthRating(c.ws.reports, { name: m.name, email: emailOf(m) }, c.today.slice(0, 7)))}</td>
             <td class="r nowrap">
               <button class="btn small primary" data-act="rate" data-id="${m.id}">Evaluate</button>
               <button class="btn small" data-act="note" data-id="${m.id}" title="A note for the day: evidence in the evaluation">Spotlight note</button>
@@ -90,7 +92,22 @@ export function render(c) {
     </section>
     ${person && mode === 'rate' ? rateForm(person, c) : ''}${person && mode === 'note' ? personForm(person, c.project) : ''}
     ${person ? history(person, all) : ''}
+    ${crewBox(c)}
     ${everything(all)}`;
+}
+
+/** v0.67.0 (Phase D2): a month's Field Report rating, with the change against the month before. */
+const rateCell = x => (x ? html`<span title="${x.days} day${x.days === 1 ? '' : 's'} rated">${x.v.toFixed(1)}/5</span>${x.trend ? html` ${chip(`${x.trend > 0 ? '+' : ''}${x.trend.toFixed(1)}`, x.trend > 0 ? 'ok' : 'high')}` : ''}` : html`<span class="muted">—</span>`);
+const partsLine = x => Object.entries(PARTS).map(([k, w]) => `${w} ${x.parts[k] ?? '—'}`).join(' · ');
+
+/** v0.67.0: everyone who wrote reports on this project this month and last, to compare the crews. A hint only. */
+function crewBox(c) {
+  const month = c.today.slice(0, 7);
+  const rows = monthTable(c.ws.reports, month);
+  return html`<section class="card"><div class="toolbar"><h3>Field Report ratings, ${month}</h3><span class="muted">From the approved daily reports of ${c.project.name}. A hint for the evaluation; it is never filled in from it.</span></div>
+    ${rows.length ? html`<table class="table compact"><thead><tr><th>Reports written by</th><th class="r">This month</th><th class="r">Days rated</th><th class="r">Last month</th><th>Parts (out of 5)</th></tr></thead>
+      <tbody>${rows.map(x => html`<tr><td>${x.name}</td><td class="r nowrap">${rateCell(x)}</td><td class="r">${x.days}</td><td class="r">${x.prev == null ? '—' : x.prev.toFixed(1)}</td><td class="muted small">${partsLine(x)}</td></tr>`)}</tbody></table>`
+      : html`<p class="muted">No rated report this month yet. Field Report rates each report from version 2.18.0.</p>`}</section>`;
 }
 
 function problemList() {
@@ -105,7 +122,9 @@ const periodNow = c => evalPeriod(c.today, store.global?.evalMonths);
 function factsBox(m, c) {
   const period = periodNow(c);
   const f = factsOf({ reports: c.ws.reports, spotlight: spotAll(c), person: m, period });
+  const fr = monthRating(c.ws.reports, { name: m.name, email: emailOf(m) }, c.today.slice(0, 7));
   return html`<aside class="field-note"><div><b>Facts for ${period.label}</b>
+    ${fr ? html`<span>Field Report rating this month ${fr.v.toFixed(1)}/5 from ${fr.days} day${fr.days === 1 ? '' : 's'}${fr.prev != null ? ` (last month ${fr.prev.toFixed(1)})` : ''} · ${partsLine(fr)}</span>` : ''}
     <span>Attendance ${f.attendance == null ? '—' : `${f.attendance}%`} (${f.present} present, ${f.absent} absent) · Late days ${f.late} · Reports sent by 17:30: ${f.onTime} of ${f.reports} · Spotlight ${f.positive} positive, ${f.negative} negative · Safety notes ${f.safety}</span>
     ${f.notes.length ? html`<ul class="plain small">${f.notes.slice(0, 12).map(n => html`<li class="${n.tone === 'positive' ? 'ok' : 'bad'}">${n.date} · ${catLabel(n.category)} · ${n.note}</li>`)}</ul>` : ''}</div></aside>`;
 }

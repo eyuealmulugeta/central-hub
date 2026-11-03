@@ -3,6 +3,7 @@
 // that data (action 'export', see apps-script/field-report-export.gs) and turns
 // it into Central Hub daily reports waiting for the Office to confirm.
 
+import { ratingOf } from '../engine/crewratings.js';
 import { statusOf, activitiesOf, cleanActivities, cleanText, cleanLink, cleanEmail, LIMITS } from '../engine/deployment.js';
 import { targetFor } from '../engine/calendar.js';
 import { toDay, fromDay } from '../core/util.js';
@@ -224,7 +225,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       const keepOlder = others.length ? { older: others } : {};
       if (Object.keys(approvedHere(old, meta)).length || old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
         // v0.27.0: "Checked by" signed in Field Report (script 7.36.0) comes with the review
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder }, ...approvedHere(old, meta) });
+        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder, ...(meta.rating ? { rating: ratingOf(meta.rating) } : {}) }, ...approvedHere(old, meta) });
       }
       putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
@@ -252,6 +253,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         progress: meta.progress || [], extra: meta.progressExtra || [], notes: meta.notes || [], plan: meta.plan || [],
         requests: meta.requestItems || [], photos: meta.photos || 0,
         photoFiles: meta.photoFiles || [],   // v0.23.1: the photos in Drive (Field Report 2.1.0)
+        rating: ratingOf(meta.rating),   // v0.67.0: Field Report's rating of the report out of 5 (2.18.0 and later)
         // structured entries, sent once Field Report works from this project's lists (see buildSetup)
         work: meta.work || [], milestones: meta.milestones || [], attendance: meta.attendance || [],
         delayItems: meta.delayItems || [], received: meta.received || [], instructions: meta.instructions || [],

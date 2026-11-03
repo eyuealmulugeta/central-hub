@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { METHODS, invoiceLines, makeDoc, nextNumber, docTotals } from '../engine/billing.js';
-import { reportSnapshot } from '../engine/report.js';
+import { reportSnapshot, weekOf, photoPool, PHOTOS_MIN, PHOTOS_MAX } from '../engine/report.js';
 import { performanceReport } from '../engine/performance.js';
 import { paySheet, delayRecord } from '../engine/site.js';
 import { uid, money, num, fmtDate, fmtFull, fmtDay, toDay, fromDay, sum, clamp } from '../core/util.js';
@@ -56,8 +56,27 @@ const refOf = (c, type, key) => docRef({ company: c.global.company, project: c.p
 
 const liveRange = c => {
   const to = endDate || c.today;
+  // v0.66.0: a week is Monday to Sunday
+  if (period === 'weekly') return weekOf(to);
   return [fromDay(toDay(to) - PERIODS[period][1] + 1), to];
 };
+
+/** v0.66.0: the photos chosen for a weekly report, as on the paper. */
+const chosenPhotos = (c, doc) => {
+  const proj = c.project.fieldCode || '';
+  const list = doc?.photos || [];
+  return list.length && proj ? html`<h3>Site photos</h3><div class="ph-grid wk-photos">${list.map(p => html`<figure class="ph"><img src="data:," alt="${p.caption || 'Site photo'}" data-fphoto="${proj}|${p.pdf}|${p.id}"><figcaption>${[fmtDate(p.date), p.caption].filter(Boolean).join(' · ')}</figcaption></figure>`)}</div>` : '';
+};
+
+/** v0.66.0: choose 6 to 12 of the week's photos for the client (draft weekly report). */
+function photoPicker(c, doc) {
+  const pool = photoPool(c.ws, doc.period.from, doc.period.to), proj = c.project.fieldCode || '';
+  const on = new Set((doc.photos || []).map(p => `${p.pdf}|${p.id}`));
+  if (!pool.length || !proj) return html`<p class="muted no-print">No site photos in this week's approved reports.</p>`;
+  return html`<details class="card no-print wk-pick" open><summary>Photos for the client: ${on.size} chosen (choose ${PHOTOS_MIN} to ${PHOTOS_MAX})</summary>
+    <div class="ph-grid">${pool.map(p => html`<button type="button" class="ph pick ${on.has(p.key) ? 'on' : ''}" data-act="pickPhoto" data-k="${p.key}" aria-pressed="${on.has(p.key)}" title="${on.has(p.key) ? 'Leave out' : 'Add to the report'}">
+      <img src="data:," alt="" data-fphoto="${proj}|${p.pdf}|${p.id}"><span>${on.has(p.key) ? '✓ ' : ''}${fmtDate(p.date)}${p.caption ? ` · ${p.caption}` : ''}</span></button>`)}</div></details>`;
+}
 
 // ---- printable pieces ----
 
@@ -173,6 +192,21 @@ function docPaper(d, c) {
     </article>`;
 }
 
+/** v0.66.0: the weekly report's equipment, materials received and safety, day by day. */
+function weeklyParts(d, dropHead, drop) {
+  const yes = v => (v == null ? '' : v ? 'Yes' : 'No');
+  return html`
+    ${d.equipment?.length ? html`<h3>Equipment</h3><table class="table compact">
+      <thead><tr><th>Date</th><th>Equipment</th><th class="r">Qty</th><th class="r">Hours</th><th>Status</th>${dropHead}</tr></thead>
+      <tbody>${d.equipment.map((e, i) => html`<tr><td class="nowrap">${fmtDate(e.date)}</td><td>${e.name}</td><td class="r">${e.qty}</td><td class="r">${e.hrs}</td><td>${e.status}</td>${drop('equipment', i)}</tr>`)}</tbody></table>` : ''}
+    ${d.received?.length ? html`<h3>Materials received</h3><table class="table compact">
+      <thead><tr><th>Date</th><th>Material</th><th class="r">Qty</th><th>Note</th>${dropHead}</tr></thead>
+      <tbody>${d.received.map((x, i) => html`<tr><td class="nowrap">${fmtDate(x.date)}</td><td>${x.name}</td><td class="r nowrap">${x.qty} ${x.unit}</td><td>${x.note}</td>${drop('received', i)}</tr>`)}</tbody></table>` : ''}
+    ${d.safety?.length ? html`<h3>Safety</h3><table class="table compact">
+      <thead><tr><th>Date</th><th>Status</th><th>Toolbox talk</th><th>Notes</th>${dropHead}</tr></thead>
+      <tbody>${d.safety.map((s, i) => html`<tr><td class="nowrap">${fmtDate(s.date)}</td><td>${s.status}</td><td>${yes(s.toolbox)}</td><td>${s.notes.join('; ')}</td>${drop('safety', i)}</tr>`)}</tbody></table>` : ''}`;
+}
+
 /**
  * Progress report drawn from a snapshot (reportSnapshot). `doc` is the saved
  * client report, if any; while it is a draft its lines can be left out.
@@ -229,12 +263,16 @@ function reportPaper(c, kind, d, doc) {
         <p>${d.manpower.map(m => `${m.trade}: ${num(m.days)} man-days${m.ot ? ` and ${num(m.ot)} overtime hours` : ''}`).join('; ')}.
           Reported on ${d.reportDays} day${d.reportDays === 1 ? '' : 's'}${d.weather.length ? `. Weather: ${d.weather.join(', ').toLowerCase()}` : ''}.</p>` : ''}
 
+      ${d.weekly ? weeklyParts(d, dropHead, drop) : ''}
+
       <h3>Coming up</h3>
       ${d.lookahead.length ? taskTable(d.lookahead) : html`<p class="muted">No work is scheduled in the next period.</p>`}
 
       ${d.issues.length ? html`
         <h3>Open items</h3>
         <table class="table compact"><tbody>${d.issues.map((x, i) => html`<tr><td>${x.title}${x.due ? ` (due ${fmtDate(x.due)})` : ''}</td>${drop('issues', i)}</tr>`)}</tbody></table>` : ''}
+
+      ${d.weekly ? chosenPhotos(c, doc) : ''}
 
       <h3>Schedule</h3>
       ${miniGantt(d, d.asOf)}
@@ -555,6 +593,7 @@ export function render(c) {
       ${emailed(doc)}
       ${draft ? html`<label class="no-print">Remarks to the client
         <textarea data-chg="docField" data-f="remarks" data-fk="d-remarks" rows="3" placeholder="Summary, explanations, decisions needed from the client">${doc.remarks || ''}</textarea></label>` : ''}
+      ${draft && doc.data?.weekly ? photoPicker(c, doc) : ''}
       ${reportPaper(c, doc.kind, doc.data, doc)}`;
   } else if (doc) {
     preview = html`
@@ -592,11 +631,11 @@ export function render(c) {
       <div class="toolbar no-print">
         <div class="seg">${Object.entries(PERIODS).map(([k, [label]]) => html`<button class="${period === k ? 'on' : ''}" data-act="period" data-k="${k}">${label}</button>`)}</div>
         <label class="inline">Up to <input type="date" data-chg="endDate" data-fk="r-end" value="${endDate || c.today}" max="${c.today}"></label>
-        <span class="muted">Live preview</span>
+        <span class="muted">${period === 'weekly' ? `Live preview, Monday to Sunday, approved reports only. Save it to choose ${PHOTOS_MIN} to ${PHOTOS_MAX} photos.` : 'Live preview'}</span>
         <span class="grow"></span>
         <button class="btn primary" data-act="createReport">Create client report</button>
       </div>
-      ${reportPaper(c, period, reportSnapshot(c, ...liveRange(c)))}`;
+      ${reportPaper(c, period, reportSnapshot(c, ...liveRange(c), { weekly: period === 'weekly' }))}`;
   } else if (sel?.kind === 'pay' || sel?.kind === 'claim') {
     preview = html`
       <div class="toolbar no-print">
@@ -657,7 +696,7 @@ export const actions = {
     const doc = {
       id: uid('d'), type: 'report', kind: period, number: nextNumber(c.ws.docs, 'report', c.project), date: c.today, due: '',
       status: 'draft', party: { name: '', address: '', contact: '', taxId: '', ...c.project.client },
-      period: { from, to }, remarks: '', data: reportSnapshot(c, from, to), lines: [], subtotal: 0, amountDue: 0,
+      period: { from, to }, remarks: '', data: reportSnapshot(c, from, to, { weekly: period === 'weekly' }), lines: [], subtotal: 0, amountDue: 0, photos: [],
     };
     store.update(ws => ws.docs.push(doc));
     sel = { kind: 'doc', id: doc.id };
@@ -665,13 +704,26 @@ export const actions = {
   },
   refreshReport(el, c) {
     if (current(c.ws)?.status !== 'draft') return;
-    store.update(ws => { const doc = current(ws); doc.data = reportSnapshot(c, doc.period.from, doc.period.to); });
+    store.update(ws => { const doc = current(ws); doc.data = reportSnapshot(c, doc.period.from, doc.period.to, { weekly: !!doc.data?.weekly }); });
     notice = 'Figures refreshed from the latest data.';
   },
   omitLine(el) {
     store.update(ws => { const doc = current(ws); if (doc?.status === 'draft') doc.data[el.dataset.k].splice(+el.dataset.i, 1); });
   },
   period(el) { period = el.dataset.k; },
+  /** v0.66.0: add a photo to the weekly report, or take it out; at most 12. */
+  pickPhoto(el, c) {
+    const d = current(c.ws);
+    if (d?.status !== 'draft') return;
+    const p = photoPool(c.ws, d.period.from, d.period.to).find(x => x.key === el.dataset.k);
+    if (!p) return;
+    const has = (d.photos || []).some(x => `${x.pdf}|${x.id}` === p.key);
+    if (!has && (d.photos || []).length >= PHOTOS_MAX) { notice = `At most ${PHOTOS_MAX} photos. Take one out first.`; return; }
+    store.update(ws => {
+      const doc = current(ws);
+      doc.photos = has ? doc.photos.filter(x => `${x.pdf}|${x.id}` !== p.key) : [...(doc.photos || []), { pdf: p.pdf, id: p.id, date: p.date, caption: p.caption }];
+    });
+  },
 
   newInvoice(el, c) {
     const { lines, period: span, why } = invoiceLines(c);
@@ -698,6 +750,9 @@ export const actions = {
     const next = d && NEXT[d.type][d.status]?.[0];
     if (!next) return;
     if (d.type === 'report' && !store.canApprove) { notice = 'Only the Admin or an assigned approver can issue a client report.'; return; }
+    // v0.66.0: a weekly report goes out with 6 to 12 photos (all of them when the week has fewer)
+    const pool = d.data?.weekly ? photoPool(c.ws, d.period.from, d.period.to).length : 0;
+    if (d.type === 'report' && d.data?.weekly && (d.photos || []).length < Math.min(PHOTOS_MIN, pool)) { notice = `Choose at least ${Math.min(PHOTOS_MIN, pool)} photos for the client first.`; return; }
     store.update(ws => {
       const doc = current(ws);
       doc.status = next;

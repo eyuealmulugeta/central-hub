@@ -7,6 +7,7 @@ import { money, fmtDate, fmtFull } from '../core/util.js';
 import { html, icon } from './dom.js';
 import { isGM } from '../engine/expenses.js';
 import { tradeActuals, tradeLines, tradeWarnings } from '../engine/tradebudget.js';
+import { weeklyDue } from '../engine/report.js';
 import { healthOf, projectLine, needsYou, needGroups, thisWeek, waitingOn } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 
@@ -102,7 +103,7 @@ export function render(c) {
   const summaries = c.summaries || [];
   const meetings = [...(c.company.meetings || []).filter(m => !me() || m.by === me() || (m.invitees || []).some(i => i.email === me())), ...(c.company.bookings || [])];
   const others = summaries.filter(s => s.project.id !== c.project.id);
-  const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), meetings, today: c.today, trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
+  const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
     .filter(n => !only || n.projectId === only);
   const week = only && only !== c.project.id ? [] : thisWeek({ today: c.today, rows: c.sched.rows, items: c.flags.items, meetings });
   const waits = only && only !== c.project.id ? [] : waitingOn(c.flags.items);

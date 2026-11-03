@@ -48,7 +48,7 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '' }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
   if (approver) {
@@ -62,6 +62,8 @@ export function needsYou({ project, flags, requests = [], others = [], approver 
     if (decide.length) out.push({ sev: 'warn', kind: 'Expenses', title: `${decide.length} expense${decide.length > 1 ? 's' : ''} to approve`, detail: decide.some(r => r.status === 'gm') ? 'Some are above the limit and wait for the GM' : 'Asked for by the site or the office', link: 'requests', projectId: project.id, project: project.name });
     if (toPay.length) out.push({ sev: 'info', kind: 'Expenses', title: `${toPay.length} approved expense${toPay.length > 1 ? 's' : ''} to pay`, detail: 'Mark each paid with the method and the bank reference', link: 'requests', projectId: project.id, project: project.name });
   }
+  // v0.66.0 (owner): every Sunday, the week's client report
+  if (weekly) out.push({ sev: 'warn', kind: 'Weekly report', title: `Weekly report ready to send: ${project.name}`, detail: 'Made from this week\'s approved daily reports. Choose 6 to 12 photos, approve and email it.', link: 'docs', projectId: project.id, project: project.name });
   // v0.64.0: this person's meetings later today
   for (const m of meetings) {
     const t = Date.parse(m.start);

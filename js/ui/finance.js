@@ -41,12 +41,13 @@ function companyPaper(c, f) {
   const foot = footText(c, SHEET_TITLE.construction, ref, { project: false, note: 'internal' });
   return html`<section class="card sheet"><div class="paper dsr doc-paper fin-paper" data-foot="${foot}">
     ${docHead(c, { title: SHEET_TITLE.construction, sub: fmtFull(c.today), ref, facts: [['Projects', String(f.rows.length)], ['As of', fmtFull(c.today)], ['Currency', `${f.currency}, converted`]] })}
-    <div class="dsr-kpis" style="grid-template-columns:repeat(5,1fr)">
+    <div class="dsr-kpis" style="grid-template-columns:repeat(6,1fr)">
       <div><b>${m(t.received)}</b><span>Received · of ${m(t.invoiced)} invoiced</span></div>
       <div><b>${m(t.spent)}</b><span>Spent, all projects</span></div>
       <div class="${t.cash < 0 ? 'warn' : ''}"><b>${m(t.cash)}</b><span>Cash position</span></div>
       <div><b>${m(t.owed)}</b><span>Owed to you · ${f.receivables.length} invoices</span></div>
       <div><b>${m(t.committed)}</b><span>Ordered, not delivered</span></div>
+      <div><b>${m(t.payable)}</b><span>Owed to suppliers · ${f.payables.length} bills</span></div>
     </div>
     ${docSec(1, 'By project', html`<table class="dsr-t">
       <thead><tr><th>Project</th><th class="r">Contract</th><th class="r">Invoiced</th><th class="r">Received</th><th class="r">Spent</th><th class="r">Cash</th><th class="r">Margin</th><th class="r">Progress</th></tr></thead>
@@ -146,6 +147,7 @@ export function render(c) {
         ${kpi('Cash position', m(t.cash), 'Received less spent', t.cash < 0 ? 'bad' : '')}
         ${kpi('Owed to you', m(t.owed), `${f.receivables.length} invoice${f.receivables.length === 1 ? '' : 's'} awaiting payment`)}
         ${kpi('Ordered, not delivered', m(t.committed), `${f.commitments.length} purchase order${f.commitments.length === 1 ? '' : 's'} open`)}
+        ${kpi('Owed to suppliers', m(t.payable), `${f.payables.length} bill${f.payables.length === 1 ? '' : 's'} not paid${f.payables.some(x => x.overdue > 0) ? `, ${f.payables.filter(x => x.overdue > 0).length} overdue` : ''}`, f.payables.some(x => x.overdue > 0) ? 'bad' : '')}
       </section>
 
       <section class="card">

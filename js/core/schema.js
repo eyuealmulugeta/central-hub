@@ -123,6 +123,7 @@ export const emptyWorkspace = () => ({
   // pay kept apart so only those who see pay read it (0.18.0): day rate per team member, the labour cost of each crew payment
   crewRates: [], paycosts: [],
   docs: [], payStages: [], measure: [], billRates: {}, requests: [], trash: [],
+  bills: [],   // v0.68.0: supplier bills (engine/bills.js), a money section
   attendance: [],   // the office's corrections of the attendance sheet (see engine/attendance.js)
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)
   payments: [],     // Payments: what was paid to whom, for which period (each is also a labour cost in ledger)

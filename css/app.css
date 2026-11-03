@@ -1713,3 +1713,5 @@ body.side-narrow .side-health { display: none; }
 .ph.pick.on { border-color: var(--accent, #0a3440); background: var(--soft, #eef3f6); }
 .ph.pick img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; }
 .wk-photos { grid-template-columns: repeat(3, 1fr); }
+/* v0.68.0: supplier bills */
+.bill-form { margin: 8px 0 12px; }

@@ -77,7 +77,7 @@ export function mayOpen(role, pages, page, ranks = []) {
 
 /** Money records (costs, invoices, billing terms) are loaded only for people who have a page that shows them. */
 export const MONEY_PAGES = ['ledger', 'cashflow', 'payments', 'docs', 'finance'];
-export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates'];
+export const MONEY_SECTIONS = ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates', 'bills'];
 export const seesMoney = (role, pages) => role === 'owner' || ((role === 'office' || role === 'site') && MONEY_PAGES.some(p => pages.includes(p)));
 /**
  * Pay of named people: day rates, trade rates, pay runs, payments and their labour costs. The Admin, and Office people

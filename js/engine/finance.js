@@ -22,6 +22,7 @@ export function companyFinance(projects, workspaces, global, today, currency = g
   const rows = [];
   const receivables = [];
   const commitments = [];
+  const payables = [];   // v0.68.0: supplier bills not paid yet
   const invoices = [];
   const entries = [];
   const byMonth = new Map();
@@ -62,6 +63,11 @@ export function companyFinance(projects, workspaces, global, today, currency = g
       }
     }
 
+    for (const b of ws.bills || []) {
+      if (b.paid) continue;
+      const overdue = b.due ? T - toDay(b.due) : 0;
+      payables.push({ project: project.name, number: b.number || '', supplier: b.supplier, due: b.due || '', overdue, amount: convert(+b.amount || 0, b.currency, currency, global.fx) });
+    }
     for (const r of d.led.rows) {
       entries.push({ project: project.name, ...r });
       const month = r.date.slice(0, 7);
@@ -73,16 +79,17 @@ export function companyFinance(projects, workspaces, global, today, currency = g
 
   receivables.sort((a, b) => b.overdue - a.overdue);
   commitments.sort((a, b) => a.due.localeCompare(b.due));
+  payables.sort((a, b) => b.overdue - a.overdue);
   const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)).slice(-MONTHS_SHOWN)
     .map(m => ({ ...m, net: m.in - m.out }));
   const total = f => sum(rows, f);
   const invoiced = total(r => r.invoiced), spent = total(r => r.spent), received = total(r => r.received);
 
   return {
-    currency, rows,
+    currency, rows, payables,
     totals: {
       contract: total(r => r.contract), invoiced, received, owed: total(r => r.owed), spent,
-      cash: received - spent, committed: sum(commitments, x => x.amount),
+      cash: received - spent, committed: sum(commitments, x => x.amount), payable: sum(payables, x => x.amount),
       margin: invoiced > 0 ? (invoiced - spent) / invoiced * 100 : null,
     },
     receivables,

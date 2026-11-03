@@ -9,6 +9,7 @@ import { html, options, meter, chip } from './dom.js';
 import { docHead, docSec, docFoot, footText, signoff } from './print.js';
 import { openMail } from './maildialog.js';
 import { bankView, bankActions, bankChanges } from './bank.js';
+import { billsView, billActions, billChanges, billSubmits } from './bills.js';
 import { tradeActuals, tradeLines, hasTradeBudgets } from '../engine/tradebudget.js';
 
 const LABEL = { labor: 'Labour', material: 'Material', equipment: 'Equipment', subcontract: 'Subcontract', transport: 'Transport', overhead: 'Overhead' };
@@ -38,9 +39,10 @@ const titleOf = () => (view === 'summary' ? 'Project finance summary' : only ? `
 const refOf = c => docRef({ company: c.global.company, project: c.project, type: view === 'summary' ? 'FIN' : 'LED', key: to || c.today });
 
 export function render(c) {
-  const seg = html`<div class="seg" role="group" aria-label="View">${[['entries', 'Entries'], ['statement', 'Statement'], ['summary', 'Summary'], ['bank', 'Bank statement']].map(([k, l]) => html`<button class="${view === k ? 'on' : ''}" data-act="view" data-v="${k}">${l}</button>`)}</div>`;
+  const seg = html`<div class="seg" role="group" aria-label="View">${[['entries', 'Entries'], ['statement', 'Statement'], ['summary', 'Summary'], ['bills', 'Supplier bills'], ['bank', 'Bank statement']].map(([k, l]) => html`<button class="${view === k ? 'on' : ''}" data-act="view" data-v="${k}">${l}</button>`)}</div>`;
   if (view === 'entries') return html`<div class="toolbar no-print">${seg}<span class="muted">${notice}</span></div>${entries(c)}`;
   if (view === 'bank') return html`<div class="toolbar no-print">${seg}</div>${bankView(c)}`;
+  if (view === 'bills') return html`<div class="toolbar no-print">${seg}</div>${billsView(c)}`;
   return html`
     <div class="toolbar no-print">
       ${seg}
@@ -182,6 +184,7 @@ function entries(c) {
 }
 
 export const submits = {
+  ...billSubmits,
   entry(fd) {
     const amount = +fd.get('amount');
     if (!(amount > 0)) return false;
@@ -194,12 +197,14 @@ export const submits = {
 
 export const changes = {
   ...bankChanges,
+  ...billChanges,
   from(el) { from = el.value; },
   to(el) { to = el.value; },
 };
 
 export const actions = {
   ...bankActions,
+  ...billActions,
   view(el) { view = el.dataset.v; notice = ''; },
   print() { print(); },
   csv(el, c) {

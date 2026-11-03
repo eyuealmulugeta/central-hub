@@ -19,6 +19,10 @@ import { mySignature, openPad } from './sigpad.js';
 import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
 import { checksOf, approveSummary, pinsMessage, SECTIONS, sectionLabel } from '../engine/review.js';
 import { dailyDoc } from './dailyreport.js';
+import { tell } from '../core/image.js';
+import { randomKey } from '../engine/sign.js';
+import { siLink, fromSigned } from '../engine/siteinstr.js';
+import { consultantOf, maySendDiary, diaryLink, diaryPage, contactUrl, DIARY_STATUS, DIARY_TONE } from '../engine/diary.js';
 import { photoGrid } from './photos.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
@@ -313,7 +317,20 @@ function replyBox(r, c) {
 let spotPage = false;
 export function preset(p = {}) { spotPage = !!p.spot; }
 
+// v0.80.0: the consultant's answer, looked up once per link while Reports is open (the server also copies it)
+const diaryChecked = new Set();
+function diaryLookUp(c) {
+  for (const r of c.ws.reports || []) {
+    if (r.diary?.status !== 'sent' || !r.diary.link || diaryChecked.has(r.diary.link)) continue;
+    diaryChecked.add(r.diary.link);
+    Promise.resolve(store.readDoc(`company/main/sisigned/${r.diary.link}`)).then(s => {
+      if (s && maySendDiary(store.role, store.ranks)) store.update(ws => { const x = ws.reports.find(y => y.id === r.id); if (x?.diary?.status === 'sent') x.diary = { ...x.diary, ...fromSigned(s) }; });
+    }).catch(() => {});
+  }
+}
+
 export function render(c) {
+  diaryLookUp(c);
   if (spotPage) return store.isAdmin || (store.ranks || []).includes('hr_assistant') ? html`<div class="side">${spotCard(c)}</div>` : '';   // v0.50.1: and HR
   const { ws, project } = c;
   const cur = underReview(ws);
@@ -509,6 +526,16 @@ export function render(c) {
     ${now === 'enter' || back ? formCard : listCard}</div>`;
 }
 
+/** v0.80.0: the consultant's part of an approved report: Send to sign, the link again, or the answer. */
+function diaryButton(r, c) {
+  const con = consultantOf(c.project), d = r.diary;
+  if (!con.on || !r.approvedBy) return '';
+  if (d?.status && d.status !== 'sent') return chip(`${DIARY_STATUS[d.status]}${d.consultant?.name ? `: ${d.consultant.name}` : ''}`, DIARY_TONE[d.status]);
+  if (!maySendDiary(store.role, store.ranks)) return d ? chip(DIARY_STATUS.sent, 'warn') : '';
+  return d ? html`${chip(DIARY_STATUS.sent, 'warn')}<button class="btn" data-act="diarySend" data-id="${r.id}" data-again>Send the link again</button>`
+    : html`<button class="btn" data-act="diarySend" data-id="${r.id}" title="The consultant reads this report and signs it (site diary)">Send to the consultant to sign</button>`;
+}
+
 /** The report as the Daily Site Report, with Print, Email as PDF and WhatsApp. The attendance page is the office's only. */
 function docView(r, c) {
   const office = store.isAdmin || c.role === 'office';
@@ -517,6 +544,7 @@ function docView(r, c) {
       <button class="btn small" data-act="closeDoc" data-fresh>‹ Back</button>
       <b>Daily site report</b><span class="muted">${fmtDate(r.date)}${r.field?.no ? `, No. ${r.field.no}` : ''}. ${notice}</span><span class="grow"></span>
       ${office && !brief ? html`<label class="check"><input type="checkbox" data-chg="withAtt" ${withAtt ? 'checked' : ''}> With the attendance page (office copy)</label>` : ''}
+      ${diaryButton(r, c)}
       <button class="btn" data-act="emailDoc" data-id="${r.id}">Email as PDF</button>
       <button class="btn" data-share title="Send this report as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn primary" data-act="printDoc">Print</button>
@@ -744,6 +772,30 @@ export const changes = {
 };
 
 export const actions = {
+  // v0.80.0 (owner): the approved report to the project's consultant, who reads it and signs it by link (site diary)
+  async diarySend(el, c) {
+    const r = c.ws.reports.find(x => x.id === el.dataset.id), con = consultantOf(c.project);
+    if (!r || !con.on || !maySendDiary(store.role, store.ranks)) return;
+    if (!con.name) return tell('Add the consultant\'s name first: Documents, Consultant.');
+    const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+    let link = r.diary?.link;
+    if (!('again' in el.dataset) || !link) {
+      if (!confirm(`Send the daily report of ${fmtDate(r.date)} to ${con.name} to sign? The consultant's copy does not change after sending.`)) return;
+      const paper = document.querySelector('.paper');
+      const page = paper ? diaryPage(await paperHtml(paper, `Daily site report ${r.date}`)) : '';
+      if (!page) return tell('The report is too large to send this way. Use Email as PDF instead.');
+      link = randomKey(30);
+      try { await store.writeDoc(`company/main/silinks/${link}`, diaryLink(r, c.project, link, store.user?.email || '', page)); }
+      catch { return tell('The link could not be made. Check the internet connection and try again.'); }
+      const by = store.profile?.name || store.user?.name || store.user?.email || '';
+      store.update(ws => { const x = ws.reports.find(y => y.id === r.id); if (x) x.diary = { status: 'sent', link, sentAt: new Date().toISOString(), sentBy: by }; });
+    }
+    const url = siLink(base, link, !store.cloud);
+    const text = `Dear ${con.name}, please read and sign the daily site report of ${c.project.name} for ${fmtDate(r.date)}: ${url}`;
+    try { await navigator.clipboard.writeText(url); } catch { /* the link is in the message */ }
+    const to = contactUrl(con.contact, text);
+    if (to) window.open(to, '_blank', 'noopener'); else prompt('Copy this link for the consultant:', url);
+  },
   frPdf(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, false, +el.dataset.v || 0); },
   frClient(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, true, +el.dataset.v || 0); },
   ...photoActions,

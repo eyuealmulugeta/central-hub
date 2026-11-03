@@ -517,7 +517,16 @@ function terms(c) {
       </dl>`;
   }
 
+  const con = p.consultant || {};
   return html`
+    <section class="card">
+      <h2>Consultant</h2>
+      <div class="form">
+        <label class="check"><input type="checkbox" data-chg="consultant" data-f="on" ${con.on ? 'checked' : ''}> This project has a consultant who signs the daily reports (site diary)</label>
+        ${con.on ? html`<label>Name <input data-chg="consultant" data-f="name" data-fk="con-name" value="${con.name || ''}"></label>
+        <label>Phone (WhatsApp) or email <input data-chg="consultant" data-f="contact" data-fk="con-contact" value="${con.contact || ''}"></label>` : ''}
+      </div>
+    </section>
     <section class="card">
       <h2>Client</h2>
       <div class="form">
@@ -888,6 +897,8 @@ export const changes = {
   },
   docField(el) { store.update(ws => { const d = current(ws); if (d && (el.dataset.f !== 'due' || el.value)) d[el.dataset.f] = el.value; }); },
   client(el) { store.updateProject(p => { p.client = { ...p.client, [el.dataset.f]: el.value.trim() }; }); },
+  // v0.80.0 (owner): only projects with a consultant send the daily report to sign
+  consultant(el) { store.updateProject(p => { p.consultant = { ...p.consultant, [el.dataset.f]: el.type === 'checkbox' ? el.checked : el.value.trim() }; }); },
   billing(el) {
     const f = el.dataset.f;
     let v = field(el);

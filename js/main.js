@@ -9,6 +9,7 @@ import { todayISO, downloadText } from './core/util.js';
 import { html, options, icon } from './ui/dom.js';
 import { driveConfig, saveToDrive } from './sync/drive.js';
 import { fileCopy } from './sync/filecopy.js';
+import { diaryWaiting } from './engine/diary.js';
 import { prefs } from './core/prefs.js';
 import * as home from './ui/home.js';
 import * as dashboard from './ui/dashboard.js';
@@ -295,7 +296,8 @@ function renderSidebar(name, summaries) {
   const asked = ctx && store.role !== 'site' ? ctx.ws.requests.filter(r => r.status === 'requested').length : 0;
   // what the project still needs before it runs smoothly: the essentials left on its checklist
   const toSet = ctx && store.isAdmin ? setup.itemsOf(ctx).remaining : 0;
-  const raw = { siteinstr: ctx ? siteinstr.pendingCount(ctx) : 0, setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
+  const raw = { siteinstr: ctx ? siteinstr.pendingCount(ctx) + diaryWaiting(ctx.ws.reports, ctx.today).length : 0,   // v0.80.0: + daily reports waiting for the consultant
+    setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
   // the counts that are only counts can be marked as read; alerts, chat and meetings remember what was opened
   const key = { setup: `${p?.id}:setup`, requests: `${p?.id}:requests`, trade: `${division}:trade`, contracts: `${division}:contracts`, hr: `${division}:hr`, access: 'access' };
   lastCounts = { raw, key };

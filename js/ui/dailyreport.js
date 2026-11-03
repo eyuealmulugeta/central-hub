@@ -108,6 +108,7 @@ export function dailyDoc(r, c, { office = false } = {}) {
     ${sec(9, 'Sign-off', html`<div class="dsr-sign">
       <div><span>Prepared by</span><b>${r.by || ''}</b>${sigByName(c.ws, r.by) ? html`<img class="dsr-sig" src="${sigByName(c.ws, r.by).sig}" alt="Signature">` : ''}<em>${[f.position, fmtDate(r.date)].filter(Boolean).join(' · ')}</em></div>
       <div><span>Approved by</span><b>${r.approvedBy || ''}</b><em>${r.approvedAt ? fmtDate(r.approvedAt.slice(0, 10)) : 'Signature and date'}</em></div>
+      ${r.diary?.consultant ? html`<div><span>Consultant</span><b>${r.diary.consultant.name || ''}</b><img class="dsr-sig" src="${r.diary.consultant.image}" alt="Signature"><em>${r.diary.status === 'commented' ? 'Commented' : 'Signed'} ${fmtDate(String(r.diary.consultant.at || '').slice(0, 10))}</em>${r.diary.consultant.comment ? html`<em>${r.diary.consultant.comment}</em>` : ''}</div>` : ''}
     </div>`)}
 
     ${office && m.attendance.length ? html`<section class="dsr-sec dsr-office"><h3><span>A</span>Attendance <small>for office use only</small></h3>

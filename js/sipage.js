@@ -14,6 +14,7 @@ const local = !firebaseConfig || params.has('local');
 const app = document.getElementById('app');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let WHAT = 'instruction';   // v0.80.0: or 'report'
 const when = iso => new Date(iso).toLocaleString([], { dateStyle: 'long', timeStyle: 'short' });
 const show = (title, text, cls = '') => { app.innerHTML = `<div class="card"><h1>${esc(title)}</h1><p class="${cls}">${esc(text)}</p></div>`; };
 
@@ -34,7 +35,7 @@ async function openData() {
 }
 
 const answered = rec => `<div class="card"><h2>${rec.decision === 'comment' ? 'Comment sent' : 'Signed'}</h2>
-  <p class="ok">${esc(rec.name)} ${rec.decision === 'comment' ? 'commented on' : 'signed'} this instruction on ${esc(when(rec.at))}.</p>
+  <p class="ok">${esc(rec.name)} ${rec.decision === 'comment' ? 'commented on' : 'signed'} this ${WHAT} on ${esc(when(rec.at))}.</p>
   ${rec.comment ? `<p>${esc(rec.comment)}</p>` : ''}<img class="sig" src="${esc(rec.image)}" alt="Signature">
   <p class="muted" style="margin-top:10px">You can close this page. Amistad Prefab has your answer.</p>
   <div class="row no-print"><button type="button" onclick="print()">Print this page</button></div></div>`;
@@ -46,8 +47,14 @@ async function start() {
   catch { show('The instruction could not be opened', 'Check the internet connection and open the link again.', 'bad'); return; }
   if (!x) { show('This link no longer works', 'Ask Amistad Prefab for a new one.', 'bad'); return; }
   document.title = `${x.no} · ${x.subject}`;
+  // v0.80.0: a daily report (site diary): the report as a page, shown without scripts
+  const diary = x.kind === 'diary', what = diary ? 'report' : 'instruction';
+  WHAT = what;
   const facts = [['Project', x.project], ['Date', x.date], ['From', x.from], ['To', x.to], ['Location', x.zone], ['Reply by', x.dueBy], ['Changes cost or time', x.costTime ? 'Yes' : 'No']].filter(([, v]) => v);
-  app.innerHTML = `
+  app.innerHTML = diary ? `
+    <div class="card"><h1>Daily site report</h1><p class="muted">${esc([x.project, x.date, x.no].filter(Boolean).join(' · '))}</p>
+      <iframe class="diary-frame" sandbox="" title="Daily site report" srcdoc="${esc(x.html)}"></iframe></div>
+    <div id="act"></div>` : `
     <div class="card"><h1>Site instruction ${esc(x.no)}</h1><p class="muted">${esc(x.subject)}</p>
       <dl>${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
       <div class="doc-text">${esc(x.text)}</div>
@@ -56,7 +63,7 @@ async function start() {
   const act = document.getElementById('act');
   const done = await data.answer(key).catch(() => null);
   if (done) { act.innerHTML = answered(done); return; }
-  if (x.status !== 'sent') { act.innerHTML = '<div class="card"><p class="bad">This instruction is closed. It can no longer be answered here.</p></div>'; return; }
+  if (x.status !== 'sent') { act.innerHTML = `<div class="card"><p class="bad">This ${what} is closed. It can no longer be answered here.</p></div>`; return; }
   act.innerHTML = `
     <form class="card" id="form">
       <h2>Your answer</h2>
@@ -64,8 +71,8 @@ async function start() {
       <label>Comment (optional) <textarea id="comment" maxlength="2000" placeholder="Only if something should be corrected"></textarea></label>
       <div class="pad-wrap" id="wrap"><canvas id="pad"></canvas></div>
       <div class="row"><button type="button" id="clear">Clear</button><span class="muted">Use a finger, a pen or the mouse.</span></div>
-      <label class="check"><input type="checkbox" id="agree"> <span>This is the instruction I gave. I sign it electronically; this signature has the same purpose as my handwritten one.</span></label>
-      <div class="row"><button class="primary" id="go">Sign the instruction</button><button type="button" id="note">Send only the comment</button><span id="msg" class="bad"></span></div>
+      <label class="check"><input type="checkbox" id="agree"> <span>${diary ? 'This report is a true record of the day on site.' : 'This is the instruction I gave.'} I sign it electronically; this signature has the same purpose as my handwritten one.</span></label>
+      <div class="row"><button class="primary" id="go">Sign the ${what}</button><button type="button" id="note">Send only the comment</button><span id="msg" class="bad"></span></div>
     </form>`;
   const sig = pad(document.getElementById('pad'), document.getElementById('wrap'));
   document.getElementById('clear').addEventListener('click', () => sig.clear());

@@ -17,6 +17,7 @@ import { docHead, docFoot, footText, signoff } from './print.js';
 import { checkOf, checkRecord, checkId } from '../engine/paysteps.js';
 import { openMail } from './maildialog.js';
 import { tell } from '../core/image.js';
+import { siteEngineerSig } from '../engine/sitesig.js';   // v0.73.0
 
 let at = '';            // a day inside the period on screen; '' = today
 let editing = null;     // { date, key } of the cell being corrected
@@ -216,7 +217,7 @@ export function render(c) {
         <tfoot><tr><td class="att-name">Present per day</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t">${r.rows.reduce((s, x) => s + x.absent, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.sick, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.leave, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.ot, 0) || ''}</td></tr></tfoot>
       </table></div>
       <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site. Crew photo: ✓ on time, L late, ✗ missing; the time is below, the tag and place in the tip.</p>
-      ${signoff([{ label: 'Prepared by · Site engineer', name: holder(c, /site engineer/i) }, { label: 'Approved by · Project engineer', name: holder(c, /project engineer/i) }])}
+      ${signoff([{ label: 'Prepared by · Site engineer', name: holder(c, /site engineer/i) || siteEngineerSig(c.ws)?.name || '', sig: siteEngineerSig(c.ws)?.sig || '' }, { label: 'Approved by · Project engineer', name: holder(c, /project engineer/i) }])}
       ${docFoot(footText(c, 'Attendance sheet', ref))}`
       : html`<p class="empty">Nobody is on this project's site team yet, and no attendance was reported for ${p.label}.</p>`}
     </div></section>

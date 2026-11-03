@@ -10,6 +10,7 @@ import { fmtDate, fmtFull, num } from '../core/util.js';
 import { html } from './dom.js';
 import { docFoot, footText } from './print.js';
 import { photoGrid } from './photos.js';
+import { sigByName } from '../engine/sitesig.js';   // v0.73.0
 
 const STATE = { present: 'Present', absent: 'Absent', sick: 'Sick', leave: 'Leave' };
 const pct = v => (v == null ? '' : `${num(v, 0)} %`);
@@ -105,7 +106,7 @@ export function dailyDoc(r, c, { office = false } = {}) {
     ${sec(8, 'Next day schedule', m.plan.length ? m.plan.map(z => html`<div class="dsr-zone"><b>${z.zone}</b><ul>${z.lines.map(l => html`<li>${l}</li>`)}</ul></div>`) : none('Nothing planned'))}
 
     ${sec(9, 'Sign-off', html`<div class="dsr-sign">
-      <div><span>Prepared by</span><b>${r.by || ''}</b><em>${[f.position, fmtDate(r.date)].filter(Boolean).join(' · ')}</em></div>
+      <div><span>Prepared by</span><b>${r.by || ''}</b>${sigByName(c.ws, r.by) ? html`<img class="dsr-sig" src="${sigByName(c.ws, r.by).sig}" alt="Signature">` : ''}<em>${[f.position, fmtDate(r.date)].filter(Boolean).join(' · ')}</em></div>
       <div><span>Approved by</span><b>${r.approvedBy || ''}</b><em>${r.approvedAt ? fmtDate(r.approvedAt.slice(0, 10)) : 'Signature and date'}</em></div>
     </div>`)}
 

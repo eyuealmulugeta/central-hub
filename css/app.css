@@ -1165,6 +1165,7 @@ input, textarea, select, [contenteditable], [contenteditable] * { -webkit-user-s
 .dsr-none { color: var(--muted); font-style: italic; margin: 0; }
 .dsr-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; }
 .dsr-sign div { border-top: 1px solid var(--ink); padding-top: 4px; display: flex; flex-direction: column; }
+.dsr-sign .dsr-sig { max-height: 46px; max-width: 180px; object-fit: contain; align-self: flex-start; margin: 2px 0; }   /* v0.73.0 */
 .dsr-sign span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); } .dsr-sign em { font-style: normal; font-size: 11.5px; color: var(--muted); }
 .dsr-office { break-before: page; }
 .dsr-ref { margin: 16px 0 0; font-size: 11px; color: var(--muted); }

@@ -45,7 +45,10 @@ export const signoff = (list, seal = null) => {
     ? html`<div><span>${s.label || 'Company stamp'}</span>${seal?.stamp ? html`<em class="doc-stamp has-img"><img src="${seal.stamp}" alt="Company stamp"></em>` : html`<em class="doc-stamp"></em>`}</div>`
     : seal?.sig && s.label === seal.as
       ? html`<div><span>${s.label}</span><b>${s.name || seal.name || ''}</b><img class="doc-sig-img" src="${seal.sig}" alt="Signature"><i>Signature</i><i>${s.note || 'Date'}</i></div>`
-      : html`<div><span>${s.label}</span><b>${s.name || ''}</b><i>Signature</i><i>${s.note || 'Date'}</i></div>`)}</div>`;
+      // v0.73.0: the site person's own signature from Field Report (engine/sitesig.js)
+      : s.sig
+        ? html`<div><span>${s.label}</span><b>${s.name || ''}</b><img class="doc-sig-img" src="${s.sig}" alt="Signature"><i>Signature</i><i>${s.note || 'Date'}</i></div>`
+        : html`<div><span>${s.label}</span><b>${s.name || ''}</b><i>Signature</i><i>${s.note || 'Date'}</i></div>`)}</div>`;
 };
 
 /** The footer line on screen and in the shared PDF; on paper it is in the page margin, with the page number. */

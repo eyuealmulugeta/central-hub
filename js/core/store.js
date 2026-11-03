@@ -218,6 +218,8 @@ function openWorkspace(id) {
   }
   // v0.71.0: Field Report's live attendance marks and the reporter's check; read only, never a saved section
   opened.push(api.watchCol(`projects/${id}/fieldDay`, docs => { ws.fieldDays = docs; emit(); }, () => {}));
+  // v0.73.0: the site people's signatures from Field Report (engine/sitesig.js); read only, never saved
+  opened.push(api.watchCol(`projects/${id}/fieldSigs`, docs => { ws.fieldSigs = docs; emit(); }, () => {}));
 }
 
 function setProjects(list) {

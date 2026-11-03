@@ -18,6 +18,7 @@ import { amountWords } from '../engine/words.js';
 import { docRef } from '../engine/docref.js';
 import { archiveDoc } from './archive.js';
 import { sealBar, sealOf } from './seal.js';
+import { siteEngineerSig, reporterSig } from '../engine/sitesig.js';   // v0.73.0
 
 let tab = 'docs';
 let mode = null;     // invoices | quotations | status: what the menu opened this screen as (null = everything)
@@ -211,6 +212,9 @@ function weeklyParts(d, dropHead, drop) {
  * Progress report drawn from a snapshot (reportSnapshot). `doc` is the saved
  * client report, if any; while it is a draft its lines can be left out.
  */
+/** v0.73.0 (owner): the weekly report is prepared by the site person who sent most of the week's reports, with their signature. */
+const weeklyBy = (c, d) => { const s = reporterSig(c.ws, d.from, d.to); return { label: 'Prepared by', name: s?.name || '', sig: s?.sig || '' }; };
+
 function reportPaper(c, kind, d, doc) {
   const range = d.from === d.to ? fmtFull(d.to) : `${fmtFull(d.from)} to ${fmtFull(d.to)}`;
   const outlook = d.slip > 0 ? `${d.slip} working days behind plan` : d.slip < 0 ? `${-d.slip} working days ahead of plan` : 'on plan';
@@ -276,7 +280,7 @@ function reportPaper(c, kind, d, doc) {
 
       <h3>Schedule</h3>
       ${miniGantt(d, d.asOf)}
-      ${signoff([{ label: REPORT_SIGN[0] }, { label: REPORT_SIGN[1], name: doc?.status === 'issued' ? doc.approvedBy : '', note: doc?.status === 'issued' ? fmtFull(doc.approvedAt) : 'Date' }], doc?.status === 'issued' ? sealOf(`doc:${doc.id}`) : null)}
+      ${signoff([d.weekly ? weeklyBy(c, d) : { label: REPORT_SIGN[0] }, { label: REPORT_SIGN[1], name: doc?.status === 'issued' ? doc.approvedBy : '', note: doc?.status === 'issued' ? fmtFull(doc.approvedAt) : 'Date' }], doc?.status === 'issued' ? sealOf(`doc:${doc.id}`) : null)}
       ${docFoot(foot)}
     </article>`;
 }
@@ -344,7 +348,7 @@ function claimPaper(c) {
         </table>
         <p class="muted p-notes">A working day is ${d.hoursPerDay} hours. This is a record of what the site reported; it is not itself a notice under the contract.</p>`
       : html`<p class="muted">No itemised delays were reported in this period. They come from the Delays section of Field Report, version 1.13 or later.</p>`}
-      ${signoff([{ label: 'Prepared by · Site engineer' }, { label: 'Checked by · Project engineer' }])}
+      ${signoff([{ label: 'Prepared by · Site engineer', name: siteEngineerSig(c.ws)?.name || '', sig: siteEngineerSig(c.ws)?.sig || '' }, { label: 'Checked by · Project engineer' }])}
       ${docFoot(footText(c, 'Record of delays', refOf(c, 'DLY', to)))}
     </article>`;
 }

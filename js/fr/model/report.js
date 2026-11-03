@@ -7,6 +7,15 @@ import { endStatus } from './end.js';
 
 /** 2.27.0: the step a screen belongs to (a work item is Work done, a delivery Materials...). */
 const STEP_OF = { att: 'crew', item: 'work', photo: 'photos', delivery: 'materials', delay: 'safety', request: 'end', sign: 'send', me: 'send' };
+/**
+ * 2.35.0 (3 Nov): with the data route Both, every report sent in the last 7 days needs its database copy. A sent
+ * report without `dbAt` (the database's answer) is sent there again once the phone is signed in. Keys, oldest first.
+ */
+export const DB_DAYS = 7;
+export const dbWaiting = (drafts, now = Date.now()) => Object.keys(drafts || {})
+  .filter(k => { const r = drafts[k] || {}; return r.sentAt && !r.dbAt && !r.nowork && now - r.sentAt < DB_DAYS * 864e5; })
+  .sort((a, b) => drafts[a].sentAt - drafts[b].sentAt);
+
 export const stepOfScreen = h => STEP_OF[h] || (STEPS.some(s => s.id === h) ? h : '');
 /** 2.27.0: "Eyob · 02:51": who last changed a step and when (Addis time). */
 export const stampLine = st => (st && st.at > 1e12 ? [st.by, new Date(st.at).toLocaleTimeString('en-GB', { timeZone: 'Africa/Addis_Ababa', hour: '2-digit', minute: '2-digit' })].filter(Boolean).join(' · ') : '');

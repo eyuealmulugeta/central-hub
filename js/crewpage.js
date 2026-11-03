@@ -49,7 +49,9 @@ const blank = () => ({ doc: 'fayda', nationality: 'Ethiopian' });
 const field = (label, key, type = 'text', extra = '') => `<label>${esc(label)}<input type="${type}" data-k="${key}" value="${esc(form[key] || '')}" ${extra}></label>`;
 const choose = (label, key, list) => `<label>${esc(label)}<select data-k="${key}"><option value="">Choose…</option>${list.map(([v, t]) => `<option value="${esc(v)}" ${form[key] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
 const shot = (label, key, capture, cls = '') => `<div class="shot ${cls}">${esc(label)}${form[key] ? `<img src="${form[key]}" alt="${esc(label)}">` : '<div class="empty">No picture yet</div>'}
-  <label class="btn">${form[key] ? 'Take again' : 'Take picture'}<input type="file" accept="image/*" capture="${capture}" data-shot="${key}" hidden></label></div>`;
+  <div class="pick"><label class="btn">${form[key] ? 'Take again' : 'Camera'}<input type="file" accept="image/*" capture="${capture}" data-shot="${key}" hidden></label>` +
+  // v0.83.0 (owner): a picture already on the phone (no capture: the phone's gallery or files)
+  `<label class="btn">Gallery<input type="file" accept="image/*" data-shot="${key}" hidden></label></div></div>`;
 
 function draw() {
   const fayda = form.doc !== 'passport';

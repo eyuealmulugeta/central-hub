@@ -12,10 +12,10 @@ export const typeName = id => DOC_TYPES.find(([k]) => k === id)?.[1] || 'Other';
 
 const clean = s => String(s ?? '').replace(/[\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** The Drive folder of a document of `date`: "2026/11/MJO", or "2026/11/Company" when it has no project. */
-export const archiveFolder = (date, code) => {
+/** v0.79.0: the Drive folder of a document, Project / Category / Month: "MJO/Invoice/2026-11" ("Company/..." without a project). */
+export const archiveFolder = (date, code, category = 'Other') => {
   const [y, m] = String(date || '').split('-');
-  return [y || '0000', m || '00', clean(code).replace(/[^\w \-]/g, '').trim() || 'Company'].join('/');
+  return [clean(code).replace(/[^\w \-]/g, '').trim() || 'Company', clean(category) || 'Other', `${y || '0000'}-${m || '00'}`].join('/');
 };
 
 /** The standard file name, without ".pdf": "2026-11-02 MJO Invoice INV-012 Steel works". At most 120 letters. */

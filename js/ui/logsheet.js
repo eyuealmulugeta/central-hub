@@ -60,7 +60,7 @@ export function render(c) {
         <input name="url" placeholder="or a Google Drive link" aria-label="Google Drive link">
         <button class="btn primary">Add to the log sheet</button>
       </form>
-      <p class="muted">A file from this computer is saved to Google Drive in ${archiveFolder(c.today, code)} with the standard name.${mailReady() ? '' : ' Google Drive is not set up on this computer (Backup), so only a Drive link can be added here.'}</p>
+      <p class="muted">A file from this computer is saved to Google Drive in ${archiveFolder(c.today, code, 'type')} (project / document type / month) with the standard name.${mailReady() ? '' : ' Google Drive is not set up on this computer (Backup), so only a Drive link can be added here.'}</p>
     </section>`}`;
 }
 
@@ -103,7 +103,7 @@ export const submits = {
       const code = company ? 'Company' : projectCode(c.project);
       const ext = (String(file.name).match(/\.[a-z0-9]{1,5}$/i) || [''])[0];
       readBase64(file)
-        .then(data => saveBase64(archiveName({ ...fields, code }) + ext, data, file.type || 'application/octet-stream', { folder: archiveFolder(fields.date, code) }))
+        .then(data => saveBase64(archiveName({ ...fields, code }) + ext, data, file.type || 'application/octet-stream', { folder: archiveFolder(fields.date, code, typeName(fields.type)) }))
         .then(out => { setFile(row.id, out, company); tell(`✓ ${noText(row)} saved to Google Drive.`); })
         .catch(err => tell(`${noText(row)} is logged, but the file was not saved: ${err?.message || err}`));
     }

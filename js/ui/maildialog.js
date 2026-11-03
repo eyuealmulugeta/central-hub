@@ -6,6 +6,7 @@
 import { sendMail, mailReady, mailtoLink, readPdf, MAX_FILES, MAX_FILE_BYTES } from '../sync/mail.js';
 import { driveConfig } from '../sync/drive.js';
 import { makePdf } from '../sync/share.js';
+import { fileCopy } from '../sync/filecopy.js';
 import { store } from '../core/store.js';
 import { todayISO } from '../core/util.js';
 import { resolveList, suggestions, remember, defaultsFor, splitList } from '../engine/contacts.js';
@@ -131,6 +132,8 @@ function wire() {
       const out = await sendMail({ ...v, replyTo, fromName, html, filename: job.filename, files: [...(ownPdf ? [ownPdf] : []), ...picked].map(({ name, dataBase64 }) => ({ name, dataBase64 })), ics: job.ics || null });
       $('dlg-mail').close();
       keepRecipients(v);
+      // v0.79.0: a copy in Drive, Project / Category / Month (documents that archive themselves are left out)
+      if (!job.archived) fileCopy(job.sheet?.(), ownPdf);
       job.onSent?.({ to: v.to, cc: v.cc, attached: out.attached || '' });
     } catch (err) {
       status(err.message, 'bad');

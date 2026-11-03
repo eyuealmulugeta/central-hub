@@ -796,6 +796,7 @@ export const actions = {
       filename: name.replace(/[\\/:*?"<>|]/g, '-'),
       getHtml: () => paperHtml(paper, name),
       sheet: () => paper,
+      archived: true,
       onSent({ to }) {
         notice = `Sent to ${to}.`;
         // v0.51.0: archived to Drive as a PDF and logged in the project's Log sheet

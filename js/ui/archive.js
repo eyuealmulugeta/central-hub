@@ -7,7 +7,7 @@ import { uid } from '../core/util.js';
 import { saveToDrive } from '../sync/drive.js';
 import { mailReady } from '../sync/mail.js';
 import { projectCode } from '../engine/docref.js';
-import { logRow, archiveFolder, archiveName } from '../engine/logsheet.js';
+import { logRow, archiveFolder, archiveName, typeName } from '../engine/logsheet.js';
 import { tell } from '../core/image.js';
 
 export const me = () => store.profile?.name || store.user?.name || store.user?.email || '';
@@ -40,7 +40,7 @@ export async function archiveDoc({ c, company = false, type, reference = '', sub
   if (!mailReady()) { tell('Logged in the Log sheet. The PDF was not archived: Google Drive is not set up on this computer (Backup).'); return row; }
   try {
     const name = archiveName({ date, code, type, reference, subject });
-    const out = await saveToDrive(`${name}.html`, await getHtml(), 'text/html', { folder: archiveFolder(date, code), pdf: true });
+    const out = await saveToDrive(`${name}.html`, await getHtml(), 'text/html', { folder: archiveFolder(date, code, typeName(type)), pdf: true });
     setFile(row.id, out, company);
   } catch (err) { tell(`Logged in the Log sheet, but the PDF was not archived: ${err?.message || err}`); }
   return row;

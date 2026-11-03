@@ -17,9 +17,9 @@ export async function sendPayReport({ name, csv, subject }) {
   if (!mailReady()) { tell('Approved. The pay report was not saved or sent: Google Drive is not set up on this computer (Backup).'); return; }
   const to = reportList(store.global, store.isAdmin ? store.user?.email || '' : '');
   try {
-    // v0.51.0: filed under year / month / Company and logged in the company's Log sheet
+    // v0.51.0: filed under Company / Pay report / month (v0.79.0) and logged in the company's Log sheet
     const date = new Date().toISOString().slice(0, 10);
-    const out = await saveToDrive(`${name}.csv`, csv, 'text/csv', { folder: archiveFolder(date, 'Company') });
+    const out = await saveToDrive(`${name}.csv`, csv, 'text/csv', { folder: archiveFolder(date, 'Company', 'Pay report') });
     const row = addRow({ date, type: 'payreport', subject: subject || name, projectId: '', source: 'auto' }, true);
     if (row) setFile(row.id, out, true);
     if (to.length) await sendMail({ to: to.join(','), subject, message: `${subject}\n\nThe report is attached and saved to Google Drive as "${name}.csv".`, html: pageHtml(tableOf(csv), subject), filename: name });

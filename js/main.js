@@ -8,6 +8,7 @@ import { derive } from './core/derive.js';
 import { todayISO, downloadText } from './core/util.js';
 import { html, options, icon } from './ui/dom.js';
 import { driveConfig, saveToDrive } from './sync/drive.js';
+import { fileCopy } from './sync/filecopy.js';
 import { prefs } from './core/prefs.js';
 import * as home from './ui/home.js';
 import * as dashboard from './ui/dashboard.js';
@@ -612,6 +613,8 @@ $('#division').addEventListener('click', e => {
 // The file is made first and the share sheet opens on a second tap, because a browser only opens it
 // for a tap that has just happened, and making the PDF can take a few seconds.
 let sharing = false;
+// v0.79.0: a printed sheet is copied to Drive too (Project / Category / Month)
+window.addEventListener('beforeprint', () => { fileCopy(root.querySelector('.paper')); });
 // v0.58.0: Save as PDF: the same PDF file as for sending, downloaded to the computer or phone
 root.addEventListener('click', async e => {
   const button = e.target.closest('[data-savepdf]');
@@ -624,6 +627,7 @@ root.addEventListener('click', async e => {
     const file = await makePdf(paper, describePaper(paper).name);
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(file), download: file.name });
     document.body.append(a); a.click(); a.remove();
+    fileCopy(paper, file);
     setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
     toast(`${file.name} saved.`);
   } catch (err) {
@@ -644,6 +648,7 @@ root.addEventListener('click', async e => {
     const info = describePaper(paper);
     const file = await makePdf(paper, info.name);
     showShareBar(file, button.dataset.text || info.text);
+    fileCopy(paper, file);
   } catch (err) {
     diagnostics.record(err, 'share');
     toast(`The PDF could not be made (${err.message}). Use Print, then Save as PDF.`);

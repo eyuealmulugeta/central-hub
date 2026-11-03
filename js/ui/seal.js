@@ -17,9 +17,19 @@ export const stampPng = () => (store.company?.seals || []).find(s => s.id === 's
 /** Who may add them: whoever prints outgoing documents (the Admin and Office). */
 export const maySeal = () => store.isAdmin || store.role === 'office';
 const myName = () => store.profile?.name || store.user?.name || '';
-/** v0.81.0 (owner, 3 Nov): the Admin and the GM sign under General manager only, where a document has that box. */
-const topSigner = () => store.isAdmin || (store.ranks || []).includes('general_manager');
-export const signLabels = (labels, top = topSigner()) => { const gm = (labels || []).filter(l => /general manager/i.test(l)); return top && gm.length ? gm : labels || []; };
+/**
+ * v0.81.0 (owner, 3 Nov): the Admin and the GM sign under General manager only, where a document has that box.
+ * v0.82.0 (owner): everyone signs under their own title: a Project engineer under Project engineer, a Site engineer
+ * under Site engineer. A document with no box of the signer's title offers all its boxes.
+ */
+const TITLE_OF = [['general_manager', /general manager/i], ['project_manager', /project engineer/i], ['site_engineer', /site engineer/i]];
+const myRank = () => (store.isAdmin ? 'general_manager' : TITLE_OF.map(([k]) => k).find(k => (store.ranks || []).includes(k)) || '');
+export const signLabels = (labels, rank = myRank()) => {
+  if (rank === true) rank = 'general_manager';   // v0.81.0 callers
+  if (rank === false) rank = '';
+  const re = (TITLE_OF.find(([k]) => k === rank) || [])[1], own = re ? (labels || []).filter(l => re.test(l)) : [];
+  return own.length ? own : labels || [];
+};
 
 /** What signoff() adds to the document `key`, or null while it is not ticked. */
 export function sealOf(key) {

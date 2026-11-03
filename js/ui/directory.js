@@ -38,19 +38,16 @@ export const directoryOf = (team, projectName) => team.filter(m => m.active !== 
 
 const full = () => store.role === 'owner';
 
-// v0.74.0 (owner): the project's Site engineer or Project engineer corrects a crew member's name, trade and phone
-// (the Manpower Directory gets it from the server). Field Report's SE, PE and GM do the same there.
-export const mayFixCrew = (role, ranks) => role === 'site' && (ranks || []).some(r => r === 'site_engineer' || r === 'project_manager');
+// v0.74.0: crew corrected in Field Report by the project's SE, PE or GM (v0.75.0: not in Central Hub)
 /** Who changed a crew member last, and when, for the lists. */
 export const editedLine = m => (m.editedBy && m.editedAt ? `Changed by ${m.editedBy} · ${String(m.editedAt).slice(0, 10)}` : '');
-let fixing = null;
 
 export function render(c) {
   return full() ? manpower(c) : teamList(c);
 }
 
 function teamList(c) {
-  // v0.74.0: with the record's id and who changed it last; the phone only inside the Edit form
+  // v0.74.0: with who changed it last (in Field Report)
   const all = c.ws.team.filter(m => m.active !== false && String(m.name || '').trim())
     .map(m => ({ ...directoryOf([m], c.project.name)[0], id: m.id, contact: m.contact || '', editedBy: m.editedBy || '', editedAt: m.editedAt || '' }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -62,13 +59,8 @@ function teamList(c) {
       <span class="grow"></span><span class="muted">${shown.length} of ${all.length}</span></div>
     <p class="muted">The people working on ${c.project.name}. Choose another project at the top to see its team.</p>
     ${shown.length ? html`<table class="table">
-      <thead><tr><th>Name</th><th>Job position</th><th>Project</th>${mayFixCrew(store.role, store.ranks) ? html`<th></th>` : ''}</tr></thead>
-      <tbody>${shown.map(r => fixing === r.id ? html`<tr><td colspan="4"><form data-form="crewFix" class="entry" data-id="${r.id}">
-          <input name="name" value="${r.name}" required aria-label="Name"><input name="role" value="${r.position}" placeholder="Trade or position" aria-label="Trade">
-          <input name="phone" value="${r.contact.includes('@') ? '' : r.contact}" placeholder="Phone" aria-label="Phone">
-          <button class="btn primary small">Save</button><button type="button" class="btn ghost small" data-act="crewFix" data-id="">Cancel</button></form></td></tr>`
-        : html`<tr><td><b>${r.name}</b>${editedLine(r) ? html`<br><span class="muted small">${editedLine(r)}</span>` : ''}</td><td>${r.position}</td><td>${r.project}</td>
-          ${mayFixCrew(store.role, store.ranks) ? html`<td class="r"><button type="button" class="btn ghost small" data-act="crewFix" data-id="${r.id}">Edit</button></td>` : ''}</tr>`)}</tbody>
+      <thead><tr><th>Name</th><th>Job position</th><th>Project</th></tr></thead>
+      <tbody>${shown.map(r => html`<tr><td><b>${r.name}</b>${editedLine(r) ? html`<br><span class="muted small">${editedLine(r)}</span>` : ''}</td><td>${r.position}</td><td>${r.project}</td></tr>`)}</tbody>
     </table>` : html`<p class="empty">${all.length ? 'Nobody matches.' : 'Nobody is on this project yet.'}</p>`}
   </section>`;
 }
@@ -219,7 +211,6 @@ function follow(person, on, off, a) {
 }
 
 export const actions = {
-  crewFix(el) { fixing = el.dataset.id || null; },
   mpTable(el) { table = el.dataset.t; filt.position = ''; filt.tier = ''; },
   mpAdd(el, c) {
     const name = (typeof prompt === 'function' ? prompt('Full name of the new person:') : '') || '';
@@ -322,18 +313,6 @@ export const changes = {
 };
 
 export const submits = {
-  // v0.74.0: a crew correction by the project's SE or PE (rules: name, role, contact only, in their own name)
-  crewFix(fd, c, form) {
-    const id = form?.dataset.id || fixing, name = String(fd.get('name') || '').trim();
-    if (!id || !name) return false;
-    const phone = String(fd.get('phone') || '').trim(), role = String(fd.get('role') || '').trim();
-    store.update(ws => {
-      const m = ws.team.find(x => x.id === id);
-      if (!m) return;
-      Object.assign(m, { name, role, ...(phone ? { contact: phone } : {}), editedBy: store.user?.email || '', editedAt: new Date().toISOString(), crewSync: true });
-    });
-    fixing = null;
-  },
   /** v0.57.0: a new position or trade, under the tier chosen, from the Positions & trades tab. */
   mpNewPos(fd) {
     const name = String(fd.get('name') || '').trim().replace(/\s+/g, ' ');

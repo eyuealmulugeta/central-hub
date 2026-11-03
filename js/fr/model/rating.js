@@ -48,10 +48,12 @@ export const thirdOf = hhmm => { const m = mins(hhmm); return m == null ? '' : m
 export const addisTime = ms => addis(ms);
 
 /**
- * 2.27.0 Engagement (owner, 2 Nov): four checks, each worth a quarter: photos spread over morning, midday and afternoon;
- * most parts filled in (6 of 8); attendance marked on time (within an hour of the start); the report sent before 18:00.
- * A report not sent yet counts as on time while it is before 18:00. Each check says what it found.
+ * 2.27.0 Engagement (owner, 2 Nov): checks of equal weight: photos spread over morning, midday and afternoon;
+ * most parts filled in (6 of 8); attendance marked on time (within an hour of the start); the report sent before 17:30
+ * the same day (2.37.0, owner: was 18:00; a report not sent yet is a ✗); 2.37.0: progress entered, every work item
+ * with a quantity or a % done. Each check says what it found.
  */
+export const SENT_BY = 1050;   // 17:30
 export function engageChecks(r, nowMs = Date.now()) {
   const thirds = [...new Set((r.photos || []).map(p => thirdOf(p.at)).filter(Boolean))];
   const d = r.done || {};
@@ -60,18 +62,20 @@ export function engageChecks(r, nowMs = Date.now()) {
   const startM = mins(r.start && r.start.start) ?? 480;
   const crewM = crewAt ? mins(addis(crewAt)) : null;
   const sentM = mins(addis(r.sentAt || nowMs));
+  const items = r.items || [], withQty = items.filter(i => Number(i.qty) > 0).length;
   return [
     { k: 'photos', label: 'Photos spread over morning, midday and afternoon', v: thirds.length / 3, why: thirds.length ? thirds.join(', ') : 'No photos' },
     { k: 'filled', label: 'Most sections filled in', v: filled >= 6 ? 1 : filled / 6, why: `${filled} of 8` },
     { k: 'att', label: 'Attendance marked on time', v: crewM == null ? 0 : crewM <= startM + 60 ? 1 : 0, why: crewM == null ? 'Not marked' : `at ${addis(crewAt)}` },
-    { k: 'sent', label: 'Report sent before 18:00', v: sentM != null && sentM < 1080 ? 1 : 0, why: r.sentAt ? `at ${addis(r.sentAt)}` : sentM < 1080 ? 'Not sent yet' : 'Not sent by 18:00' },
+    { k: 'sent', label: 'Report sent before 17:30', v: r.sentAt && sentM != null && sentM < SENT_BY ? 1 : 0, why: r.sentAt ? `at ${addis(r.sentAt)}` : sentM < SENT_BY ? 'Not sent yet' : 'Not sent by 17:30' },
+    { k: 'progress', label: 'Progress entered', v: items.length ? withQty / items.length : 0, why: items.length ? `${withQty} of ${items.length} work items with a quantity or %` : 'No work items' },
   ];
 }
 
-/** Engagement: the owner's four checks (engageChecks), out of 5. (Before 2.27.0: the half hours worked in.) */
+/** Engagement: the owner's checks (engageChecks), out of 5. (Before 2.27.0: the half hours worked in.) */
 export function engageScore(r, nowMs = Date.now()) {
   const cs = engageChecks(r, nowMs);
-  return { v: round(5 * cs.reduce((n, x) => n + x.v, 0) / cs.length), checks: cs, why: `${cs.filter(x => x.v >= 1).length} of 4 checks met` };
+  return { v: round(5 * cs.reduce((n, x) => n + x.v, 0) / cs.length), checks: cs, why: `${cs.filter(x => x.v >= 1).length} of ${cs.length} checks met` };
 }
 
 /** Free text written in the report. */
@@ -102,5 +106,5 @@ export const RATE_WORD = { photos: 'Photo times', data: 'Data strength', engage:
 /** "Rating 4.2/5 · Photo times 5 · Data strength 4 · Engagement 3.3 · Grammar 5" */
 export const rateLine = x => `Rating ${x.v}/5 · ${Object.entries(x.parts).map(([k, p]) => `${RATE_WORD[k]} ${p.v}`).join(' · ')}`;
 
-/** 2.27.0: the engagement checks as lines, "✓ Report sent before 18:00 · at 17:12", shown whenever a report is sent or opened. */
+/** 2.27.0: the engagement checks as lines, "✓ Report sent before 17:30 · at 17:12", shown whenever a report is sent or opened. */
 export const checkLines = x => ((x.parts.engage || {}).checks || []).map(c => `${c.v >= 1 ? '✓' : c.v > 0 ? '◐' : '✗'} ${c.label} · ${c.why}`);

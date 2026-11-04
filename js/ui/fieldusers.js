@@ -257,7 +257,7 @@ function routeCard() {
 function compareBox() {
   const day = d => (d ? d.slice(5).split('-').reverse().join('/') : '–');
   return html`<h4>Compare <span class="muted">a week with nothing in the last column means the database can take over</span></h4>
-    <div class="actions left"><button class="btn small" type="button" data-act="fuCompare" ${cmpBusy ? 'disabled' : ''}>${cmpBusy ? 'Reading…' : cmp ? 'Compare again' : 'Compare'}</button>${cmp ? html`<span class="muted small">Read ${when(cmp.at)}</span>` : ''}</div>
+    <div class="actions left"><button class="btn small" type="button" data-act="fuCompare" ${cmpBusy ? 'disabled' : ''}>${cmpBusy ? 'Reading…' : cmp ? 'Compare again' : 'Compare'}</button>${cmp ? html`<span class="muted small">Read ${when(cmp.at)}${store.fieldRouteSince ? `. Counted from ${day(store.fieldRouteSince)}, the day Both was switched on` : ''}</span>` : ''}</div>
     ${cmp ? html`<div class="table-wrap"><table class="table compact"><thead><tr><th>Project</th><th>Since</th><th>Script</th><th>Database</th><th>Differences</th></tr></thead><tbody>
       ${cmp.rows.map(({ p, c }) => html`<tr><td>${p.name}</td><td>${day(c.from)}</td><td>${c.script.n} · last ${day(c.script.last)}</td><td>${c.db.n} · last ${day(c.db.last)}</td>
         <td>${!c.from ? html`<span class="muted">No report in the database yet</span>` : clean(c) ? html`<span class="chip ok">None</span>` : html`<span class="bad small">${[
@@ -272,7 +272,7 @@ async function compareLoad() {
   try {
     const ps = store.projects.filter(p => p.fieldCode);
     const rows = [];
-    for (const p of ps) rows.push({ p, c: compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`)) });
+    for (const p of ps) rows.push({ p, c: compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`), store.fieldRouteSince) });
     cmp = { at: Date.now(), rows };
   } catch (e) { tell(`Compare did not load: ${e.message}`); }
   cmpBusy = false; store.notify();

@@ -39,6 +39,18 @@ export function monthEnd(month) {
   return fromDay(toDay(`${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`) - 1);
 }
 
+// v0.86.0 (owner): a person's pay month runs from their joining date and the salary is due on the same date the next
+// month (joined 7 Sep: 7 Sep to 6 Oct, due 7 Oct). The run of a month holds the periods that start in it. Nobody with
+// a joining date: the calendar month, due on the 1st of the next. A day the month does not have is its last day.
+const lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+const onDay = (y, m, d) => { if (m > 12) { y += 1; m -= 12; } return `${y}-${String(m).padStart(2, '0')}-${String(Math.min(d, lastDay(y, m))).padStart(2, '0')}`; };
+export function payPeriod(staff, month) {
+  const [y, m] = String(month).split('-').map(Number);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(staff?.started || '')) ? Number(staff.started.slice(8)) : 1;
+  const due = onDay(y, m + 1, d);
+  return { from: onDay(y, m, d), to: fromDay(toDay(due) - 1), due };
+}
+
 /** Was this person employed at any time in the month? */
 export function employedIn(staff, month) {
   if (staff.started && staff.started > monthEnd(month)) return false;
@@ -50,11 +62,11 @@ export function employedIn(staff, month) {
  * Days present and overtime hours of one person in the month, from the attendance in daily reports.
  * A person is found by their name (any case) or by the email of a team member of the same name.
  */
-export function attendanceFor(reports, month, staff) {
+export function attendanceFor(reports, month, staff, period = null) {
   const name = String(staff.name || '').trim().toLowerCase();
   let days = 0, ot = 0, absent = 0, recorded = 0;
   for (const r of reports) {
-    if (!String(r.date).startsWith(month)) continue;
+    if (period ? r.date < period.from || r.date > period.to : !String(r.date).startsWith(month)) continue;   // v0.86.0: the person's pay period
     for (const a of r.field?.attendance || []) {
       if (!name || String(a.name || '').trim().toLowerCase() !== name) continue;
       const st = a.state || 'present';
@@ -68,10 +80,12 @@ export function attendanceFor(reports, month, staff) {
 
 /** One empty line for a person: how they are paid, and the figures typed or filled in for the month. */
 export function newLine(staff, month, reports = []) {
-  const a = payOn(staff, monthEnd(month));   // v0.48.0: the pay in force that month (pay history), never today's for an old month
-  const att = attendanceFor(reports, month, staff);
+  const per = payPeriod(staff, month);
+  const a = payOn(staff, per.to);   // v0.48.0: the pay in force that month (pay history), never today's for an old month
+  const att = attendanceFor(reports, month, staff, per);
   return {
     id: `pl-${staff.id}`, staffId: staff.id, name: staff.name || '', title: staff.title || '',
+    from: per.from, to: per.to, due: per.due,   // v0.86.0
     currency: a.currency || '', payPer: a.payPer || 'month', rate: num(a.pay),
     days: att.days, ot: att.ot, unpaidDays: 0,   // v0.85.0: the 90% rule replaces taking off each absent day (the Admin may still type unpaid days)
     ...monthRule(a.payPer || 'month', att),

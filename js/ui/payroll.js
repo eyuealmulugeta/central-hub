@@ -5,7 +5,7 @@
 import { usdOf } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import {
-  DEFAULT_SETTINGS, statusLabel, monthLabel, newLines, newLine, attendanceFor, compute, totals, warnings, csvRows,
+  DEFAULT_SETTINGS, monthRule, statusLabel, monthLabel, newLines, newLine, attendanceFor, compute, totals, warnings, csvRows,
 } from '../engine/payroll.js';
 import { uid, money, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
@@ -123,7 +123,7 @@ function detail(run, c) {
           return html`<tr>
             <td><b>${l.name}</b><br><span class="muted">${l.title || ''}</span>${l.fromAttendance ? html` ${chip('attendance', 'ok')}` : ''}</td>
             <td class="nowrap">${m(l.rate, l.currency)}<br><span class="muted">${PER[l.payPer] || ''}</span></td>
-            <td class="r">${num(l, 'days')}</td><td class="r">${num(l, 'ot')}</td>
+            <td class="r">${num(l, 'days')}${l.byDays ? html`<br><span class="muted">by days · ${l.share}%</span>` : ''}</td><td class="r">${num(l, 'ot')}</td>
             <td class="r">${l.payPer === 'month' ? num(l, 'unpaidDays') : html`<span class="muted">—</span>`}</td>
             <td class="r">${num(l, 'allowances')}</td><td class="r">${num(l, 'tax')}</td><td class="r">${num(l, 'other')}</td>
             <td class="r nowrap"><b>${m(r.net, l.currency)}</b></td>
@@ -160,7 +160,7 @@ function slipPaper(run, l, c) {
     ${docHead(c, { title: 'Payslip', sub: `${monthLabel(run.month)} · confidential`, ref, status: statusLabel(run.status), tone: run.status === 'draft' ? 'warn' : 'ok', facts: [['Employee', l.name], ['Position', l.title || '—'], ['Month', monthLabel(run.month)], ['Paid', basis]] })}
     <div class="slip-two">
       <div><h3 class="pay-k">Earnings</h3><table class="pay-t"><tbody>
-        <tr><td>${l.payPer === 'month' ? 'Monthly wage' : l.payPer === 'day' ? `${l.days} days at ${m(l.rate, l.currency)}` : `${l.days} days of ${run.settings.hoursPerDay} hours at ${m(l.rate, l.currency)} per hour`}${l.unpaidDays ? ` (${l.unpaidDays} unpaid days taken off)` : ''}</td><td class="r">${m(r.basic, l.currency)}</td></tr>
+        <tr><td>${l.payPer === 'month' ? (l.byDays ? `${l.days} days at ${m(l.rate / 30, l.currency)} (attendance ${l.share}%, under 90%)` : 'Monthly wage') : l.payPer === 'day' ? `${l.days} days at ${m(l.rate, l.currency)}` : `${l.days} days of ${run.settings.hoursPerDay} hours at ${m(l.rate, l.currency)} per hour`}${l.unpaidDays ? ` (${l.unpaidDays} unpaid days taken off)` : ''}</td><td class="r">${m(r.basic, l.currency)}</td></tr>
         ${row(`Overtime, ${l.ot} hours`, r.overtime)}${row('Allowances', r.allowances)}
       </tbody><tfoot><tr><td>Gross pay</td><td class="r">${m(r.gross, l.currency)}</td></tr></tfoot></table></div>
       <div><h3 class="pay-k">Deductions</h3><table class="pay-t"><tbody>
@@ -210,7 +210,7 @@ export const actions = {
         const staff = co.staff.find(p => p.id === l.staffId);
         if (!staff) continue;
         const a = attendanceFor(sheetReports(c), run.month, staff);
-        if (a.found) { l.days = a.days; l.ot = a.ot; l.fromAttendance = true; }
+        if (a.found) { l.days = a.days; l.ot = a.ot; l.fromAttendance = true; Object.assign(l, monthRule(l.payPer, a)); }
       }
     });
     notice = `Days and overtime read again from the daily reports of ${c.project.name}.`;

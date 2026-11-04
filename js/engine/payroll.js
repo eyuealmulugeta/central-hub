@@ -15,6 +15,13 @@ import { STEPS, bandTax, payOn } from './paysteps.js';
 
 export const DEFAULT_SETTINGS = { hoursPerDay: 10, otMultiplier: 1.5, monthDays: 30, pensionEmployee: 0, pensionEmployer: 0 };
 
+// v0.85.0 (owner): a monthly wage is paid in full when at least 90% of the person's attendance records in the month are
+// not "absent"; below that it becomes a day wage (monthly wage / 30) x the days present on the approved sheet.
+export const FULL_MONTH_PCT = 90;
+/** The share of the records that are not absent (present, sick, on leave), in %, or null with no record. */
+export const presentShare = ({ recorded = 0, absent = 0 } = {}) => (recorded > 0 ? Math.round((recorded - absent) / recorded * 1000) / 10 : null);
+export const byDaysOf = att => { const p = presentShare(att); return p !== null && p < FULL_MONTH_PCT; };
+
 export const STATUSES = STEPS;   // v0.48.0: Draft, Checked, Approved, Paid, Payslips shared
 export const statusLabel = id => STATUSES.find(([k]) => k === id)?.[1] || id;
 
@@ -45,16 +52,18 @@ export function employedIn(staff, month) {
  */
 export function attendanceFor(reports, month, staff) {
   const name = String(staff.name || '').trim().toLowerCase();
-  let days = 0, ot = 0, absent = 0;
+  let days = 0, ot = 0, absent = 0, recorded = 0;
   for (const r of reports) {
     if (!String(r.date).startsWith(month)) continue;
     for (const a of r.field?.attendance || []) {
       if (!name || String(a.name || '').trim().toLowerCase() !== name) continue;
-      if ((a.state || 'present') === 'present') days++; else if (a.state === 'absent') absent++;
+      const st = a.state || 'present';
+      if (st === 'present') days++; else if (st === 'absent') absent++;
+      if (['present', 'absent', 'sick', 'leave'].includes(st)) recorded++;
       ot += num(a.ot);
     }
   }
-  return { days, ot, absent, found: days + absent > 0 || ot > 0 };
+  return { days, ot, absent, recorded, found: days + absent > 0 || ot > 0 };
 }
 
 /** One empty line for a person: how they are paid, and the figures typed or filled in for the month. */
@@ -64,11 +73,15 @@ export function newLine(staff, month, reports = []) {
   return {
     id: `pl-${staff.id}`, staffId: staff.id, name: staff.name || '', title: staff.title || '',
     currency: a.currency || '', payPer: a.payPer || 'month', rate: num(a.pay),
-    days: att.days, ot: att.ot, unpaidDays: (a.payPer || 'month') === 'month' ? att.absent : 0,   // v0.50.0: absent days of the monthly sheet are unpaid (a draft: the Admin may change it)
+    days: att.days, ot: att.ot, unpaidDays: 0,   // v0.85.0: the 90% rule replaces taking off each absent day (the Admin may still type unpaid days)
+    ...monthRule(a.payPer || 'month', att),
     allowances: 0, tax: 0, other: 0, notes: '',
     fromAttendance: att.found,
   };
 }
+
+/** v0.85.0: { share, byDays } of a monthly-paid line from its attendance; a day or hour wage never changes. */
+export const monthRule = (payPer, att) => (payPer === 'month' ? { share: presentShare(att), byDays: byDaysOf(att) } : { share: null, byDays: false });
 
 /** The lines of a new run: everyone employed in the month. */
 export const newLines = (staffList, month, reports) => staffList.filter(p => employedIn(p, month)).map(p => newLine(p, month, reports))
@@ -83,6 +96,7 @@ export function compute(line, s = DEFAULT_SETTINGS) {
   let basic = 0, hourly = 0;
   if (line.payPer === 'day') { basic = rate * num(line.days); hourly = rate / hoursPerDay; }
   else if (line.payPer === 'hour') { basic = rate * num(line.days) * hoursPerDay; hourly = rate; }
+  else if (line.byDays) { basic = rate / monthDays * num(line.days); hourly = rate / monthDays / hoursPerDay; }   // v0.85.0: under 90%, a day wage
   else { basic = rate - (rate / monthDays) * num(line.unpaidDays); hourly = rate / monthDays / hoursPerDay; }
   basic = Math.max(0, basic);
   const overtime = hourly * num(set.otMultiplier) * num(line.ot);

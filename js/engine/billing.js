@@ -29,10 +29,12 @@ export function billingState({ project, ws, sched }) {
   const b = billingOf(project);
   const invoices = ws.docs.filter(d => d.type === 'invoice');
   const stageDoc = new Map();
+  const stageBilled = new Map();   // v0.85.0: what each stage was invoiced for so far, its catch-up lines included
   const measuredBilled = {};
   for (const d of invoices) {
     for (const l of d.lines) {
-      if (l.stageId) stageDoc.set(l.stageId, d);
+      if (l.stageId && !l.catchUp) stageDoc.set(l.stageId, d);
+      if (l.stageId) stageBilled.set(l.stageId, (stageBilled.get(l.stageId) || 0) + (+l.amount || 0));
       if (l.measureId) measuredBilled[l.measureId] = (measuredBilled[l.measureId] || 0) + l.qty;
     }
   }
@@ -42,7 +44,9 @@ export function billingState({ project, ws, sched }) {
     // a stage with no task is due from the start (an advance payment)
     const reached = s.taskId ? taskById.get(s.taskId)?.progress >= 100 : true;
     const doc = stageDoc.get(s.id);
-    return { ...s, amount, doc, state: doc ? 'invoiced' : reached ? 'ready' : 'pending' };
+    // v0.85.0 (owner): a stage invoiced before the contract value changed is owed (or owes) the difference
+    const catchUp = doc && b.method === 'milestone_pct' ? round2(amount - (stageBilled.get(s.id) || 0)) : 0;
+    return { ...s, amount, doc, catchUp, state: doc ? 'invoiced' : reached ? 'ready' : 'pending' };
   });
   return {
     ...b, stages, measuredBilled,
@@ -61,8 +65,12 @@ export function invoiceLines({ project, ws, sched, bill, today }) {
     case 'milestone_fixed': {
       const ready = bill.stages.filter(s => s.state === 'ready');
       const pct = bill.method === 'milestone_pct';
-      return ready.length
-        ? { lines: ready.map(s => once(pct ? `${s.name} (${s.value}% of contract value)` : s.name, s.amount, { stageId: s.id })) }
+      // v0.85.0: the stages already invoiced at another contract value are put right on the next invoice
+      const fix = bill.stages.filter(s => s.state === 'invoiced' && Math.abs(s.catchUp || 0) > 0.005)
+        .map(s => once(`${s.name}: contract value changed since it was invoiced (${s.value}% of the difference)`, s.catchUp, { stageId: s.id, catchUp: true }));
+      const lines = [...ready.map(s => once(pct ? `${s.name} (${s.value}% of contract value)` : s.name, s.amount, { stageId: s.id })), ...fix];
+      return lines.length
+        ? { lines }
         : { lines: [], why: bill.stages.length ? 'No payment stage has been reached that is not already invoiced.' : 'Add payment stages under Billing terms first.' };
     }
     case 'advance': {

@@ -8,6 +8,7 @@ import { register, daysBetween, keyOf } from './attendance.js';
 import { billingOf } from './billing.js';
 import { dayRateOf, dayCurOf } from './people.js';
 import { isMonthly } from './paysteps.js';
+import { byDaysOf } from './payroll.js';
 
 export const METHODS = [['cash', 'Cash'], ['bank', 'Bank transfer'], ['mobile', 'Mobile money']];
 export const methodLabel = k => METHODS.find(([m]) => m === k)?.[1] || k || '';
@@ -71,6 +72,9 @@ export function payMerges(staff, projects = []) {
 export function earnedOf(row, pay, project, period) {
   if (!(row.present > 0) && !(row.ot > 0)) return 0;   // v0.28.0: no day present, nothing earned (and off the salary sheet)
   if (pay.per === 'month') {
+    // v0.85.0 (owner): under 90% of the records not absent, a day wage (monthly / 30) x the days present
+    const att = { recorded: (+row.present || 0) + (+row.absent || 0) + (+row.sick || 0) + (+row.leave || 0), absent: +row.absent || 0 };
+    if (byDaysOf(att)) return r2(pay.wage / 30 * row.present);
     // the share of each month's wage for the days of the period in it
     return r2(daysBetween(period.from, period.to).reduce((s, d) => s + pay.wage / daysInMonth(d), 0));
   }

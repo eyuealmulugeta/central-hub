@@ -20,11 +20,13 @@ let notice = '';
 const label = key => new Date(`${key}-01T00:00:00Z`).toLocaleString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' });
 const m = (v, cur) => money(v, cur, 0);
 
+const finished = c => (c.sched?.progress || 0) >= 100;   // v0.88.0
+
 function flowsOf(c) {
   // payroll comes from HR records, which only the Admin has
   const payroll = store.isAdmin ? payrollByCurrency(c.company.staff, c.project.id, monthlyPay, c.global.fx) : {};
   const paid = store.isAdmin ? payrollPaid(c.company.payroll, c.company.staff, c.project.id) : [];   // v0.87.0
-  return cashflow({ ledger: [...costsOf(c.ws), ...paid], docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency });
+  return cashflow({ ledger: [...costsOf(c.ws), ...paid], docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency, done: finished(c) });
 }
 
 /** Bars of money in (green) and out (red) for each month, and the balance as a line. Forecast months are paler. */
@@ -84,7 +86,7 @@ export function render(c) {
         </table>`)}
         ${f.draft ? html`<p class="muted">Draft invoices of ${m(f.draft, f.currency)} are not counted until they are sent.</p>` : ''}`)
       : html`<p class="empty">Nothing recorded yet. Payments and receipts entered under Costs appear here.</p>`}
-      <p class="muted p-notes">Only payments recorded under Costs are counted as paid. The labour worked out from daily reports is an estimate of cost, not cash. Forecast: invoices sent and not yet paid are expected by their due date (overdue ones in the first month ahead); ${store.isAdmin ? (staffHere ? `payroll is the monthly pay of the ${staffHere} ${staffHere === 1 ? 'person' : 'people'} HR lists on this project` : 'no payroll is counted, because HR lists nobody on this project') : 'payroll is not shown to you'}; ${usual ? 'the usual spending is the average of the last three full months' : 'the usual spending is left out'}. Retention held back is not counted.</p>
+      <p class="muted p-notes">Only payments recorded under Costs are counted as paid. The labour worked out from daily reports is an estimate of cost, not cash. Forecast: invoices sent and not yet paid are expected by their due date (overdue ones in the first month ahead); ${store.isAdmin ? (staffHere ? `payroll is the monthly pay of the ${staffHere} ${staffHere === 1 ? 'person' : 'people'} HR lists on this project` : 'no payroll is counted, because HR lists nobody on this project') : 'payroll is not shown to you'}; ${!usual ? 'the usual spending is left out' : finished(c) ? 'no usual spending, because the work is finished' : 'the usual spending is the average of the last three full months'}. Retention held back is not counted.</p>
       ${signoff([{ label: 'Prepared by' }, { label: 'Checked by' }])}
       ${docFoot(foot)}
     </div></section>`;

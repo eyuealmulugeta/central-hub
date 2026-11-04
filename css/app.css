@@ -1755,3 +1755,8 @@ body.side-narrow .side-health { display: none; }
 .install-box div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .install-box button { min-height: 36px; padding: 0 14px; border: 1px solid rgba(255,255,255,.5); border-radius: 8px; background: none; color: #fff; font: inherit; cursor: pointer; }
 .install-box button.primary { background: #fff; color: #0a3440; border-color: #fff; font-weight: 600; }
+/* v0.88.0 (simulation S6): at 901-1279 px the top bar was 40 px too wide and "+ New" ran off the screen */
+@media (min-width: 901px) and (max-width: 1279px) {
+  .project-pick select { max-width: 190px; }
+  #btn-search { max-width: 150px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+}

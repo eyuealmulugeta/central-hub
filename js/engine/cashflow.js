@@ -28,7 +28,7 @@ const r2 = n => Math.round(n * 100) / 100;
  * @param usual     include the usual spending in the forecast
  * @param fallback  the currency of lines that carry none
  */
-export function cashflow({ ledger = [], docs = [], payroll = {}, today, horizon = 3, usual = true, fallback = '' }) {
+export function cashflow({ ledger = [], docs = [], payroll = {}, today, horizon = 3, usual = true, fallback = '', done = false }) {
   const now = monthOf(today);
   const cur = e => e.currency || fallback;
   const currencies = [...new Set([...ledger.map(cur), ...docs.filter(d => d.type === 'invoice').map(() => fallback), ...Object.keys(payroll)])].filter(Boolean).sort();
@@ -47,7 +47,8 @@ export function cashflow({ ledger = [], docs = [], payroll = {}, today, horizon 
     // the usual spending: the last three full months before this one, without labour when payroll is counted
     const usualPool = actual.filter(m => m.month < now).slice(-3);
     const payrollMonthly = r2(payroll[currency] || 0);
-    const usualMonthly = usual && usualPool.length
+    // v0.88.0 (simulation S6): a finished project (done) spends nothing more as usual, so none is forecast
+    const usualMonthly = usual && !done && usualPool.length
       ? r2(sum(usualPool, m => sum(rows.filter(e => e.type === 'expense' && monthOf(e.date) === m.month && !(payrollMonthly && e.category === 'labor')), e => +e.amount || 0)) / usualPool.length)
       : 0;
 

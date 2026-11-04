@@ -103,10 +103,10 @@ export function withTeam(p, team) {
   const by = new Map(team.map(m => [m.id, m]));
   // 2.17.0: only the crew Central Hub has on the project (owner, 1 Nov): anyone else leaves every device
   const staff = (p.staff || []).filter(s => s.id && by.has(s.id) && by.get(s.id).active !== false)
-    .map(s => { const m = by.get(s.id); return { ...s, name: m.name || s.name, trade: normTrade(m.role || s.trade), fromSite: !!m.fromSite, dropAsk: m.dropAsk || null }; });
+    .map(s => { const m = by.get(s.id); return { ...s, name: m.name || s.name, trade: normTrade(m.role || s.trade), fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, personId: m.personId || '' }; });   // 2.45.0: personId, the employee record
   const have = new Set(staff.map(s => s.id));
   // 2.14.2: anyone ticked in Central Hub's Allocated crew joins at once (office roles stay out, as in Central Hub)
-  for (const m of team) if (m.active !== false && !have.has(m.id) && m.name && (m.fromSite || !OFFICE_ROLE.test(m.role || ''))) staff.push({ id: m.id, name: m.name, trade: normTrade(m.role), active: true, level: 'crew', fromSite: !!m.fromSite, dropAsk: m.dropAsk || null });
+  for (const m of team) if (m.active !== false && !have.has(m.id) && m.name && (m.fromSite || !OFFICE_ROLE.test(m.role || ''))) staff.push({ id: m.id, name: m.name, trade: normTrade(m.role), active: true, level: 'crew', fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, personId: m.personId || '' });
   // 2.16.0: someone approved in Central Hub leaves the waiting list on every device at once, not at the next check
   const approved = new Set(team.filter(m => m.fromSite && m.active !== false).map(m => String(m.name || '').trim().toLowerCase()));
   const crewWait = (p.crewWait || []).filter(w => !approved.has(String(w.name || '').trim().toLowerCase()));

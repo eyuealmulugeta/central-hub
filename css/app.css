@@ -1760,3 +1760,33 @@ body.side-narrow .side-health { display: none; }
   .project-pick select { max-width: 190px; }
   #btn-search { max-width: 150px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 }
+/* v0.90.0 Notifications: one compact list */
+.notif-card { padding: 4px 14px 6px; }
+.notif-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 8px 0; border-bottom: 1px solid var(--line-2); font-size: 12px; font-weight: 600; color: var(--muted, #6b7280); }
+.notif-sum > span.on { color: var(--ink); }
+.notif-sum .grow { flex: 1; text-align: right; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nk { flex: none; display: inline-block; min-width: 58px; text-align: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--ink); }
+.nk-devices { background: var(--bad-soft); color: var(--bad); }
+.nk-requests { background: var(--warn-soft); color: var(--warn); }
+.nk-reports { background: var(--primary-soft); color: var(--primary); }
+.notif-list .trow { padding: 8px 0; gap: 10px; }
+.notif-list .tt .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notif-list .actions { display: flex; gap: 6px; flex: none; margin: 0; }
+.notif-list .is-done .tt b { font-weight: 500; color: var(--muted, #6b7280); }
+.nk-done { flex: none; font-size: 11px; color: var(--ok); font-weight: 600; }
+.notif-empty { padding: 14px 0; margin: 0; }
+.urgent-box { padding: 0; }
+.urgent-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.urgent-head .muted { flex: 1; min-width: 0; }
+.urgent-head .urgent-tog { flex: none; color: var(--primary); font-size: 13px; font-weight: 600; }
+.urgent-box.open > form, .urgent-box.open > h4, .urgent-box.open > .urgent-log { margin: 0 14px 12px; }
+@media (max-width: 560px) {
+  .notif-list .trow { flex-wrap: wrap; }
+  .notif-list .tt { flex-basis: calc(100% - 70px); }
+  .notif-list .actions { margin-left: auto; }
+  .notif-sum .grow { flex-basis: 100%; text-align: left; }
+  .notif-list .trow.is-done { flex-wrap: nowrap; }
+  .notif-list .is-done .tt { flex-basis: auto; }
+}
+/* v0.90.0: the All / Pending / Done buttons stay on phones for this page (Today hides its own) */
+@media (max-width: 900px) { .notif-head { flex-wrap: wrap; } .notif-head .seg { display: flex; order: 3; } }

@@ -15,6 +15,7 @@ const when = iso => new Date(iso).toLocaleString('en-GB', { day: 'numeric', mont
 
 // ---- the pop-up ----
 let pop = null;
+let boxOpen = false;   // v0.90.0
 function paint() {
   const me = store.user?.email;
   const n = me && waitingFor(store.urgent, me)[0];
@@ -60,9 +61,10 @@ export function urgentBox(c) {
   if (!store.isAdmin) return '';
   const list = listOf(), to = toOf(c), targets = targetsOf(list, to);
   const sent = [...store.urgent].sort((a, b) => String(b.at).localeCompare(String(a.at)));
-  return html`<section class="card urgent-box">
-    <h3>Urgent notice <span class="muted">pops up full screen until read, and goes to the phones</span></h3>
-    <form data-form="urgentSend" class="grid2">
+  // v0.90.0: folded to one line until opened, so the notifications come first
+  return html`<section class="card urgent-box ${boxOpen ? 'open' : ''}">
+    <button type="button" class="urgent-head" data-act="urgentToggle" aria-expanded="${boxOpen}"><b>Send an urgent notice</b><span class="muted small">Full screen on the chosen phones until read${sent.length ? ` · ${sent.length} sent` : ''}</span><span class="urgent-tog">${boxOpen ? 'Close' : 'Open'}</span></button>
+    ${boxOpen ? html`<form data-form="urgentSend" class="grid2">
       <label class="span2">Notice <textarea name="text" maxlength="${MAX_TEXT}" rows="3" required></textarea></label>
       <label>Send to <select name="kind" data-chg="urgentTo" data-k="kind">${options(URGENT_TO, to.kind)}</select></label>
       ${to.kind === 'project' ? html`<label>Project <select name="pid" data-chg="urgentTo" data-k="pid">${options(store.projects.map(p => [p.id, p.name]), to.pid)}</select></label>` : ''}
@@ -76,7 +78,7 @@ export function urgentBox(c) {
         ${opened === n.id ? html`<table class="table compact"><tbody>${a.rows.map(r => html`<tr><td>${r.name}</td>
           <td>${r.kind === 'read' ? chip('Read', 'ok') : r.kind === 'reply' ? chip('Replied', 'warn') : chip('Not yet', '')}</td>
           <td>${r.text || ''}</td><td class="muted small nowrap">${r.at ? when(r.at) : ''}</td></tr>`)}</tbody></table>` : ''}</li>`;
-    })}</ul>` : ''}
+    })}</ul>` : ''}` : ''}
   </section>`;
 }
 
@@ -86,6 +88,7 @@ export const urgentChanges = {
 
 export const urgentActions = {
   urgentOpen(el) { opened = opened === el.dataset.id ? null : el.dataset.id; },
+  urgentToggle() { boxOpen = !boxOpen; },
 };
 
 export const urgentSubmits = {

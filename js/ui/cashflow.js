@@ -3,7 +3,7 @@
 // spending. One table and chart per currency; currencies are never added together.
 
 import { store } from '../core/store.js';
-import { cashflow, payrollByCurrency, csvRows, monthOf } from '../engine/cashflow.js';
+import { cashflow, payrollByCurrency, payrollPaid, csvRows, monthOf } from '../engine/cashflow.js';
 import { monthlyPay } from '../engine/hr.js';
 import { costsOf } from '../engine/ledger.js';
 import { money, fmtFull, toCSV, downloadText } from '../core/util.js';
@@ -23,7 +23,8 @@ const m = (v, cur) => money(v, cur, 0);
 function flowsOf(c) {
   // payroll comes from HR records, which only the Admin has
   const payroll = store.isAdmin ? payrollByCurrency(c.company.staff, c.project.id, monthlyPay, c.global.fx) : {};
-  return cashflow({ ledger: costsOf(c.ws), docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency });
+  const paid = store.isAdmin ? payrollPaid(c.company.payroll, c.company.staff, c.project.id) : [];   // v0.87.0
+  return cashflow({ ledger: [...costsOf(c.ws), ...paid], docs: c.ws.docs, payroll, today: c.today, horizon, usual, fallback: c.project.currency });
 }
 
 /** Bars of money in (green) and out (red) for each month, and the balance as a line. Forecast months are paler. */

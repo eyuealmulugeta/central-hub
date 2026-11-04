@@ -27,8 +27,9 @@ export function mergeStaff(rows, staff, gone = []) {
 }
 
 /** Head count, absentees, man-hours and manpower by trade for the day's working hours. */
+export const DAY_HOURS = 8;   // 2.47.0 (owner, 4 Nov): a day counts at most 8 normal hours, as Central Hub pays; overtime is added on top
 export function totals(crew, start, end) {
-  const hrs = hoursBetween(start, end) || 8;
+  const hrs = Math.min(DAY_HOURS, hoursBetween(start, end) || DAY_HOURS);
   const rows = crew && crew.rows || [];
   const extra = (crew && crew.extra || []).filter(x => x.qty > 0);
   const here = rows.filter(r => r.state === 'present');

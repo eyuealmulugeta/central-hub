@@ -104,6 +104,9 @@ const shift = (d, n, wd) => (n >= 0 ? addWork(d, n, wd) : subWork(d, -n, wd));
  */
 export function schedule(tasks, reports = [], { today, workDays } = {}) {
   const wd = workDays?.length ? workDays : DEFAULT_WEEK;
+  // v0.87.0 (owner, 4 Nov): the plan skips only the project's own non-working dates (calendarOf's planOff);
+  // a day the site reported "no work" (rain) moves the forecast, not the plan
+  const pwd = wd.planOff ? Object.assign([...wd], { off: wd.planOff }) : wd;
   const status = toDay(today);
   const act = deriveActuals(tasks, reports);
   const { order, cyclic, succ } = topoSort(tasks);
@@ -111,28 +114,28 @@ export function schedule(tasks, reports = [], { today, workDays } = {}) {
 
   // a successor starts the working day after its predecessor ends (same day after a milestone; v0.52.0: a milestone
   // sits on its predecessor's last day, as in MS Project)
-  const after = (predEnd, pred, lag, t) => addWork(predEnd, Math.max(0, (pred.milestone || t?.milestone ? 0 : 1) + (lag || 0)), wd);
+  const after = (predEnd, pred, lag, t, w = wd) => addWork(predEnd, Math.max(0, (pred.milestone || t?.milestone ? 0 : 1) + (lag || 0)), w);
   // the earliest start one link allows (end days are inclusive, so FS and SF step one working day)
-  const fromLink = (t, d, p) => {
+  const fromLink = (t, d, p, w = wd) => {
     const lag = +d.lag || 0, len = Math.max(0, span(t) - 1);
-    if (d.type === 'SS') return shift(p.es, lag, wd);
-    if (d.type === 'FF') return subWork(shift(p.ef, lag, wd), len, wd);
-    if (d.type === 'SF') return subWork(shift(p.es, lag - 1, wd), len, wd);
-    return after(p.ef, byId.get(d.id), lag, t);
+    if (d.type === 'SS') return shift(p.es, lag, w);
+    if (d.type === 'FF') return subWork(shift(p.ef, lag, w), len, w);
+    if (d.type === 'SF') return subWork(shift(p.es, lag - 1, w), len, w);
+    return after(p.ef, byId.get(d.id), lag, t, w);
   };
-  const startAfterDeps = (t, done) => {
-    let es = nextWork(toDay(t.start), wd);
+  const startAfterDeps = (t, done, w = wd) => {
+    let es = nextWork(toDay(t.start), w);
     for (const d of t.deps || []) {
       const p = done.get(d.id);
-      if (p) es = Math.max(es, fromLink(t, d, p));
+      if (p) es = Math.max(es, fromLink(t, d, p, w));
     }
     return es;
   };
 
   const plan = new Map();
   for (const t of order) {
-    const es = startAfterDeps(t, plan);
-    plan.set(t.id, { es, ef: addWork(es, Math.max(0, span(t) - 1), wd) });
+    const es = startAfterDeps(t, plan, pwd);
+    plan.set(t.id, { es, ef: addWork(es, Math.max(0, span(t) - 1), pwd) });
   }
 
   const rows = new Map();

@@ -8,7 +8,7 @@ import { buildBOM } from '../engine/bom.js';
 import { priceBOM } from '../engine/pricing.js';
 import { DEFAULT_BILLING, makeDoc, measureFromBOQ } from '../engine/billing.js';
 
-const FX = { base: 'USD', rates: { USD: 1, ETB: 155, AED: 3.6725 } };   // Central Hub works in ETB, USD and AED only
+const FX = { base: 'USD', rates: { USD: 1, ETB: 186, AED: 3.6725 } };   // Central Hub works in ETB, USD and AED only
 
 // factor = rough cost level relative to the reference USD price
 const REGIONS = [

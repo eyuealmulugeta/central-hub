@@ -23,6 +23,7 @@ export function offDates(project, reports = []) {
 export function calendarOf(project, reports = []) {
   const wd = weekdays(project);
   wd.off = new Set(offDates(project, reports).map(toDay));
+  wd.planOff = new Set((project?.nonWorking || []).filter(isDate).map(toDay));   // v0.87.0: the plan skips only these
   return wd;
 }
 
@@ -43,7 +44,8 @@ export function targetFor(project, ws, today) {
   if (!tasks.length) return out;
   const plan = schedule(tasks, [], { today, workDays: weekly });
   const planned = Math.max(1, workBetween(plan.planStart - 1, plan.planEnd, weekly));
-  const target = addWork(plan.planStart, planned - 1, cal);
+  // v0.87.0 (owner, 4 Nov): the target moves for the project's non-working dates, not for reported no-work (rain) days
+  const target = addWork(plan.planStart, planned - 1, Object.assign([...weekly], { off: cal.planOff }));
   return { ...out, plannedWorkingDays: planned, targetDate: fromDay(target), workingDaysLeft: Math.max(0, workBetween(toDay(today), target, cal)) };
 }
 

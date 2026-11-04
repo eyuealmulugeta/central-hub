@@ -8,6 +8,7 @@
 // Pure functions; the screen is ui/cashflow.js.
 
 import { sum } from '../core/util.js';
+import { compute } from './payroll.js';
 
 export const monthOf = date => String(date).slice(0, 7);
 export function addMonths(key, n) {
@@ -84,6 +85,18 @@ export function payrollByCurrency(staff, projectId, monthlyPay, fx) {
     out[c] = (out[c] || 0) + monthlyPay(p, fx, c);
   }
   return out;
+}
+
+/**
+ * v0.87.0 (simulation S5): salaries paid in Payroll, as money out of the project each person works on, on the day the
+ * run was paid (gross pay: what the staff receive plus the tax and pension held back for them). Ledger-like entries.
+ */
+export function payrollPaid(runs, staff, projectId) {
+  const here = new Set((staff || []).filter(p => p.projectId === projectId).map(p => p.id));
+  return (runs || []).filter(r => ['paid', 'shared'].includes(r.status) && r.paidOn)
+    .flatMap(r => (r.lines || []).filter(l => here.has(l.staffId))
+      .map(l => ({ id: `${r.id}-${l.staffId}`, date: r.paidOn, type: 'expense', category: 'labor', currency: l.currency, amount: compute(l, r.settings).gross, note: `Salary ${l.name}` })))
+    .filter(e => e.amount > 0 && e.currency);
 }
 
 /** Rows for the accountant (CSV): one per currency and month. */

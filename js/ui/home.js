@@ -23,9 +23,7 @@ import { orderOf } from '../core/nav.js';
 import { openArrange } from './quick.js';
 import { siteVisits, loadSiteNotes } from './reports.js';
 
-let only = '';   // the project the lists are filtered to; '' = all projects
-/** v0.24.0: "All projects" chosen at the top: every project again. */
-export const showAll = () => { only = ''; };
+// v0.95.1 (owner, 5 Nov): the all-projects choice is gone; the Dashboard is about the project open in the chooser
 
 const TONE = { ok: 'ok', warn: 'warn', bad: 'high', none: '' };
 const SEV_TONE = { high: 'high', warn: 'warn', info: 'info' };
@@ -154,9 +152,15 @@ if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
 // v0.95.0: the photos of a day not posted yet, straight from the site (script dayPhotos); today's are read again after 2 minutes
 const live = new Map();   // "CODE|date" -> { list, at, busy }
 let mediaDay = '';        // the day tab chosen; '' = today
+let lastLive = null;      // v0.95.1: the project and day the Dashboard last showed, for the 2-minute refresh
+// v0.95.1: while the Dashboard is open, today's photos are asked for again every 2 minutes (the page redraws when new ones come)
+if (typeof setInterval !== 'undefined' && typeof location !== 'undefined') setInterval(() => {
+  if (lastLive && /^#?(home)?$/.test(location.hash) && document.visibilityState !== 'hidden') loadLive(lastLive.code, lastLive.today, lastLive.today);
+}, 125e3);
 function loadLive(code, date, today) {
   const k = `${code}|${date}`, x = live.get(k);
-  if (!store.cloud || (x && (x.busy || date !== today || Date.now() - x.at < 120e3))) return;
+  // v0.95.1: today again after 2 minutes, an earlier day after 10 (a report posted late, a photo sent late)
+  if (!store.cloud || (x && (x.busy || Date.now() - x.at < (date === today ? 120e3 : 600e3)))) return;
   live.set(k, { list: x?.list || [], at: Date.now(), busy: true });
   fieldDayPhotos(code, date).then(l => { live.set(k, { list: l, at: Date.now(), busy: false }); store.notify(); })
     .catch(() => { live.set(k, { list: x?.list || [], at: Date.now(), busy: false }); });
@@ -167,10 +171,11 @@ const vids = { code: '', list: [], busy: false, err: '' };
 function loadVideos(c) {
   const code = String(c.project.fieldCode || '').toUpperCase();
   if (vids.code !== code) Object.assign(vids, { code, list: [], busy: false, err: '', done: false });
+  if (vids.done && Date.now() - (vids.at || 0) > 300e3) vids.done = false;   // v0.95.1: new videos every 5 minutes
   if (!code || vids.busy || vids.done || !(store.cloud)) return;
   vids.busy = true;
   fieldVideos(code).then(l => { vids.list = l; }).catch(e => { vids.err = String(e.message || e); })
-    .finally(() => { vids.busy = false; vids.done = true; if (vids.list.length) store.notify(); });
+    .finally(() => { vids.busy = false; vids.done = true; vids.at = Date.now(); if (vids.list.length) store.notify(); });
 }
 
 function moneyBox(split, c, rows) {
@@ -277,7 +282,7 @@ export function render(c) {
   const meetings = [...(c.company.meetings || []).filter(m => !me() || m.by === me() || (m.invitees || []).some(i => i.email === me())), ...(c.company.bookings || [])];
   const others = summaries.filter(s => s.project.id !== c.project.id);
   const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
-    .filter(n => !only || n.projectId === only);
+    .filter(n => n.projectId === c.project.id);
   const urgent = needs.filter(n => n.sev === 'high').length;
 
   // v0.94.0 (owner, 5 Nov): a fixed layout; every box the person may see is drawn, empty or not
@@ -319,14 +324,12 @@ export function render(c) {
       : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: String(spot.length), link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),
-    people: () => peopleBox(people, may('evaluation')),
+    people: () => peopleBox(people, may('evaluation')),
   };
   const rows = rowsOf(has, rowsFor(orderOf(prefs.get(HOME_ORDER))));   // v0.92.0: in the person's order
   return html`
     <section class="today-head xhead-row">
       <div><h2>${fmtFull(c.today)}</h2><span class="muted">${needs.length ? `${needs.length} thing${needs.length > 1 ? 's' : ''} need${needs.length > 1 ? '' : 's'} you${urgent ? `, ${urgent} urgent` : ''}.` : 'Nothing needs you right now.'}</span></div>
-      ${summaries.length > 1 ? html`<div class="seg">${[['', 'All projects'], ...summaries.map(s => [s.project.id, s.project.name])].map(([id, name]) => html`
-        <button type="button" class="${only === id ? 'on' : ''}" data-act="only" data-id="${id}">${name}</button>`)}</div>` : ''}
       <a class="btn small ghost" href="#quick" data-act="arrangeOpen" title="Change the order of the menu and of these boxes">Arrange</a>
       <button type="button" class="btn small" data-act="present" title="Full screen for a meeting (Esc to leave)">${presenting() ? 'Leave full screen' : 'Present'}</button>
     </section>
@@ -342,14 +345,18 @@ function mediaFor(c, mayRead) {
   const code = String(c.project.fieldCode || '').toUpperCase(), week = weekDays(c.today), reports = c.ws.reports || [];
   const day = week.includes(mediaDay) && mediaDay <= c.today ? mediaDay : c.today;
   const videos = code && vids.code === code ? vids.list : [];
+  // v0.95.1 (owner, 5 Nov): every day of the week is read from the site and kept in step: the posted report's photos
+  // plus any the site sent that the report (as imported here) does not have yet
+  const dayOf = d => {
+    const posted = todayMedia(reports, d), ids = new Set(posted.map(x => x.p.id));
+    const extra = livePhotos(live.get(`${code}|${d}`)?.list).filter(x => !ids.has(x.p.id));
+    return { photos: [...posted, ...extra].sort((a, b) => String(b.p.time || '').localeCompare(String(a.p.time || ''))), live: extra.length > 0 };
+  };
+  if (code && mayRead) { lastLive = { code, today: c.today }; week.filter(d => d <= c.today).forEach(d => loadLive(code, d, c.today)); }
   const counts = {};
-  for (const d of week) {
-    const n = todayMedia(reports, d).length || (live.get(`${code}|${d}`)?.list || []).length;
-    counts[d] = n + videos.filter(v => v.date === d).length;
-  }
+  for (const d of week) counts[d] = code ? dayOf(d).photos.length + videos.filter(v => v.date === d).length : 0;
   if (!code) return { day, week, counts, photos: [], videos: [] };
-  let photos = todayMedia(reports, day), isLive = false;
-  if (!photos.length && mayRead) { loadLive(code, day, c.today); photos = livePhotos(live.get(`${code}|${day}`)?.list); isLive = photos.length > 0; }
+  const { photos, live: isLive } = dayOf(day);
   return { day, week, counts, photos, videos: videos.filter(v => v.date === day).sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))), live: isLive, busy: !!live.get(`${code}|${day}`)?.busy };
 }
 
@@ -359,7 +366,6 @@ if (typeof document !== 'undefined') document.addEventListener('fullscreenchange
 const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
 
 export const actions = {
-  only(el) { only = el.dataset.id || ''; },
   mediaDay(el) { mediaDay = el.dataset.d || ''; },
   mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
   mediaKind(el) { mediaKind = el.dataset.k || ''; },

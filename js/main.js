@@ -80,7 +80,7 @@ const VIEWS = { home, notifications, quick, crewforms, dashboard, reports, sched
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
-const COMPANY_VIEWS = { home: 'What needs you, across all projects', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
+const COMPANY_VIEWS = { home: 'The open project at a glance: photos, money, requests and people', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
 const TITLES = { mine: 'My settings', home: 'Dashboard', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
@@ -119,7 +119,6 @@ const quickOk = q => allowed(q.view) && pagesIn(division).includes(q.view) && !(
 const ROLE_NAME = { owner: 'Admin', office: 'Office', site: 'Site' };
 const SIDE_KEY = 'sf:side';
 const NEW_PROJECT = '__new';
-const ALL_PROJECTS = '__all__';
 const TOAST_MS = 5000;
 const UNDO_MS = 60 * 1000;   // the Undo stays a minute unless used or replaced
 
@@ -271,9 +270,9 @@ function renderSidebar(name, summaries) {
   $('#division').hidden = mine.length < 2;
   $('#division').innerHTML = String(html`${mine.map(d => html`<button type="button" data-division="${d}" class="${d === division ? 'on' : ''}" aria-pressed="${d === division}">${divisionLabel(d)}</button>`)}`);
   const installation = division === 'installation';
-  // v0.24.0: one chooser, at the top centre next to the search, "All projects" first (it opens Today, across every project)
-  const all = route() === 'home';
-  const choices = String(html`<option value="${ALL_PROJECTS}" ${all ? 'selected' : ''}>All projects</option>${options(store.projects.map(x => [x.id, x.name]), all ? '' : p?.id)}
+  // v0.24.0: one chooser, at the top centre next to the search. v0.95.1 (owner, 5 Nov): no "All projects"; the chooser
+  // always shows the open project, and the Dashboard follows it
+  const choices = String(html`${options(store.projects.map(x => [x.id, x.name]), p?.id)}
     ${store.isAdmin ? html`<option value="${NEW_PROJECT}">+ New project</option>` : ''}`);
   // the same chooser twice: under the division switch in the menu (wide screens), and in the page header (phones, narrow menu)
   $('#project-select').innerHTML = choices;
@@ -742,8 +741,7 @@ const narrow = on => {
 $('#btn-collapse').addEventListener('click', () => narrow(!document.body.classList.contains('side-narrow')));
 try { if (localStorage.getItem(SIDE_KEY) === 'narrow') document.body.classList.add('side-narrow'); } catch { /* no saved choice */ }
 const pickProject = e => {
-  if (e.target.value === ALL_PROJECTS) { home.showAll(); location.hash = '#home'; return refresh(); }
-  if (e.target.value !== NEW_PROJECT) { if (route() === 'home') location.hash = '#dashboard'; return store.switchTo(e.target.value); }
+  if (e.target.value !== NEW_PROJECT) return store.switchTo(e.target.value);   // v0.95.1: the page stays (the Dashboard shows the new project)
   e.target.value = store.project?.id || '';
   newProject();
 };

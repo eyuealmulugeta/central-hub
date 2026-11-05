@@ -1,0 +1,79 @@
+// v0.91.0 (owner, 5 Nov, R1): the executive Home page (design "Option A revised"). Pure helpers: what each box shows,
+// and which boxes have something to show. A box with nothing in it is left out and the page closes up.
+
+import { tierOfPosition, normRole, ROLES } from './positions.js';
+
+import { summarise } from './evaluation.js';
+import { convert } from './pricing.js';
+
+/** Seniority behind the scenes: the position's level, then its place in the list of positions. Never shown. */
+const seniority = role => { const w = normRole(role).toLowerCase(), i = ROLES.findIndex(x => x.toLowerCase() === w); return (tierOfPosition(role) || 9) * 1000 + (i < 0 ? 999 : i); };
+
+/** Box keys in their rows: the wide row, the three small boxes, the bottom row, the planning row. */
+export const ROWS = [['today', 'money'], ['action', 'spot', 'requests'], ['book', 'people'], ['week', 'waits']];
+
+/** The rows with only the boxes that have something to show; an empty row is dropped. */
+export const rowsOf = (has, rows = ROWS) => rows.map(r => r.filter(k => has[k])).filter(r => r.length);
+
+/** Today's site photos from the field reports, taken with the camera (an office upload from the gallery is left out). */
+export function todayMedia(reports = [], today) {
+  return reports.filter(r => r.source === 'field' && r.date === today && r.field?.pdf)
+    .flatMap(r => (r.field.photoFiles || []).filter(p => p && p.id && !p.gallery).map(p => ({ r, p })))
+    .sort((a, b) => String(b.p.time || '').localeCompare(String(a.p.time || '')));
+}
+
+const PENDING = ['requested', 'gm'], APPROVED = ['approved'], TRANSIT = ['arranging'];
+
+/** Site requests by stage: Pending, Approved, In transit (being arranged); with the next ones to watch. */
+export function requestBoard(requests = []) {
+  const list = requests.filter(r => !['draft', 'deleted'].includes(r.status));
+  const of = st => list.filter(r => st.includes(r.status));
+  const stage = r => (TRANSIT.includes(r.status) ? 'transit' : APPROVED.includes(r.status) ? 'approved' : 'pending');
+  const lines = [...of(TRANSIT), ...of(PENDING), ...of(APPROVED)]
+    .sort((a, b) => String(a.neededBy || '9999').localeCompare(String(b.neededBy || '9999')))
+    .map(r => ({ r, stage: stage(r) }));
+  const pending = of(PENDING).length, approved = of(APPROVED).length, transit = of(TRANSIT).length;
+  return { pending, approved, transit, open: pending + approved + transit, lines };
+}
+
+/** The money still asked for: expenses waiting for approval or approved but not paid, in the project's currency. */
+export const requestedAmount = (requests = [], currency, fx) => requests
+  .filter(r => r.kind === 'expense' && [...PENDING, ...APPROVED].includes(r.status) && +r.amount > 0)
+  .reduce((s, r) => s + (fx ? convert(+r.amount, r.currency || currency, currency, fx) : +r.amount), 0);
+
+/** Budget split into Paid, Requested and Remaining, as amounts and whole percentages of the budget. */
+export function moneySplit({ budget = 0, spent = 0, requested = 0 }) {
+  const b = Math.max(0, +budget || 0);
+  if (!b) return null;
+  const paid = Math.max(0, +spent || 0), asked = Math.max(0, +requested || 0);
+  const remaining = Math.max(0, b - paid - asked);
+  const pct = v => Math.round(Math.min(100, v / b * 100));
+  return { budget: b, paid, requested: asked, remaining, paidPct: pct(paid), requestedPct: pct(asked), remainingPct: pct(remaining), over: paid + asked > b };
+}
+
+/** Signed site book: the latest instructions sent to the consultant (not drafts), newest first. */
+export const bookLog = (list = [], n = 3) => list.filter(x => x.status && x.status !== 'draft')
+  .sort((a, b) => String(b.consultant?.at || b.sentAt || b.date || '').localeCompare(String(a.consultant?.at || a.sentAt || a.date || '')))
+  .slice(0, n);
+
+/**
+ * Who is on site today: present in today's field report. Most senior first (by position, behind the scenes; the
+ * level is never shown), then by name. Stars from the latest evaluation, else the feedback notes, when allowed.
+ */
+export function onSite({ reports = [], team = [], staff = [], evaluations = null, today }) {
+  const r = reports.find(x => x.date === today && (x.field?.attendance || []).length);
+  if (!r) return [];
+  const seen = new Set();
+  return r.field.attendance.filter(a => (a.state || 'present') === 'present').map(a => {
+    const m = team.find(t => t.id && t.id === a.id) || team.find(t => t.name && t.name === a.name) || {};
+    const role = m.role || a.trade || a.role || '';
+    const person = staff.find(s => s.id && (s.id === m.personId || s.id === m.staffId));
+    let stars = null;
+    if (evaluations && m.id) {
+      const s = summarise(evaluations, m.id);
+      stars = s.latest?.overall ?? s.stars ?? null;
+    }
+    return { key: m.id || a.id || a.name, name: m.name || a.name || 'Unnamed', role, photo: String(person?.photo || '').length > 200 ? person.photo : '', rank: seniority(role), stars: stars == null || Number.isNaN(stars) ? null : Math.round(stars * 2) / 2 };
+  }).filter(p => !seen.has(p.key) && seen.add(p.key))
+    .sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+}

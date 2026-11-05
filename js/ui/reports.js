@@ -64,23 +64,41 @@ const TONE = { pos: ['Positive', 'ok'], neg: ['Negative', 'bad'] };
 /** v0.49.0: Field Report's Spotlight notes once loaded, in Central Hub's shape (for the evaluation facts). */
 export const spotNotes = projectName => fromField(spot.list, projectName);
 export function spotRows(list, { tone = '', about = '' } = {}) {
-  return (list || []).filter(x => (!tone || x.tone === tone) && (!about || x.about === about));
+  return (list || []).filter(x => (!tone || (tone === 'visit' ? !!x.visit : x.tone === tone)) && (!about || x.about === about));
+}
+/** v0.93.0 (R3): the visitors logged on site (Field Report 2.49.0), once the site notes are loaded. */
+export const siteVisits = () => (spot.list || []).filter(x => x.visit);
+/** v0.93.0: Today asks for the site notes of the open project too (the Admin and HR only, as the Spotlight page). */
+export function loadSiteNotes(c) {
+  const code = String(c.project.fieldCode || '').toUpperCase();
+  if (spot.code !== code) Object.assign(spot, { list: null, code, err: '', tone: '', about: '' });
+  if (code && !spot.list && !spot.busy && !spot.err) queueMicrotask(() => actions.spotLoad());
 }
 function spotCard(c) {
   const code = String(c.project.fieldCode || '').toUpperCase();
   if (spot.code !== code) Object.assign(spot, { list: null, code, err: '', tone: '', about: '' });
   if (code && !spot.list && !spot.busy && !spot.err) queueMicrotask(() => actions.spotLoad());   // v0.30.1: loads by itself, no extra click
   const rows = spotRows(spot.list, spot), abouts = [...new Set((spot.list || []).map(x => x.about))].sort();
-  const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).length - pos;
+  const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).filter(x => x.tone === 'neg').length, visits = (spot.list || []).filter(x => x.visit).length;
   // v0.31.1: on the page: a photo as a picture, a video in Drive's player (it plays here); a tap on a photo opens it large
   const media = x => html`<div class="spot-media">${(x.media || []).map(m => /^video/.test(m.type)
     ? html`<iframe src="https://drive.google.com/file/d/${m.fileId}/preview" title="Video from the site" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>`
     : html`<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener"><img src="https://drive.google.com/thumbnail?id=${m.fileId}&sz=w800" alt="Photo from the site" loading="lazy"></a>`)}</div>`;
   // v0.34.0: a modern page: figures on top, filter chips, the notes as cards grouped by day
-  const people = new Set((spot.list || []).map(x => x.about).filter(a => a && !/project/i.test(a))).size;
+  const people = new Set((spot.list || []).filter(x => !x.visit).map(x => x.about).filter(a => a && !/project/i.test(a))).size;
   const initials = n => String(n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const days = [...new Set(rows.map(x => String(x.at).slice(0, 10)))];
-  const card = x => html`<article class="spot-card ${x.tone === 'pos' ? 'pos' : 'neg'}">
+  // v0.93.0: a visitor card: who, from where, when, why, the summary, photos and the signature
+  const vcard = x => {
+    const v = x.visit, all = x.media || [], sig = v.sign >= 0 ? all[v.sign] : null, photos = all.filter((_, i) => i !== v.sign);
+    return html`<article class="spot-card visit"><header><span class="spot-av" aria-hidden="true">${initials(v.name)}</span>
+        <div><b>${v.name}</b><span class="muted">${[v.org, `${v.tin || '?'}–${v.tout || 'on site'}`].filter(Boolean).join(' · ')}</span></div><span class="spot-tone">Visitor</span></header>
+      <div class="spot-tags"><span>${v.type}</span>${v.purpose ? html`<span>${v.purpose}</span>` : ''}${v.result ? html`<span>${v.result}</span>` : ''}</div>
+      ${x.note ? html`<p class="spot-note">${x.note}</p>` : ''}${photos.length ? media({ media: photos }) : ''}
+      ${sig ? html`<img class="visit-sig" src="https://drive.google.com/thumbnail?id=${sig.fileId}&sz=w400" alt="Signature of ${v.name}" loading="lazy">` : ''}
+      <p class="muted small">Logged by ${x.byName || x.by}</p></article>`;
+  };
+  const card = x => x.visit ? vcard(x) : html`<article class="spot-card ${x.tone === 'pos' ? 'pos' : 'neg'}">
       <header><span class="spot-av" aria-hidden="true">${initials(x.byName || x.by)}</span>
         <div><b>${x.byName || x.by}</b><span class="muted">${String(x.at).slice(11, 16)} UTC${x.madeAt ? ` · made ${x.madeAt.slice(11, 16)} on the phone` : ''}</span></div>
         <span class="spot-tone">${TONE[x.tone]?.[0] || ''}</span></header>
@@ -93,8 +111,8 @@ function spotCard(c) {
     ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
     ${spot.list ? html`<div class="spot-kpis">
         <div><b>${spot.list.length}</b><span>Notes</span></div><div class="pos"><b>${pos}</b><span>Positive</span></div>
-        <div class="neg"><b>${neg}</b><span>Negative</span></div><div><b>${people}</b><span>People named</span></div></div>
-      <div class="spot-filter">${chipBtn('', 'All', spot.list.length)}${chipBtn('pos', 'Positive', pos)}${chipBtn('neg', 'Negative', neg)}
+        <div class="neg"><b>${neg}</b><span>Negative</span></div><div><b>${people}</b><span>People named</span></div><div class="visit"><b>${visits}</b><span>Visitors</span></div></div>
+      <div class="spot-filter">${chipBtn('', 'All', spot.list.length)}${chipBtn('pos', 'Positive', pos)}${chipBtn('neg', 'Negative', neg)}${chipBtn('visit', 'Visitors', visits)}
         <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select></div>
       ${rows.length ? days.map(d => html`<h4 class="spot-day">${fmtDate(d)}</h4><div class="spot-grid">${rows.filter(x => String(x.at).startsWith(d)).map(card)}</div>`)
         : html`<p class="empty">No note here.</p>`}` : spot.busy ? html`<p class="muted">Asking Field Report…</p>` : ''}`}</section>`;

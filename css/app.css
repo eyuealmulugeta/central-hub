@@ -1876,3 +1876,9 @@ body.side-narrow .side-new > summary span { display: none; }
 .arr-list li:first-child { border-top: 0; }
 .arr-no { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--surface-2); flex: none; }
 .arr-name { flex: 1; }
+/* v0.93.0 visitors from the site */
+.spot-card.visit { border-left: 4px solid #6d28d9; }
+.spot-card.visit .spot-tone { background: #ede9fe; color: #6d28d9; }
+.visit-sig { display: block; height: 52px; max-width: 220px; object-fit: contain; background: #fff; border-radius: 6px; margin-top: 8px; }
+.spot-kpis .visit b { color: #6d28d9; }
+.tag.xvis { background: #ede9fe; color: #6d28d9; }

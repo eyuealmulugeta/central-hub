@@ -19,6 +19,7 @@ import { topicLabel } from '../engine/spotlight.js';
 import { prefs } from '../core/prefs.js';
 import { orderOf } from '../core/nav.js';
 import { openArrange } from './quick.js';
+import { siteVisits, loadSiteNotes } from './reports.js';
 
 let only = '';   // the project the lists are filtered to; '' = all projects
 /** v0.24.0: "All projects" chosen at the top: every project again. */
@@ -169,8 +170,11 @@ export function render(c) {
   const reqs = may('requests') ? requestBoard(c.ws.requests || []) : { open: 0 };
   const book = may('siteinstr') ? bookLog(c.ws.siteInstr || []) : [];
   const since = fromDay(toDay(c.today) - 14);
-  const spot = may('spotlight') ? (c.company.spotlight || []).filter(n => n.kind === 'project' && n.projectId === c.project.id && n.date >= since)
-    .sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).slice(0, 3) : [];
+  // v0.93.0 (R3): with the visitors logged on site (Field Report Spotlight > Visitors)
+  if (may('spotlight') && (store.isAdmin || (store.ranks || []).includes('hr_assistant'))) loadSiteNotes(c);
+  const visits = may('spotlight') ? siteVisits().filter(x => String(x.at).slice(0, 10) >= since).map(x => ({ visit: x.visit, at: x.at, date: String(x.at).slice(0, 10), byName: x.byName || x.by, note: x.note })) : [];
+  const spot = may('spotlight') ? [...(c.company.spotlight || []).filter(n => n.kind === 'project' && n.projectId === c.project.id && n.date >= since), ...visits]
+    .sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).slice(0, 4) : [];
   const people = onSite({ reports: c.ws.reports || [], team: c.ws.team || [], staff: c.company.staff || [], evaluations: may('evaluation') ? c.company.evaluations || [] : null, today: c.today });
   const split = c.money && c.led ? moneySplit({ budget: c.led.budget, spent: c.led.spent, requested: requestedAmount(c.ws.requests || [], c.project.currency, c.global.fx) }) : null;
   const bars = c.money ? summaries.filter(s => s.money && +s.budget > 0) : [];
@@ -192,7 +196,8 @@ export function render(c) {
     action: () => box('action', needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
           <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`), { n: String(needs.length) }),
-    spot: () => box('spot', html`<ul class="xlist">${spot.map(n => html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: String(spot.length), link: ['spotlight', 'All'] }),
+    spot: () => box('spot', html`<ul class="xlist">${spot.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
+      : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: String(spot.length), link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),
     people: () => peopleBox(people, may('evaluation')),

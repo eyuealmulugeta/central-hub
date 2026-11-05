@@ -29,7 +29,7 @@ export function checkSpot(n) {
 export const editable = (n, nowMs = Date.now()) => nowMs - Date.parse(n.at) < EDIT_HOURS * 3600e3;
 
 /** Field Report's Spotlight notes in the same shape as these (for the evaluation facts and the list). */
-export const fromField = (list, projectName = '') => (list || []).map(x => ({
+export const fromField = (list, projectName = '') => (list || []).filter(x => !x.visit).map(x => ({   // v0.93.0: a visit is not a note about a person
   id: `fr_${x.id || x.at}`, kind: /project/i.test(x.about || '') ? 'project' : 'person', from: 'Field Report',
   tone: x.tone === 'pos' ? 'positive' : 'negative', category: String(x.cat || '').toLowerCase(), topic: 'project',
   subjectName: x.about || '', note: x.note || '', at: x.at, date: String(x.at || '').slice(0, 10), byName: x.byName || x.by, projectName, media: x.media || [],

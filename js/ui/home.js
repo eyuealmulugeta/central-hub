@@ -11,11 +11,14 @@ import { weeklyDue } from '../engine/report.js';
 import { billStatus } from '../engine/bills.js';
 import { healthOf, projectLine, needsYou, needGroups, thisWeek, waitingOn } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
-import { rowsOf, todayMedia, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
+import { rowsOf, rowsFor, HOME_ORDER, todayMedia, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
 import { expenseTitle, isExpense } from '../engine/expenses.js';
 import { siNo, SI_STATUS, SI_TONE } from '../engine/siteinstr.js';
 import { topicLabel } from '../engine/spotlight.js';
+import { prefs } from '../core/prefs.js';
+import { orderOf } from '../core/nav.js';
+import { openArrange } from './quick.js';
 
 let only = '';   // the project the lists are filtered to; '' = all projects
 /** v0.24.0: "All projects" chosen at the top: every project again. */
@@ -197,12 +200,13 @@ export function render(c) {
             <span class="tt"><b>${w.title}</b><span class="muted">${w.kind}${w.detail ? `, ${w.detail}` : ''}</span></span><a class="btn small ghost" href="#${w.link}">Open</a></li>`)}</ul>`),
     waits: () => box('waits', html`<ul class="tlist">${waits.slice(0, 8).map(i => html`<li class="trow"><span class="tt"><b>${i.title}</b><span class="muted">With ${i.owner}${i.due ? `, due ${fmtDate(i.due)}` : ''}${i.overdue ? ', overdue' : ''}</span></span>${i.overdue ? tag('Overdue', 'high') : ''}</li>`)}</ul>`),
   };
-  const rows = rowsOf(has);
+  const rows = rowsOf(has, rowsFor(orderOf(prefs.get(HOME_ORDER))));   // v0.92.0: in the person's order
   return html`
     <section class="today-head xhead-row">
       <div><h2>${fmtFull(c.today)}</h2><span class="muted">${needs.length ? `${needs.length} thing${needs.length > 1 ? 's' : ''} need${needs.length > 1 ? '' : 's'} you${urgent ? `, ${urgent} urgent` : ''}.` : 'Nothing needs you right now.'}</span></div>
       ${summaries.length > 1 ? html`<div class="seg">${[['', 'All projects'], ...summaries.map(s => [s.project.id, s.project.name])].map(([id, name]) => html`
         <button type="button" class="${only === id ? 'on' : ''}" data-act="only" data-id="${id}">${name}</button>`)}</div>` : ''}
+      <a class="btn small ghost" href="#quick" data-act="arrangeOpen" title="Change the order of the menu and of these boxes">Arrange</a>
       <button type="button" class="btn small" data-act="present" title="Full screen for a meeting (Esc to leave)">${presenting() ? 'Leave full screen' : 'Present'}</button>
     </section>
     ${kpis.length ? html`<section class="xkpis" style="--n:${kpis.length}">${kpis}</section>` : ''}
@@ -217,6 +221,7 @@ const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
 
 export const actions = {
   only(el) { only = el.dataset.id || ''; },
+  arrangeOpen() { openArrange(); },
   /** v0.91.0: Present, the Home page alone on the full screen for a meeting. */
   present() {
     const on = !presenting();

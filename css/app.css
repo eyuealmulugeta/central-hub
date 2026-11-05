@@ -1864,3 +1864,15 @@ body.presenting .sidebar, body.presenting header.top, body.presenting #tabs, bod
   .xm.big { grid-column: span 3; grid-row: span 2; }
   .xkpi b { font-size: 20px; }
 }
+/* v0.92.0 + New in the left menu; Arrange */
+.side-new { width: 100%; }
+.side-new > summary.side-link { color: var(--primary); font-weight: 600; }
+.side-new[open] > summary.side-link { background: var(--surface-2); }
+.side-new .menu { position: static; min-width: 0; margin: 2px 0 6px; box-shadow: none; }
+body.side-narrow .side-new > summary span { display: none; }
+.arr-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+.arr-list { list-style: none; margin: 0; padding: 0; }
+.arr-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); }
+.arr-list li:first-child { border-top: 0; }
+.arr-no { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--surface-2); flex: none; }
+.arr-name { flex: 1; }

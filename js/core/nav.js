@@ -39,7 +39,9 @@ export const resolve = page => REDIRECT[page] || page;
 
 // v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
 // project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
-const today = { id: 'home', label: 'Today', icon: 'home', tabs: ['home', 'quick', 'notifications'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
+const today = { id: 'home', label: 'Today', icon: 'home', tabs: ['home', 'notifications'] };
+// v0.92.0 (owner, 5 Nov, R2): Quick moved out of Today's tabs into the main menu
+const quickHub = { id: 'quick', label: 'Quick', icon: 'apps', tabs: ['quick'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
 const team = [
   { id: 'discuss', label: 'Discuss', icon: 'discuss', tabs: ['discuss'], team: true },
   { id: 'meetings', label: 'Meetings', icon: 'meetings', tabs: ['meetings'], team: true },
@@ -50,6 +52,7 @@ export const MENUS = {
   // Today > the open project: Project, Reports, People, Money, Documents > Team
   installation: [
     today,
+    quickHub,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight', 'siteinstr'] },   // siteinstr: v0.77.0
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
@@ -59,6 +62,7 @@ export const MENUS = {
   ],
   trading: [
     today,
+    quickHub,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['trade', 'stock'] },
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
@@ -71,6 +75,15 @@ export const MENUS = {
 export const PHONE_TABS = [['home', 'Today'], ['projects', 'Project'], ['trading', 'Trading'], ['report', 'Reports'], ['finance', 'Money']];
 
 export const hubsOf = division => MENUS[division] || MENUS.installation;
+
+/** v0.92.0: where each person keeps their own order of the menu (ids, comma separated; follows them to every device). */
+export const MENU_ORDER = 'sf:menuOrder';
+/** The menu in the person's order: the main items as they arranged them (new ones at the end), the Team items stay at the foot. */
+export function arranged(list, order = []) {
+  const main = list.filter(h => !h.team), pos = id => { const i = order.indexOf(id); return i < 0 ? 999 + main.findIndex(h => h.id === id) : i; };
+  return [...[...main].sort((a, b) => pos(a.id) - pos(b.id)), ...list.filter(h => h.team)];
+}
+export const orderOf = v => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
 export const pagesIn = division => hubsOf(division).flatMap(h => h.tabs);
 
 /**

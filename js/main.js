@@ -60,7 +60,7 @@ import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
 import { syncPeople } from './ui/peoplesync.js';
 import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, isDelete, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
-import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS } from './core/nav.js';
+import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS, arranged, orderOf, MENU_ORDER } from './core/nav.js';
 import { healthOf } from './engine/today.js';
 import { footCss } from './ui/print.js';
 import { openPalette } from './ui/palette.js';
@@ -83,7 +83,7 @@ for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 const COMPANY_VIEWS = { home: 'What needs you, across all projects', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { mine: 'My settings', home: 'Today', quick: '+ Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { mine: 'My settings', home: 'Today', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -92,7 +92,7 @@ setCurrentDivision(division);
 const myDivisions = () => divisionsOf({ role: store.role, divisions: store.divisions });
 /** The company's records of the open division only: a page cannot mix the two businesses. */
 const scoped = () => scopedCompany(store.company, division);
-const hubs = () => hubsOf(division);
+const hubs = () => arranged(hubsOf(division), orderOf(prefs.get(MENU_ORDER)));   // v0.92.0: in the person's order
 const hubOf = name => hubs().find(h => h.tabs.includes(name));
 /** The page a section opens on: the one last opened in it, else its first page this person may open (v0.22.0: no grid of tiles). */
 const entryOf = h => { const tabs = h.tabs.filter(allowed); return lastTab[h.id] && tabs.includes(lastTab[h.id]) ? lastTab[h.id] : tabs[0]; };
@@ -319,8 +319,9 @@ function renderSidebar(name, summaries) {
       </a>`;
   };
   const teamLinks = !p ? [] : hubs().filter(h => h.team).map(link).filter(String);
-  $('#nav-hubs').innerHTML = String(html`${!p ? '' : hubs().filter(h => !h.team).map(link)}
-    ${teamLinks.length ? html`<div class="side-label">Team</div>${teamLinks}` : ''}`);
+  $('#nav-hubs').innerHTML = String(html`${!p ? '' : hubs().filter(h => !h.team).map(link)}`);
+  // v0.92.0: + New sits under the main items (index.html), then the Team items
+  $('#nav-team').innerHTML = String(html`${teamLinks.length ? html`<div class="side-label">Team</div>${teamLinks}` : ''}`);
   // the open project's health under the chooser: progress and days behind, with a coloured dot
   const own = summaries.find(s => s.project === p);
   const health = own ? healthOf(own) : null;

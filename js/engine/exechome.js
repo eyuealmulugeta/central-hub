@@ -12,6 +12,19 @@ const seniority = role => { const w = normRole(role).toLowerCase(), i = ROLES.fi
 /** Box keys in their rows: the wide row, the three small boxes, the bottom row, the planning row. */
 export const ROWS = [['today', 'money'], ['action', 'spot', 'requests'], ['book', 'people'], ['week', 'waits']];
 
+/** v0.92.0: every box in its usual order, and the names the Arrange list shows. */
+export const BOXES = ROWS.flat();
+export const BOX_LABELS = { today: 'Today at a glance', money: 'Financials & progress', action: 'Needs your action', spot: 'Spotlight', requests: 'Site requests', book: 'Signed site book', people: 'On site now', week: 'This week', waits: 'Waiting on others' };
+export const HOME_ORDER = 'sf:homeOrder';
+/** The boxes in the person's order (boxes they never placed keep their usual place after). */
+export const boxOrder = (order = []) => [...order.filter(k => BOXES.includes(k)), ...BOXES.filter(k => !order.includes(k))];
+/** Rows for that order: a wide row of two, a row of three small boxes, then rows of two. The usual order gives ROWS. */
+export function rowsFor(order = []) {
+  const keys = boxOrder(order), out = [];
+  for (const n of [2, 3, 2, 2]) out.push(keys.splice(0, n));
+  return out.filter(r => r.length);
+}
+
 /** The rows with only the boxes that have something to show; an empty row is dropped. */
 export const rowsOf = (has, rows = ROWS) => rows.map(r => r.filter(k => has[k])).filter(r => r.length);
 

@@ -19,6 +19,11 @@
     <label class="side-project" id="side-project" hidden><span>Project</span><select id="side-project-select" aria-label="Select project"></select></label>
     <div class="side-health" id="side-health" hidden></div>
     <nav class="nav" id="nav-hubs" aria-label="Sections"></nav>
+    <details class="quick side-new" id="quick">
+      <summary class="side-link" title="Start something new (N)"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg><span>New</span></summary>
+      <div class="menu" id="quick-menu"></div>
+    </details>
+    <nav class="nav" id="nav-team" aria-label="Team"></nav>
     <button class="side-link" id="btn-new-project" type="button"><span>+ New project</span></button>
     <span class="grow"></span>
     <div id="nav-foot"></div>
@@ -35,10 +40,6 @@
     <span class="chip" id="role-badge"></span>
     <a class="btn ghost gear" id="btn-settings" href="#prices" title="Settings"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.488.488 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6a3.6 3.6 0 110-7.2 3.6 3.6 0 010 7.2z"/></svg><span class="sr">Settings</span></a>
     <button class="btn ghost" id="btn-print" type="button">Print</button>
-    <details class="quick" id="quick">
-      <summary class="btn primary" title="Start something new">+ New</summary>
-      <div class="menu" id="quick-menu"></div>
-    </details>
   </header>
 
   <nav id="tabs" class="tabs" aria-label="Pages of this section"></nav>

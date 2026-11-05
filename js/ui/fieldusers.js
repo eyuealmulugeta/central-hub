@@ -223,14 +223,16 @@ function accessCell(p, r, catalog) {
   </details>`;
 }
 
-function personRow(p, catalog, waits) {
-  const r = rowOf(p), [stWord, stTone] = ST_WORDS[p.st] || ST_WORDS.active;
+function personRow(p, catalog, devs = []) {
+  const waits = devs.length, r = rowOf(p), [stWord, stTone] = ST_WORDS[p.st] || ST_WORDS.active;
   const typed = [p.uName, p.uPos].filter(Boolean).join(', ');
   const acts = ACTIONS.filter(([k]) => (k !== 'approve' && k !== 'deny') || waits > 0).filter(([k]) => !(k === 'activate' && p.st === 'active') && !(k === 'suspend' && p.st === 'suspended') && !(k === 'block' && p.st === 'blocked'));
   return html`<tr class="${p.st !== 'active' ? 'muted-row' : ''}">
     <td><input data-chg="fuEdit" data-e="${p.email}" data-f="full" value="${r.full}" aria-label="Name of ${p.email}" placeholder="Full name" class="fu-name">
       ${typed && !p.ok ? html`<br><span class="muted small">Typed in the app: ${typed}</span>` : ''}</td>
-    <td class="small">${p.email}${waits ? html` <span class="chip high">New</span>` : ''}</td>
+    <td class="small">${p.email}${devs.map(d => html`<div class="fu-newphone"><span class="chip warn">New phone</span> <span class="muted">${d.ua || 'Unknown device'} · ${when(d.first)}</span>
+      <span class="actions"><button class="btn small primary" type="button" data-act="fuDecide" data-e="${d.email}" data-dev="${d.dev}" data-v="approve">Approve</button>
+      <button class="btn small ghost" type="button" data-act="fuDecide" data-e="${d.email}" data-dev="${d.dev}" data-v="deny">Reject</button></span></div>`)}</td>
     <td>${r.pos || html`<span class="muted">No position</span>`}${r.inDir ? '' : html`<br><span class="chip warn small" title="Add this email to the person in the Manpower Directory (Employee data)">Not in the directory</span>`}</td>
     <td>${accessCell(p, r, catalog)}</td>
     <td><select data-chg="fuEdit" data-e="${p.email}" data-f="role" aria-label="Field Report role of ${p.email}">${options(ROLE_WORDS, r.role)}</select></td>
@@ -281,6 +283,8 @@ async function compareLoad() {
 export function body() {
   if (!feed && !busy) load();
   const people = feed?.people || [], catalog = feed?.catalog || [], waits = waiting();
+  // v0.95.2 (owner, 5 Nov): a known account asking from a new phone is decided on its own row; only an email nobody has added yet stays on top
+  const fresh = waits.filter(d => !people.some(p => p.email === d.email));
   return html`
     ${routeCard()}
     <section class="card set-box">
@@ -291,10 +295,10 @@ export function body() {
       ${said ? html`<p class="callout ${said.ok ? 'ok' : 'bad'}" role="status"><b>${said.ok ? '✓' : '✗'}</b> <span>${said.text}</span></p>` : ''}
       ${signupsCard(catalog)}
       ${crewCard()}
-      ${waits.length ? html`<h4>New sign-ins <span class="chip high">${waits.length} new</span></h4><ul class="list fu-devs">${waits.map(deviceRow)}</ul>` : ''}
+      ${fresh.length ? html`<h4>New sign-ins <span class="chip high">${fresh.length} new</span></h4><ul class="list fu-devs">${fresh.map(deviceRow)}</ul>` : ''}
       ${people.length ? html`<div class="table-wrap"><table class="table compact fu-table">
         <thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Access</th><th>Role</th><th>Status</th><th>Action</th><th></th></tr></thead>
-        <tbody>${people.map(p => personRow(p, catalog, waits.filter(d => d.email === p.email).length))}</tbody>
+        <tbody>${people.map(p => personRow(p, catalog, waits.filter(d => d.email === p.email)))}</tbody>
       </table></div>` : feed ? html`<p class="empty">Nobody may sign in to Field Report yet. Add a person below.</p>` : ''}
       <h4>Add a person</h4>
       <form data-form="fuAdd" class="entry">

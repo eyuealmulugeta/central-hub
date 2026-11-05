@@ -1914,3 +1914,6 @@ body.viewing { overflow: hidden; }
 .xv-act { border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.12); color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
 .xv-act:hover { background: rgba(255,255,255,.25); }
 .xv-fig figcaption { align-items: center; }
+/* v0.95.2: a new phone of a known account, decided on its row; the day's photos scroll when there are many */
+.fu-newphone { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.xbox-today .xmedia { max-height: 560px; overflow-y: auto; }

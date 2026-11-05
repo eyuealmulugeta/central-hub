@@ -53,7 +53,7 @@ function todayBox(m, c) {
   const all = viewerItems(c.project.fieldCode || '', m.photos, m.videos);
   const list = all.filter(x => !mediaKind || x.kind === mediaKind);
   if (viewAt < 0) viewList = list;   // a redraw while the viewer is open keeps its list
-  const shown = list.slice(0, 9), more = list.length - shown.length;
+  const shown = list, more = 0;   // v0.95.2 (owner, 5 Nov): every photo and video of the day, loaded by itself
   const nPh = m.photos.length, nV = m.videos.length;
   const when = m.day === c.today ? (m.live ? 'Today · live from site' : 'Today') : fmtDate(m.day);
   // v0.95.0 (owner, 5 Nov): a tab per day of this week; a day opens its photos and videos

@@ -482,8 +482,8 @@ export async function fieldPhotoPut(proj, report, id, data) {
   return out.fileId;
 }
 
-export async function fieldPhoto(proj, report, id) {
-  const out = await post({ action: 'photoGet', proj, report, id });
+export async function fieldPhoto(proj, report, id, full = false) {
+  const out = await post({ action: 'photoGet', proj, report, id, ...(full ? { full: true } : {}) });   // v0.95.0: full = the camera original
   if (!out.ok) throw new Error(out.error || 'Field Report would not give the photo.');
   return out.data;
 }
@@ -500,6 +500,19 @@ export async function fieldUserDo(action, body) {
 }
 
 /** v0.30.0: the Spotlight notes of one project from the site (script 7.39.0, spotList), newest first. */
+/** v0.95.0: the photos the site sent on a day, before the report is posted (script 7.48.0 dayPhotos). */
+export async function fieldDayPhotos(code, date) {
+  const out = await post({ action: 'dayPhotos', proj: String(code || '').toUpperCase(), date });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not say.');
+  return out.photos || [];
+}
+/** v0.95.0: Save a site video for good (script 7.48.0 videoKeep); it is then never deleted after 30 days. */
+export async function fieldVideoKeep(code, id) {
+  const out = await post({ action: 'videoKeep', proj: String(code || '').toUpperCase(), id });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not keep it.');
+  return out.video;
+}
+
 /** v0.94.0 (R4): the site videos of a project, kept 30 days (script 7.47.0 videoList), newest first. */
 export async function fieldVideos(code) {
   const out = await post({ action: 'videoList', proj: String(code || '').toUpperCase() });

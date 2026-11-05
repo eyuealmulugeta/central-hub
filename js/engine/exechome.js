@@ -49,9 +49,18 @@ const todayDays = reports => reports.filter(r => r.source === 'field' && r.field
 
 /** The viewer's list: videos first, then photos, as { kind, key | fileId, label }. */
 export const viewerItems = (proj, photos, videos) => [
-  ...videos.map(v => ({ kind: 'video', fileId: v.fileId, label: [v.time, 'Video', v.byName].filter(Boolean).join(' · ') })),
+  ...videos.map(v => ({ kind: 'video', id: v.id, proj, fileId: v.fileId, kept: !!v.kept, label: [v.time, 'Video', v.byName].filter(Boolean).join(' · ') })),
   ...photos.map(({ r, p }) => ({ kind: 'photo', key: `${proj}|${r.field.pdf}|${p.id}`, label: [p.time, p.zone || p.task, p.caption].filter(Boolean).join(' · ') })),
 ];
+
+/** v0.95.0 (owner, 5 Nov): the days of this week, Monday to Sunday, as YYYY-MM-DD. */
+export function weekDays(today) {
+  const t = new Date(`${today}T00:00:00Z`), back = (t.getUTCDay() + 6) % 7;
+  return Array.from({ length: 7 }, (_, i) => new Date(t.getTime() + (i - back) * 864e5).toISOString().slice(0, 10));
+}
+/** The photos the site sent for a day before its report is posted (script dayPhotos), in the shape of a report's photos. */
+export const livePhotos = (list = []) => list.filter(x => x && x.id && x.report)
+  .map(x => ({ r: { field: { pdf: x.report } }, p: { id: x.id, time: x.time, caption: x.caption, zone: x.zone, task: x.task } }));
 /** The next place in a list of n, going round at either end. */
 export const stepIn = (i, d, n) => (n ? ((i + d) % n + n) % n : 0);
 

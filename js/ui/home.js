@@ -11,9 +11,9 @@ import { weeklyDue } from '../engine/report.js';
 import { billStatus } from '../engine/bills.js';
 import { healthOf, projectLine, needsYou, needGroups } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
-import { fieldVideos } from '../sync/fieldreport.js';
+import { fieldVideos, fieldDayPhotos, fieldPhoto, fieldVideoKeep } from '../sync/fieldreport.js';
 import { fillPhotos } from './photos.js';
-import { rowsOf, rowsFor, HOME_ORDER, latestMedia, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
+import { rowsOf, rowsFor, HOME_ORDER, todayMedia, weekDays, livePhotos, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
 import { expenseTitle, isExpense } from '../engine/expenses.js';
 import { siNo, SI_STATUS, SI_TONE } from '../engine/siteinstr.js';
@@ -57,14 +57,17 @@ function todayBox(m, c) {
   if (viewAt < 0) viewList = list;   // a redraw while the viewer is open keeps its list
   const shown = list.slice(0, 9), more = list.length - shown.length;
   const nPh = m.photos.length, nV = m.videos.length;
-  const when = !m.day ? '' : m.day === c.today ? 'Today' : `Latest · ${fmtDate(m.day)}`;
+  const when = m.day === c.today ? (m.live ? 'Today · live from site' : 'Today') : fmtDate(m.day);
+  // v0.95.0 (owner, 5 Nov): a tab per day of this week; a day opens its photos and videos
+  const tabs = html`<div class="xdays">${m.week.map(d => html`<button type="button" class="${d === m.day ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="mediaDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
+      <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${m.counts[d] ? html`<i>${m.counts[d]}</i>` : ''}</button>`)}</div>`;
   const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
     ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay" aria-hidden="true">▶</span>`
     : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}<figcaption>${x.label}</figcaption></figure></button>`;
-  return box('today', html`${nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
+  return box('today', html`${tabs}${nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
     ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
       ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
-    : html`<p class="empty">${c.project.fieldCode ? 'No site photos or videos yet. They show here as the site sends them.' : 'This project is not linked to Field Report yet.'}</p>`}
+    : html`<p class="empty">${!c.project.fieldCode ? 'This project is not linked to Field Report yet.' : m.busy ? 'Getting the photos from the site…' : m.day === c.today ? 'No photos from the site yet today. Each one shows here as soon as it is taken.' : 'No photos or videos on this day.'}</p>`}
     <p class="xfoot">All photos are taken live with the Field Report camera, not uploaded. Videos are recorded live too and kept 30 days, then deleted.</p>`,
   { n: [when, `${nPh} photo${nPh === 1 ? '' : 's'}`, nV ? `${nV} video${nV === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '), link: ['reports', 'Open reports'] });
 }
@@ -78,7 +81,13 @@ function viewer() {
     el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Site photos and videos');
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-v]');
-      if (b) { e.stopPropagation(); if (b.dataset.v === 'x') closeView(); else showAt(stepIn(viewAt, +b.dataset.v, viewList.length)); }
+      if (b) {
+        e.stopPropagation();
+        if (b.dataset.v === 'x') closeView();
+        else if (b.dataset.v === 'dl') downloadOriginal(viewList[viewAt], b);
+        else if (b.dataset.v === 'save') saveVideo(viewList[viewAt], b);
+        else showAt(stepIn(viewAt, +b.dataset.v, viewList.length));
+      }
       else if (e.target === el) closeView();
     });
     document.body.append(el);
@@ -94,11 +103,42 @@ function showAt(i) {
     <figure class="xv-fig">${x.kind === 'video'
       ? html`<iframe src="https://drive.google.com/file/d/${x.fileId}/preview" title="Site video" allow="autoplay; fullscreen" allowfullscreen></iframe>`
       : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}
-      <figcaption>${x.label}<span>${i + 1} of ${viewList.length}</span></figcaption></figure>`);
+      <figcaption>${x.label}<span>${i + 1} of ${viewList.length}</span>${x.kind === 'video'
+        ? html`<button type="button" class="xv-act" data-v="save">${x.kept ? 'Kept ✓ · Download' : 'Save'}</button>`
+        : html`<button type="button" class="xv-act" data-v="dl">Download original</button>`}</figcaption></figure>`);
   el.hidden = false;
   document.body.classList.add('viewing');
   fillPhotos(el);
 }
+/** v0.95.0: the camera original of a photo, full size and quality, saved on this computer. */
+async function downloadOriginal(x, b) {
+  if (!x || x.kind !== 'photo') return;
+  const [proj, report, id] = x.key.split('|');
+  b.disabled = true; b.textContent = 'Getting the original…';
+  try {
+    const data = await fieldPhoto(proj, report, id, true);
+    const a = Object.assign(document.createElement('a'), { href: `data:image/jpeg;base64,${data}`, download: `${report.replace(/\.pdf$/, '')}_${id}.jpg` });
+    document.body.append(a); a.click(); a.remove();
+    b.textContent = 'Downloaded ✓';
+  } catch (e) { b.textContent = `Could not get it: ${e.message || e}`; }
+  finally { b.disabled = false; }
+}
+/** v0.95.0: Save a video: kept for good (never deleted after 30 days) and downloaded from Drive. */
+async function saveVideo(x, b) {
+  if (!x || x.kind !== 'video') return;
+  if (!x.kept) {
+    b.disabled = true; b.textContent = 'Saving…';
+    try {
+      await fieldVideoKeep(x.proj, x.id);
+      x.kept = true;
+      const v = vids.list.find(y => y.id === x.id); if (v) v.kept = true;
+      b.textContent = 'Kept ✓ · Download';
+    } catch (e) { b.textContent = `Could not save: ${e.message || e}`; b.disabled = false; return; }
+    b.disabled = false;
+  }
+  window.open(`https://drive.google.com/uc?export=download&id=${encodeURIComponent(x.fileId)}`, '_blank', 'noopener');
+}
+
 function closeView() {
   const el = document.getElementById('xviewer');
   if (el) { el.hidden = true; el.innerHTML = ''; }
@@ -110,6 +150,17 @@ if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeView(); }
   else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); showAt(stepIn(viewAt, e.key === 'ArrowRight' ? 1 : -1, viewList.length)); }
 }, true);
+
+// v0.95.0: the photos of a day not posted yet, straight from the site (script dayPhotos); today's are read again after 2 minutes
+const live = new Map();   // "CODE|date" -> { list, at, busy }
+let mediaDay = '';        // the day tab chosen; '' = today
+function loadLive(code, date, today) {
+  const k = `${code}|${date}`, x = live.get(k);
+  if (!store.cloud || (x && (x.busy || date !== today || Date.now() - x.at < 120e3))) return;
+  live.set(k, { list: x?.list || [], at: Date.now(), busy: true });
+  fieldDayPhotos(code, date).then(l => { live.set(k, { list: l, at: Date.now(), busy: false }); store.notify(); })
+    .catch(() => { live.set(k, { list: x?.list || [], at: Date.now(), busy: false }); });
+}
 
 // v0.94.0 (R4): the project's site videos, read once per project and page visit
 const vids = { code: '', list: [], busy: false, err: '' };
@@ -233,7 +284,7 @@ export function render(c) {
   const may = page => (c.can ? c.can(page) : true);
   const own = summaries.find(s => s.project.id === c.project.id) || {};
   if (c.project.fieldCode && may('reports')) loadVideos(c);
-  const media = c.project.fieldCode ? latestMedia(c.ws.reports || [], vids.code === String(c.project.fieldCode).toUpperCase() ? vids.list : [], c.today) : { day: '', photos: [], videos: [] };
+  const media = mediaFor(c, may('reports'));
   const reqs = may('requests') ? requestBoard(c.ws.requests || []) : { open: 0 };
   const book = may('siteinstr') ? bookLog(c.ws.siteInstr || []) : [];
   const since = fromDay(toDay(c.today) - 14);
@@ -283,6 +334,25 @@ export function render(c) {
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 
+/**
+ * v0.95.0 (owner, 5 Nov): the photos and videos of the day chosen in this week's tabs. A day with a posted report shows
+ * the report's photos; today (or a day not posted yet) shows what the site has sent so far, live.
+ */
+function mediaFor(c, mayRead) {
+  const code = String(c.project.fieldCode || '').toUpperCase(), week = weekDays(c.today), reports = c.ws.reports || [];
+  const day = week.includes(mediaDay) && mediaDay <= c.today ? mediaDay : c.today;
+  const videos = code && vids.code === code ? vids.list : [];
+  const counts = {};
+  for (const d of week) {
+    const n = todayMedia(reports, d).length || (live.get(`${code}|${d}`)?.list || []).length;
+    counts[d] = n + videos.filter(v => v.date === d).length;
+  }
+  if (!code) return { day, week, counts, photos: [], videos: [] };
+  let photos = todayMedia(reports, day), isLive = false;
+  if (!photos.length && mayRead) { loadLive(code, day, c.today); photos = livePhotos(live.get(`${code}|${day}`)?.list); isLive = photos.length > 0; }
+  return { day, week, counts, photos, videos: videos.filter(v => v.date === day).sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))), live: isLive, busy: !!live.get(`${code}|${day}`)?.busy };
+}
+
 const presenting = () => typeof document !== 'undefined' && document.body.classList.contains('presenting');
 if (typeof document !== 'undefined') document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('presenting'); });
 
@@ -290,6 +360,7 @@ const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
 
 export const actions = {
   only(el) { only = el.dataset.id || ''; },
+  mediaDay(el) { mediaDay = el.dataset.d || ''; },
   mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
   mediaKind(el) { mediaKind = el.dataset.k || ''; },
   arrangeOpen() { openArrange(); },

@@ -1902,3 +1902,15 @@ body.side-narrow .side-new > summary span { display: none; }
 .xv-x { top: 14px; right: 16px; width: 42px; height: 42px; font-size: 20px; }
 body.viewing { overflow: hidden; }
 @media (max-width: 700px) { .xv-nav { width: 44px; height: 44px; font-size: 30px; } .xv-nav.prev { left: 6px; } .xv-nav.next { right: 6px; } }
+
+/* v0.95.0: this week's day tabs on the Dashboard, and the viewer's Download / Save button */
+.xdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 10px; }
+.xdays button { position: relative; border: 1px solid var(--line); background: var(--card, #fff); border-radius: 8px; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 1px; cursor: pointer; font: inherit; color: inherit; }
+.xdays button small { opacity: .7; font-size: 11px; }
+.xdays button i { position: absolute; top: -6px; right: -4px; font-style: normal; font-size: 10px; background: #1e3a5f; color: #fff; border-radius: 9px; padding: 0 5px; line-height: 16px; }
+.xdays button.today { border-color: #1e3a5f; }
+.xdays button.on { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+.xdays button:disabled { opacity: .35; cursor: default; }
+.xv-act { border: 1px solid rgba(255,255,255,.5); background: rgba(255,255,255,.12); color: #fff; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+.xv-act:hover { background: rgba(255,255,255,.25); }
+.xv-fig figcaption { align-items: center; }

@@ -10,18 +10,19 @@ import { convert } from './pricing.js';
 const seniority = role => { const w = normRole(role).toLowerCase(), i = ROLES.findIndex(x => x.toLowerCase() === w); return (tierOfPosition(role) || 9) * 1000 + (i < 0 ? 999 : i); };
 
 /** Box keys in their rows: the wide row, the three small boxes, the bottom row, the planning row. */
-export const ROWS = [['today', 'money'], ['action', 'spot', 'requests'], ['book', 'people'], ['week', 'waits']];
+// v0.94.0 (owner, 5 Nov): the fixed Dashboard of design A revised; This week and Waiting on others are not on it
+export const ROWS = [['today', 'money'], ['action', 'spot', 'requests'], ['book', 'people']];
 
 /** v0.92.0: every box in its usual order, and the names the Arrange list shows. */
 export const BOXES = ROWS.flat();
-export const BOX_LABELS = { today: 'Today at a glance', money: 'Financials & progress', action: 'Needs your action', spot: 'Spotlight', requests: 'Site requests', book: 'Signed site book', people: 'On site now', week: 'This week', waits: 'Waiting on others' };
+export const BOX_LABELS = { today: 'Today at a glance', money: 'Financials & progress', action: 'Needs your action', spot: 'Spotlight', requests: 'Site requests', book: 'Signed site book', people: 'On site now' };
 export const HOME_ORDER = 'sf:homeOrder';
 /** The boxes in the person's order (boxes they never placed keep their usual place after). */
 export const boxOrder = (order = []) => [...order.filter(k => BOXES.includes(k)), ...BOXES.filter(k => !order.includes(k))];
 /** Rows for that order: a wide row of two, a row of three small boxes, then rows of two. The usual order gives ROWS. */
 export function rowsFor(order = []) {
   const keys = boxOrder(order), out = [];
-  for (const n of [2, 3, 2, 2]) out.push(keys.splice(0, n));
+  for (const n of [2, 3, 2]) out.push(keys.splice(0, n));
   return out.filter(r => r.length);
 }
 
@@ -34,6 +35,25 @@ export function todayMedia(reports = [], today) {
     .flatMap(r => (r.field.photoFiles || []).filter(p => p && p.id && !p.gallery).map(p => ({ r, p })))
     .sort((a, b) => String(b.p.time || '').localeCompare(String(a.p.time || '')));
 }
+
+/**
+ * v0.94.0: the day the photo box shows: today when today has photos or videos, else the latest day that has some
+ * (the site may not have sent today's report yet). Returns { day, photos, videos } with photos newest first.
+ */
+export function latestMedia(reports = [], videos = [], today) {
+  const days = new Set([...todayDays(reports), ...videos.map(v => v.date).filter(Boolean)]);
+  const day = days.has(today) ? today : [...days].filter(d => d <= today).sort().pop() || '';
+  return { day, photos: day ? todayMedia(reports, day) : [], videos: videos.filter(v => v.date === day).sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))) };
+}
+const todayDays = reports => reports.filter(r => r.source === 'field' && r.field?.pdf && (r.field.photoFiles || []).some(p => p && p.id && !p.gallery)).map(r => r.date);
+
+/** The viewer's list: videos first, then photos, as { kind, key | fileId, label }. */
+export const viewerItems = (proj, photos, videos) => [
+  ...videos.map(v => ({ kind: 'video', fileId: v.fileId, label: [v.time, 'Video', v.byName].filter(Boolean).join(' · ') })),
+  ...photos.map(({ r, p }) => ({ kind: 'photo', key: `${proj}|${r.field.pdf}|${p.id}`, label: [p.time, p.zone || p.task, p.caption].filter(Boolean).join(' · ') })),
+];
+/** The next place in a list of n, going round at either end. */
+export const stepIn = (i, d, n) => (n ? ((i + d) % n + n) % n : 0);
 
 const PENDING = ['requested', 'gm'], APPROVED = ['approved'], TRANSIT = ['arranging'];
 

@@ -9,9 +9,11 @@ import { isGM, levelOf } from '../engine/expenses.js';
 import { tradeActuals, tradeLines, tradeWarnings } from '../engine/tradebudget.js';
 import { weeklyDue } from '../engine/report.js';
 import { billStatus } from '../engine/bills.js';
-import { healthOf, projectLine, needsYou, needGroups, thisWeek, waitingOn } from '../engine/today.js';
+import { healthOf, projectLine, needsYou, needGroups } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
-import { rowsOf, rowsFor, HOME_ORDER, todayMedia, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
+import { fieldVideos } from '../sync/fieldreport.js';
+import { fillPhotos } from './photos.js';
+import { rowsOf, rowsFor, HOME_ORDER, latestMedia, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
 import { expenseTitle, isExpense } from '../engine/expenses.js';
 import { siNo, SI_STATUS, SI_TONE } from '../engine/siteinstr.js';
@@ -37,7 +39,7 @@ const HEADS = {
   today: ['#1e3a5f', 'reports', 'Today at a glance'], money: ['#0f5f5a', 'finance', 'Financials & progress'],
   action: ['#8a2e3b', 'notifications', 'Needs your action'], spot: ['#5b4b8a', 'meetings', 'Spotlight'],
   requests: ['#8a5a14', 'docs', 'Site requests'], book: ['#3f4a75', 'contracts', 'Signed site book'],
-  people: ['#2f5d8a', 'hr', 'On site now'], week: ['#475569', 'schedule', 'This week'], waits: ['#475569', 'discuss', 'Waiting on others'],
+  people: ['#2f5d8a', 'hr', 'On site now'], 
 };
 const box = (k, body, { n = '', link = null } = {}) => {
   const [hue, ic, title] = HEADS[k];
@@ -47,12 +49,77 @@ const pctOf = (a, b) => (b > 0 ? Math.round(a / b * 100) : 0);
 const initials = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
 const starsOf = v => html`<span class="xstars" title="${v} of 5">${'★'.repeat(Math.round(v))}<s>${'★'.repeat(5 - Math.round(v))}</s></span>`;
 
-function todayBox(media, c) {
-  const proj = c.project.fieldCode || '', shown = media.slice(0, 9), more = media.length - shown.length;
-  return box('today', html`<div class="xmedia">${shown.map(({ r, p }, i) => html`<a class="xm ${i === 0 ? 'big' : ''}" href="#reports"><figure><img src="data:," alt="${p.caption || 'Site photo'}" data-fphoto="${proj}|${r.field.pdf}|${p.id}"><figcaption>${[p.time, p.zone || p.task, p.caption].filter(Boolean).join(' · ')}</figcaption></figure></a>`)}
-      ${more > 0 ? html`<a class="xm xmore" href="#reports"><b>+${more}</b><span>more</span></a>` : ''}</div>
-    <p class="xfoot">All photos are taken live with the Field Report camera, not uploaded.</p>`,
-  { n: `${media.length} photo${media.length === 1 ? '' : 's'} · ${c.project.name}`, link: ['reports', 'Open reports'] });
+// v0.94.0 (owner, 5 Nov): a tap opens the photo or video on the full screen, with previous and next
+let viewList = [], viewAt = -1, mediaKind = '';   // the items the viewer steps through; '' = photos and videos
+function todayBox(m, c) {
+  const all = viewerItems(c.project.fieldCode || '', m.photos, m.videos);
+  const list = all.filter(x => !mediaKind || x.kind === mediaKind);
+  if (viewAt < 0) viewList = list;   // a redraw while the viewer is open keeps its list
+  const shown = list.slice(0, 9), more = list.length - shown.length;
+  const nPh = m.photos.length, nV = m.videos.length;
+  const when = !m.day ? '' : m.day === c.today ? 'Today' : `Latest · ${fmtDate(m.day)}`;
+  const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
+    ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay" aria-hidden="true">▶</span>`
+    : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}<figcaption>${x.label}</figcaption></figure></button>`;
+  return box('today', html`${nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
+    ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
+      ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
+    : html`<p class="empty">${c.project.fieldCode ? 'No site photos or videos yet. They show here as the site sends them.' : 'This project is not linked to Field Report yet.'}</p>`}
+    <p class="xfoot">All photos are taken live with the Field Report camera, not uploaded. Videos are recorded live too and kept 30 days, then deleted.</p>`,
+  { n: [when, `${nPh} photo${nPh === 1 ? '' : 's'}`, nV ? `${nV} video${nV === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '), link: ['reports', 'Open reports'] });
+}
+
+/** The full-screen viewer, drawn over the page (and over Present); arrows or the keys ← → step, Esc closes. */
+function viewer() {
+  let el = document.getElementById('xviewer');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'xviewer'; el.className = 'xviewer'; el.hidden = true;
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Site photos and videos');
+    el.addEventListener('click', e => {
+      const b = e.target.closest('[data-v]');
+      if (b) { e.stopPropagation(); if (b.dataset.v === 'x') closeView(); else showAt(stepIn(viewAt, +b.dataset.v, viewList.length)); }
+      else if (e.target === el) closeView();
+    });
+    document.body.append(el);
+  }
+  return el;
+}
+function showAt(i) {
+  const el = viewer(), x = viewList[i];
+  if (!x) return closeView();
+  viewAt = i;
+  el.innerHTML = String(html`<button type="button" class="xv-x" data-v="x" title="Close (Esc)">✕</button>
+    ${viewList.length > 1 ? html`<button type="button" class="xv-nav prev" data-v="-1" title="Previous (←)">‹</button><button type="button" class="xv-nav next" data-v="1" title="Next (→)">›</button>` : ''}
+    <figure class="xv-fig">${x.kind === 'video'
+      ? html`<iframe src="https://drive.google.com/file/d/${x.fileId}/preview" title="Site video" allow="autoplay; fullscreen" allowfullscreen></iframe>`
+      : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}
+      <figcaption>${x.label}<span>${i + 1} of ${viewList.length}</span></figcaption></figure>`);
+  el.hidden = false;
+  document.body.classList.add('viewing');
+  fillPhotos(el);
+}
+function closeView() {
+  const el = document.getElementById('xviewer');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+  viewAt = -1;
+  document.body.classList.remove('viewing');
+}
+if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
+  if (viewAt < 0) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeView(); }
+  else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); showAt(stepIn(viewAt, e.key === 'ArrowRight' ? 1 : -1, viewList.length)); }
+}, true);
+
+// v0.94.0 (R4): the project's site videos, read once per project and page visit
+const vids = { code: '', list: [], busy: false, err: '' };
+function loadVideos(c) {
+  const code = String(c.project.fieldCode || '').toUpperCase();
+  if (vids.code !== code) Object.assign(vids, { code, list: [], busy: false, err: '', done: false });
+  if (!code || vids.busy || vids.done || !(store.cloud)) return;
+  vids.busy = true;
+  fieldVideos(code).then(l => { vids.list = l; }).catch(e => { vids.err = String(e.message || e); })
+    .finally(() => { vids.busy = false; vids.done = true; if (vids.list.length) store.notify(); });
 }
 
 function moneyBox(split, c, rows) {
@@ -69,26 +136,27 @@ function moneyBox(split, c, rows) {
         <div><i style="background:#93c5fd"></i>Remaining ${split.remainingPct}%<b>${money(split.remaining, cur)}</b></div></div></div>` : ''}
     ${rows.map(s => { const paid = pctOf(s.money.spent, s.budget), done = Math.round(s.progress || 0); return html`<button type="button" class="xprow" data-act="openProject" data-id="${s.project.id}" data-to="dashboard" title="Open ${s.project.name}">
       <span><span>${s.project.name}</span><b>${done}% done · ${paid}% paid</b></span><span class="bar"><i class="${paid > done ? 'r' : ''}" style="width:${Math.min(100, done)}%"></i></span></button>`; })}
-    ${rows.some(s => pctOf(s.money.spent, s.budget) > Math.round(s.progress || 0)) ? html`<p class="xnote">Red bar: paid ahead of the work done.</p>` : ''}`,
+    ${rows.some(s => pctOf(s.money.spent, s.budget) > Math.round(s.progress || 0)) ? html`<p class="xnote">Red bar: paid ahead of the work done.</p>` : ''}
+    ${split || rows.length ? '' : html`<p class="empty">No budget set yet. The budget, what is paid and what is asked for show here.</p>`}`,
   { n: split ? c.project.name : '', link: ['ledger', 'Ledger'] });
 }
 
 function requestsBox(b) {
   const title = r => (isExpense(r) ? expenseTitle(r) : titleOf(r));
   return box('requests', html`<div class="xcnt"><div class="p"><b>${b.pending}</b><small>Pending</small></div><div class="a"><b>${b.approved}</b><small>Approved</small></div><div class="t"><b>${b.transit}</b><small>In transit</small></div></div>
-    <ul class="xlist">${b.lines.slice(0, 3).map(({ r, stage }) => html`<li><i class="xdot ${stage}"></i><span class="xt"><b>${title(r)}</b>${r.neededBy ? html` <small>needed ${fmtDate(r.neededBy)}</small>` : ''}</span></li>`)}</ul>`,
+    ${b.lines.length ? '' : html`<p class="empty">No open site requests.</p>`}<ul class="xlist">${b.lines.slice(0, 3).map(({ r, stage }) => html`<li><i class="xdot ${stage}"></i><span class="xt"><b>${title(r)}</b>${r.neededBy ? html` <small>needed ${fmtDate(r.neededBy)}</small>` : ''}</span></li>`)}</ul>`,
   { n: `${b.open} open`, link: ['requests', 'Open'] });
 }
 
 function bookBox(list) {
-  return box('book', html`<ul class="xlist">${list.map(x => html`<li><span class="xt"><b>${siNo(x.no)} · ${x.subject || '(no subject)'}</b><br><small>${[x.consultant?.name || x.from, fmtDate(String(x.consultant?.at || x.date || '').slice(0, 10))].filter(Boolean).join(' · ')}</small></span>
+  return box('book', html`${list.length ? '' : html`<p class="empty">No site instruction sent to the consultant yet.</p>`}<ul class="xlist">${list.map(x => html`<li><span class="xt"><b>${siNo(x.no)} · ${x.subject || '(no subject)'}</b><br><small>${[x.consultant?.name || x.from, fmtDate(String(x.consultant?.at || x.date || '').slice(0, 10))].filter(Boolean).join(' · ')}</small></span>
       ${x.consultant?.image ? html`<img class="xsig" src="${x.consultant.image}" alt="Signature of ${x.consultant.name || 'the consultant'}">` : ''}<span class="tag ${SI_TONE[x.status] || ''}">${SI_STATUS[x.status] || x.status}</span></li>`)}</ul>`,
   { n: String(list.length), link: ['siteinstr', 'Site book'] });
 }
 
 function peopleBox(list, rated) {
   const shown = list.slice(0, 6);
-  return box('people', html`<ul class="xlist xpeople">${shown.map(p => html`<li>${p.photo ? html`<img class="xav" src="${p.photo}" alt="">` : html`<span class="xav">${initials(p.name)}</span>`}
+  return box('people', html`${list.length ? '' : html`<p class="empty">No one marked present in today's report yet.</p>`}<ul class="xlist xpeople">${shown.map(p => html`<li>${p.photo ? html`<img class="xav" src="${p.photo}" alt="">` : html`<span class="xav">${initials(p.name)}</span>`}
       <span class="xt"><b>${p.name}</b><br><small>${p.role}</small></span>${rated && p.stars != null ? starsOf(p.stars) : ''}</li>`)}</ul>
     ${list.length > shown.length ? html`<a class="xlink2" href="#attendance">+ ${list.length - shown.length} more on site</a>` : ''}`,
   { n: `${list.length} ${list.length === 1 ? 'person' : 'people'}`, link: ['attendance', 'Attendance'] });
@@ -159,14 +227,13 @@ export function render(c) {
   const others = summaries.filter(s => s.project.id !== c.project.id);
   const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
     .filter(n => !only || n.projectId === only);
-  const week = only && only !== c.project.id ? [] : thisWeek({ today: c.today, rows: c.sched.rows, items: c.flags.items, meetings });
-  const waits = only && only !== c.project.id ? [] : waitingOn(c.flags.items);
   const urgent = needs.filter(n => n.sev === 'high').length;
 
-  // v0.91.0: what each box has; a box with nothing is left out
+  // v0.94.0 (owner, 5 Nov): a fixed layout; every box the person may see is drawn, empty or not
   const may = page => (c.can ? c.can(page) : true);
   const own = summaries.find(s => s.project.id === c.project.id) || {};
-  const media = c.project.fieldCode ? todayMedia(c.ws.reports || [], c.today) : [];
+  if (c.project.fieldCode && may('reports')) loadVideos(c);
+  const media = c.project.fieldCode ? latestMedia(c.ws.reports || [], vids.code === String(c.project.fieldCode).toUpperCase() ? vids.list : [], c.today) : { day: '', photos: [], videos: [] };
   const reqs = may('requests') ? requestBoard(c.ws.requests || []) : { open: 0 };
   const book = may('siteinstr') ? bookLog(c.ws.siteInstr || []) : [];
   const since = fromDay(toDay(c.today) - 14);
@@ -178,16 +245,17 @@ export function render(c) {
   const people = onSite({ reports: c.ws.reports || [], team: c.ws.team || [], staff: c.company.staff || [], evaluations: may('evaluation') ? c.company.evaluations || [] : null, today: c.today });
   const split = c.money && c.led ? moneySplit({ budget: c.led.budget, spent: c.led.spent, requested: requestedAmount(c.ws.requests || [], c.project.currency, c.global.fx) }) : null;
   const bars = c.money ? summaries.filter(s => s.money && +s.budget > 0) : [];
-  const has = { today: media.length, money: split || bars.length, action: needs.length, spot: spot.length, requests: reqs.open, book: book.length, people: people.length, week: week.length, waits: waits.length };
+  const has = { today: true, money: !!c.money, action: true, spot: may('spotlight'), requests: may('requests'), book: may('siteinstr'), people: true };
 
   const kpi = (tone, label, value, hint, bar = null) => html`<div class="xkpi" style="--c:${tone}"><span class="lab">${label}</span><b>${value}</b><small>${hint}</small>${bar != null ? html`<span class="bar"><i style="width:${Math.min(100, Math.max(0, bar))}%"></i></span>` : ''}</div>`;
   const health = healthOf(own);
-  const kpis = [
-    own.basis && own.basis !== 'none' ? kpi('#2563eb', own.basis === 'billed' ? 'Invoiced' : 'Progress', `${Math.round(own.progress || 0)}%`, `${c.project.name} · ${health.label}`, own.progress || 0) : '',
-    split ? kpi('#0d9488', 'Budget paid', `${split.paidPct}%`, `${money(split.paid, c.project.currency)} of ${money(split.budget, c.project.currency)}`, split.paidPct) : '',
-    reqs.open ? kpi('#d97706', 'Requests open', reqs.open, `${reqs.pending} pending · ${reqs.transit} in transit`) : '',
-    needs.length ? kpi('#e11d48', 'Needs your action', needs.length, urgent ? `${urgent} urgent` : 'none urgent') : '',
-    people.length ? kpi('#7c3aed', 'On site today', people.length, c.project.name) : '',
+  const basis = own.basis && own.basis !== 'none';
+  const kpis = [   // v0.94.0: always the same five (Budget paid only for those who see money); '–' when there is nothing yet
+    kpi('#2563eb', own.basis === 'billed' ? 'Invoiced' : 'Progress', basis ? `${Math.round(own.progress || 0)}%` : '–', basis ? `${c.project.name} · ${health.label}` : 'No progress measured yet', basis ? own.progress || 0 : 0),
+    c.money ? kpi('#0d9488', 'Budget paid', split ? `${split.paidPct}%` : '–', split ? `${money(split.paid, c.project.currency)} of ${money(split.budget, c.project.currency)}` : 'No budget set yet', split ? split.paidPct : 0) : '',
+    kpi('#d97706', 'Requests open', reqs.open || 0, `${reqs.pending || 0} pending · ${reqs.transit || 0} in transit`),
+    kpi('#e11d48', 'Needs your action', needs.length, urgent ? `${urgent} urgent` : 'none urgent'),
+    kpi('#7c3aed', 'On site today', people.length, c.project.name),
   ].filter(Boolean);
 
   const BOX = {
@@ -195,15 +263,12 @@ export function render(c) {
     money: () => moneyBox(split, c, bars),
     action: () => box('action', needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
-          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`), { n: String(needs.length) }),
-    spot: () => box('spot', html`<ul class="xlist">${spot.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
+          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`]), { n: String(needs.length) }),
+    spot: () => box('spot', html`${spot.length ? '' : html`<p class="empty">No Spotlight note or visitor in the last 14 days.</p>`}<ul class="xlist">${spot.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
       : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: String(spot.length), link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),
-    people: () => peopleBox(people, may('evaluation')),
-    week: () => box('week', html`<ul class="tlist">${week.map(w => html`<li class="trow"><span class="tday"><b>${fmtDate(w.day).split(' ')[0]}</b><small>${new Date(w.day + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' })}</small></span>
-            <span class="tt"><b>${w.title}</b><span class="muted">${w.kind}${w.detail ? `, ${w.detail}` : ''}</span></span><a class="btn small ghost" href="#${w.link}">Open</a></li>`)}</ul>`),
-    waits: () => box('waits', html`<ul class="tlist">${waits.slice(0, 8).map(i => html`<li class="trow"><span class="tt"><b>${i.title}</b><span class="muted">With ${i.owner}${i.due ? `, due ${fmtDate(i.due)}` : ''}${i.overdue ? ', overdue' : ''}</span></span>${i.overdue ? tag('Overdue', 'high') : ''}</li>`)}</ul>`),
+    people: () => peopleBox(people, may('evaluation')),
   };
   const rows = rowsOf(has, rowsFor(orderOf(prefs.get(HOME_ORDER))));   // v0.92.0: in the person's order
   return html`
@@ -214,9 +279,8 @@ export function render(c) {
       <a class="btn small ghost" href="#quick" data-act="arrangeOpen" title="Change the order of the menu and of these boxes">Arrange</a>
       <button type="button" class="btn small" data-act="present" title="Full screen for a meeting (Esc to leave)">${presenting() ? 'Leave full screen' : 'Present'}</button>
     </section>
-    ${kpis.length ? html`<section class="xkpis" style="--n:${kpis.length}">${kpis}</section>` : ''}
-    ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}
-    ${rows.length ? '' : html`<section class="card"><p class="empty">All clear. Today's photos, requests and alerts show here as they come in.</p></section>`}`;
+    <section class="xkpis" style="--n:${kpis.length}">${kpis}</section>
+    ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 
 const presenting = () => typeof document !== 'undefined' && document.body.classList.contains('presenting');
@@ -226,6 +290,8 @@ const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
 
 export const actions = {
   only(el) { only = el.dataset.id || ''; },
+  mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
+  mediaKind(el) { mediaKind = el.dataset.k || ''; },
   arrangeOpen() { openArrange(); },
   /** v0.91.0: Present, the Home page alone on the full screen for a meeting. */
   present() {

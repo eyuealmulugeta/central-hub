@@ -39,7 +39,7 @@ export const resolve = page => REDIRECT[page] || page;
 
 // v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
 // project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
-const today = { id: 'home', label: 'Today', icon: 'home', tabs: ['home', 'notifications'] };
+const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'notifications'] };
 // v0.92.0 (owner, 5 Nov, R2): Quick moved out of Today's tabs into the main menu
 const quickHub = { id: 'quick', label: 'Quick', icon: 'apps', tabs: ['quick'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
 const team = [
@@ -72,7 +72,7 @@ export const MENUS = {
 };
 
 /** The phone's five tabs (v0.22.0): Today, Project (Trading in the trading division), Reports, Money, and More for everything else. */
-export const PHONE_TABS = [['home', 'Today'], ['projects', 'Project'], ['trading', 'Trading'], ['report', 'Reports'], ['finance', 'Money']];
+export const PHONE_TABS = [['home', 'Dashboard'], ['projects', 'Project'], ['trading', 'Trading'], ['report', 'Reports'], ['finance', 'Money']];
 
 export const hubsOf = division => MENUS[division] || MENUS.installation;
 

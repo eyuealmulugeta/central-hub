@@ -1882,3 +1882,23 @@ body.side-narrow .side-new > summary span { display: none; }
 .visit-sig { display: block; height: 52px; max-width: 220px; object-fit: contain; background: #fff; border-radius: 6px; margin-top: 8px; }
 .spot-kpis .visit b { color: #6d28d9; }
 .tag.xvis { background: #ede9fe; color: #6d28d9; }
+
+/* v0.94.0: the Dashboard photo tiles as buttons, the video mark, and the full-screen viewer */
+.xmedia button.xm { padding: 0; border: 0; background: none; cursor: zoom-in; font: inherit; color: inherit; text-align: left; }
+.xm.video figure { position: relative; }
+.xplay { position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); pointer-events: none; }
+.xseg { margin-bottom: 8px; }
+.xviewer { position: fixed; inset: 0; z-index: 9999; background: rgba(8,12,20,.94); display: grid; place-items: center; }
+.xviewer[hidden] { display: none; }
+.xv-fig { margin: 0; width: min(94vw, 1400px); height: 88vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; }
+.xv-fig img { max-width: 100%; max-height: calc(88vh - 40px); object-fit: contain; border-radius: 6px; background: #111; }
+.xv-fig iframe { width: 100%; height: calc(88vh - 40px); border: 0; border-radius: 6px; background: #000; }
+.xv-fig figcaption { color: #e5e7eb; font-size: 14px; display: flex; gap: 16px; }
+.xv-fig figcaption span { opacity: .7; }
+.xv-nav, .xv-x { position: absolute; border: 0; background: rgba(255,255,255,.14); color: #fff; cursor: pointer; border-radius: 50%; display: grid; place-items: center; }
+.xv-nav { top: 50%; transform: translateY(-50%); width: 56px; height: 56px; font-size: 40px; line-height: 1; }
+.xv-nav:hover, .xv-x:hover { background: rgba(255,255,255,.28); }
+.xv-nav.prev { left: 16px; } .xv-nav.next { right: 16px; }
+.xv-x { top: 14px; right: 16px; width: 42px; height: 42px; font-size: 20px; }
+body.viewing { overflow: hidden; }
+@media (max-width: 700px) { .xv-nav { width: 44px; height: 44px; font-size: 30px; } .xv-nav.prev { left: 6px; } .xv-nav.next { right: 6px; } }

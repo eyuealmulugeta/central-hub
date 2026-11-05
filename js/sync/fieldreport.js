@@ -500,6 +500,13 @@ export async function fieldUserDo(action, body) {
 }
 
 /** v0.30.0: the Spotlight notes of one project from the site (script 7.39.0, spotList), newest first. */
+/** v0.94.0 (R4): the site videos of a project, kept 30 days (script 7.47.0 videoList), newest first. */
+export async function fieldVideos(code) {
+  const out = await post({ action: 'videoList', proj: String(code || '').toUpperCase() });
+  if (!out.ok) throw new Error(/does not send|unknown/i.test(out.error || '') ? 'The Field Report script is older than 7.47.0.' : out.error || 'Field Report would not say.');
+  return out.videos || [];
+}
+
 export async function fieldSpotlight(code) {
   const out = await post({ action: 'spotList', proj: String(code || '').toUpperCase() });
   if (!out.ok) throw new Error(/file name|PDF/i.test(out.error || '') ? 'The Field Report script is older than 7.39.0: deploy the new script first.' : out.error || 'Field Report would not say.');

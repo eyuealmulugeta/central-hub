@@ -513,6 +513,13 @@ export async function fieldVideoKeep(code, id) {
   return out.video;
 }
 
+/** v0.96.0 (owner): a video from this computer, kept with the site videos (script repVideo, marked as from the gallery). */
+export async function fieldVideoAdd(code, v) {
+  const out = await post({ action: 'repVideo', proj: String(code || '').toUpperCase(), gal: 1, ...v });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not keep it.');
+  return out.video;
+}
+
 /** v0.94.0 (R4): the site videos of a project, kept 30 days (script 7.47.0 videoList), newest first. */
 export async function fieldVideos(code) {
   const out = await post({ action: 'videoList', proj: String(code || '').toUpperCase() });

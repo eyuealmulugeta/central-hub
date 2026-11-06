@@ -49,7 +49,7 @@ const todayDays = reports => reports.filter(r => r.source === 'field' && r.field
 
 /** The viewer's list: videos first, then photos, as { kind, key | fileId, label }. */
 export const viewerItems = (proj, photos, videos) => [
-  ...videos.map(v => ({ kind: 'video', id: v.id, proj, fileId: v.fileId, kept: !!v.kept, label: [v.time, 'Video', v.byName].filter(Boolean).join(' · ') })),
+  ...videos.map(v => ({ kind: 'video', id: v.id, proj, fileId: v.fileId, kept: !!v.kept, label: [v.time, v.gal ? 'Video from gallery' : 'Video', v.byName].filter(Boolean).join(' · ') })),
   ...photos.map(({ r, p }) => ({ kind: 'photo', key: `${proj}|${r.field.pdf}|${p.id}`, label: [p.time, p.zone || p.task, p.caption].filter(Boolean).join(' · ') })),
 ];
 

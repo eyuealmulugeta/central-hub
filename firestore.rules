@@ -76,12 +76,14 @@ service cloud.firestore {
     function mine(d) { return d.get('division', '') in user().get('divisions', []); }
     // a record changed by an Office user: it is theirs before (or new) and stays theirs after
     function keptMine() { return (resource == null || mine(resource.data)) && mine(request.resource.data); }
-    function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates']; }
+    // v0.68.0: supplier bills are money records too
+    function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates', 'bills']; }
     // pay of named people: read by Office only with Costs or Payments ticked, never by Site
     function isPay(section) { return section in ['payruns', 'payments', 'paycosts', 'crewRates', 'laborRates']; }
     function officeSeesPay(section) { return !isPay(section) || officeWith(['ledger', 'payments']); }
     // billing terms and rates are settings: only the Admin changes them
-    function isSetting(section) { return section in ['payStages', 'measure', 'billRates', 'crewRates', 'laborRates']; }
+    // v0.73.0: fieldSigs (site signatures) are written by the server only; the Admin may still correct them
+    function isSetting(section) { return section in ['payStages', 'measure', 'billRates', 'crewRates', 'laborRates', 'fieldSigs']; }
     // may this Office user see the records of a project section at all?
     function officeReads(section) { return isOffice() && (!isMoney(section) || officeWith(moneyPages())) && officeSeesPay(section); }
     function officeWrites(section) { return officeReads(section) && !isSetting(section); }
@@ -106,6 +108,11 @@ service cloud.firestore {
         || (level == 'crew' && 'site_engineer' in ranks())
         || (level == 'site_engineer' && 'project_manager' in ranks())
         || (level == 'project_manager' && 'general_manager' in ranks());
+    }
+    // v0.69.0: the Site Engineer's approval limit in ETB, set by the Admin (global/main approvalLimits), 5,000 by default
+    function seLimit() {
+      let g = /databases/$(database)/documents/global/main;
+      return exists(g) ? get(g).data.get('approvalLimits', {}).get('site_engineer', {}).get('ETB', 5000) : 5000;
     }
     function salaryOnly() { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['salaryDone', 'salaryBy']); }
 
@@ -134,6 +141,17 @@ service cloud.firestore {
     match /fieldPhotos/{pid} {
       allow read: if seesAll() || fieldOn(pid);
       allow write: if isOwner();
+    }
+    // v0.72.0: urgent notices from the GM (the Admin): read by the people they were sent to; each of them adds only
+    // their own answer (read, or a reply). Never deleted: they are the log.
+    match /urgent/{id} {
+      allow read: if seesAll() || (signedIn() && me() in resource.data.emails);
+      allow create: if seesAll() && request.resource.data.from == me() && request.resource.data.answers.size() == 0;
+      allow update: if seesAll()
+        || (signedIn() && me() in resource.data.emails
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answers'])
+          && request.resource.data.answers.diff(resource.data.answers).affectedKeys().hasOnly([me()]));
+      allow delete: if false;
     }
     match /prefs/{email} {
       allow read, write: if signedIn() && email == me();
@@ -222,6 +240,26 @@ service cloud.firestore {
     match /company/main/signkeys/{id} {
       allow read: if seesAll() || signStaffOf(resource.data);
       allow create, update: if signWriter();
+    }
+    // v0.77.0 Site instructions. The consultant's copy (silinks) is read by anyone with its long random id, made by
+    // a Central Hub user in their own name; the consultant answers once (sisigned, same id) while it is open. The
+    // server copies the answer back to the project's instruction (functions/siteinstr.js).
+    match /company/main/silinks/{id} {
+      allow get: if true;
+      allow create: if hasUser() && id.size() >= 40 && request.resource.data.id == id && request.resource.data.status == 'sent'
+        && request.resource.data.by == me();
+    }
+    match /company/main/sisigned/{id} {
+      allow get: if true;
+      allow create: if id.size() >= 40
+        && request.resource.data.keys().hasOnly(['id', 'name', 'image', 'comment', 'decision', 'at', 'agent'])
+        && request.resource.data.id == id
+        && request.resource.data.name is string && request.resource.data.name.size() <= 120
+        && request.resource.data.image is string && request.resource.data.image.size() <= 250000
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
+        && request.resource.data.decision in ['signed', 'comment']
+        && request.resource.data.at is string
+        && get(/databases/$(database)/documents/company/main/silinks/$(id)).data.status == 'sent';
     }
     match /company/main/signed/{key} {
       allow get: if true;
@@ -343,26 +381,35 @@ service cloud.firestore {
       return request.resource.data.get('deleted', false) == false && resource.data.get('deleted', false) == false
         && request.time.toMillis() < resource.data.get('sentMs', 0) + 60000;
     }
+    // v0.65.0: one-to-one messages. Only the two people in it read them (the Admin too only when one of the two); the
+    // sender writes their own, may correct it within a minute and take it back at any time, like the channels.
+    function directPair(d) { return d.members is list && d.members.size() == 2 && me() in d.members && d.members[0] != d.members[1]; }
+    match /company/main/direct/{record} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create: if (hasUser() || isOwner()) && request.resource.data.by == me() && directPair(request.resource.data)
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+      allow update: if signedIn() && resource.data.by == me() && messageKept() && (messageTakenBack() || messageCorrected());
+    }
     match /company/main/messages/{record} {
       allow update: if messageKept() && ((resource.data.by == me() && (messageTakenBack() || messageCorrected()))
         || (isOwner() && messageTakenBack()));
     }
 
     match /company/main/{section}/{record} {
-      allow read: if seesAll()
+      allow read: if (seesAll() && section != 'direct')
         || (section == 'messages' && hasUser())
         || (section in ['shipments', 'sales'] && staffWith(['trade', 'finance']) && mine(resource.data))
         || (section == 'contracts' && staffWith(['contracts']) && mine(resource.data))
         || (section == 'contacts' && staffWith(['contacts']) && mine(resource.data))
         || (section == 'meetings' && staffWith(['meetings']) && mine(resource.data));
       allow create: if section == 'messages' && (isOwner() || hasUser()) && request.resource.data.by == me();
-      allow create, update: if (isOwner() && section != 'messages')
+      allow create, update: if (isOwner() && !(section in ['messages', 'direct']))
         || (section in ['shipments', 'sales'] && staffWith(['trade']) && keptMine())
         || (section == 'contracts' && staffWith(['contracts']) && keptMine())
         || (section == 'contacts' && staffWith(['contacts']) && keptMine())
         // meetings with colleagues: anyone of the division with Meetings ticked schedules one; only its organiser changes it
         || (section == 'meetings' && staffWith(['meetings']) && keptMine() && request.resource.data.by == me() && (resource == null || resource.data.by == me()));
-      allow delete: if isOwner();
+      allow delete: if isOwner() && section != 'direct';
     }
 
     match /projects/{pid} {
@@ -377,7 +424,7 @@ service cloud.firestore {
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
           || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance'] && fieldOn(pid))
-          || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance'])
+          || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
         allow create: if isOwner()
@@ -385,6 +432,8 @@ service cloud.firestore {
             // v0.55.0: an office version of a Field Report report is written by approvers only
             && (!(section in ['fieldReports', 'fieldVersions']) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
+          // v0.77.0: Site instructions, by the project's Site Engineer or Project Engineer
+          || (isSiteOn(pid) && section == 'siteInstr' && ('site_engineer' in ranks() || 'project_manager' in ranks()))
           // with Costs ticked a Site person enters costs; with Invoices and documents, drafts (never issued)
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
           || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data))
@@ -401,8 +450,14 @@ service cloud.firestore {
             // v0.55.0: a kept version is never changed; the newest is changed by approvers only
             && section != 'fieldVersions' && (section != 'fieldReports' || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
+          || (isSiteOn(pid) && section == 'siteInstr' && ('site_engineer' in ranks() || 'project_manager' in ranks()))   // v0.77.0
           || (isSiteOn(pid) && section == 'ledger' && staffWith(['ledger']))
           || (isSiteOn(pid) && section == 'docs' && staffWith(['docs']) && !isIssued(request.resource.data) && !isIssued(resource.data))
+          // v0.69.0: a Site Engineer approves or sends back an ETB expense within the Site Engineer's limit, not their own
+          || (isSiteOn(pid) && section == 'requests' && 'site_engineer' in ranks() && resource.data.get('kind', '') == 'expense'
+            && resource.data.status == 'requested' && request.resource.data.status in ['approved', 'rejected'] && resource.data.currency == 'ETB'
+            && resource.data.amount <= seLimit() && resource.data.get('by', '') != me()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'log']))
           // ...and change or withdraw it only while nobody has answered it
           || (isSiteOn(pid) && section == 'requests' && resource.data.status == 'requested' && request.resource.data.status in ['requested', 'cancelled'])
           || (section == 'fieldDay' && fieldOn(pid))   // v0.39.0
@@ -411,10 +466,21 @@ service cloud.firestore {
           || (section == 'requests' && fieldOn(pid) && resource.data.get('site', false) == true && request.resource.data.get('site', false) == true && request.resource.data.by == resource.data.by
             && ((resource.data.status == 'draft' && request.resource.data.status in ['draft', 'deleted', 'requested'])
               || (resource.data.status == 'requested' && request.resource.data.status == 'cancelled' && resource.data.by == me()
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'log', 'editedBy', 'editedAt']))
+              // v0.80.0 (owner): an asked request is changed on site and stays asked, until the office acts on it
+              || (resource.data.status == 'requested' && request.resource.data.status == 'requested'
+                && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'by', 'byName', 'number', 'projectId', 'site']))
+              // v0.78.0 (owner): any phone of the project removes an asked request; it stays, marked who and when
+              || (resource.data.status == 'requested' && request.resource.data.status == 'deleted'
                 && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'log', 'editedBy', 'editedAt']))))
           // v0.43.0: a Field Report phone asks the PM or the GM to delete a crew member (the server deletes on their confirm)
           || (section == 'team' && fieldOn(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dropAsk', 'editedBy', 'editedAt']))
           // v0.37.0: a Field Report phone corrects or takes off a crew member the site added (name, trade, phone only)
+          // v0.74.0: any crew member of the project: name, trade and phone, by its Field Report accounts (SE, PE, GM)
+          || (section == 'team' && fieldOn(pid) && get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec']
+            && request.resource.data.editedBy == me() && request.resource.data.crewSync == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'editedBy', 'editedAt', 'crewSync']))
+          // (v0.75.0, owner: not in Central Hub: the SE and PE correct the crew in Field Report)
           || (section == 'team' && fieldOn(pid) && resource.data.get('fromSite', null) != null
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'active', 'editedBy', 'editedAt']));
         // nobody but the Admin deletes a record

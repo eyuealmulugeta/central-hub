@@ -11,7 +11,7 @@ import { weeklyDue } from '../engine/report.js';
 import { billStatus } from '../engine/bills.js';
 import { healthOf, projectLine, needsYou, needGroups } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
-import { fieldVideos, fieldDayPhotos, fieldPhoto, fieldVideoKeep } from '../sync/fieldreport.js';
+import { fieldVideos, fieldDayPhotos, fieldPhoto, fieldVideoKeep, fieldVideoAdd } from '../sync/fieldreport.js';
 import { fillPhotos } from './photos.js';
 import { rowsOf, rowsFor, HOME_ORDER, todayMedia, weekDays, livePhotos, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
@@ -66,7 +66,8 @@ function todayBox(m, c) {
     ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
       ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
     : html`<p class="empty">${!c.project.fieldCode ? 'This project is not linked to Field Report yet.' : m.busy ? 'Getting the photos from the site…' : m.day === c.today ? 'No photos from the site yet today. Each one shows here as soon as it is taken.' : 'No photos or videos on this day.'}</p>`}
-    <p class="xfoot">All photos are taken live with the Field Report camera, not uploaded. Videos are recorded live too and kept 30 days, then deleted.</p>`,
+    ${c.project.fieldCode && store.cloud ? html`<p class="xfoot"><button type="button" class="btn small" data-act="videoAdd" data-d="${m.day}" ${vids.adding ? 'disabled' : ''}>${vids.adding || '+ Add a video from the gallery'}</button></p>` : ''}
+    <p class="xfoot">Photos are taken live with the Field Report camera, not uploaded. Videos are recorded live or added from the gallery (marked so), kept 30 days, then deleted unless saved.</p>`,
   { n: [when, `${nPh} photo${nPh === 1 ? '' : 's'}`, nV ? `${nV} video${nV === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '), link: ['reports', 'Open reports'] });
 }
 
@@ -365,7 +366,31 @@ if (typeof document !== 'undefined') document.addEventListener('fullscreenchange
 
 const folded = new Set();   // v0.60.0: the "Needs you" groups folded away
 
+/** v0.96.0 (owner): a video from this computer for the day shown: at most 60 seconds and 15 MB, Dashboard only. */
+function addVideo(c, day) {
+  const code = String(c.project.fieldCode || '').toUpperCase(), pick = document.createElement('input');
+  pick.type = 'file'; pick.accept = 'video/*';
+  pick.onchange = async () => {
+    const f = pick.files?.[0];
+    if (!f) return;
+    if (!/^video\//.test(f.type)) return alert('That is not a video.');
+    if (f.size > 15 * 1024 * 1024) return alert('The video is bigger than 15 MB. Choose a shorter one.');
+    const secs = await new Promise(ok => { const v = document.createElement('video'), u = URL.createObjectURL(f); v.preload = 'metadata'; v.onloadedmetadata = () => { URL.revokeObjectURL(u); ok(v.duration || 0); }; v.onerror = () => { URL.revokeObjectURL(u); ok(0); }; v.src = u; });
+    if (secs > 61) return alert('The video is longer than 60 seconds. Choose a shorter one.');
+    vids.adding = 'Sending the video…'; store.notify();
+    try {
+      const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(r.error); r.readAsDataURL(f); });
+      const id = (crypto.randomUUID?.() || String(Date.now()) + Math.random()).replace(/[^A-Za-z0-9]/g, '').slice(0, 24);
+      await fieldVideoAdd(code, { id, date: day || c.today, time: new Date().toTimeString().slice(0, 5), type: f.type.split(';')[0], data });
+      vids.done = false; vids.code = '';
+    } catch (e) { alert(`The video was not added: ${e.message || e}`); }
+    finally { vids.adding = ''; store.notify(); }
+  };
+  pick.click();
+}
+
 export const actions = {
+  videoAdd(el, c) { if (!vids.adding) addVideo(c, el.dataset.d); },
   mediaDay(el) { mediaDay = el.dataset.d || ''; },
   mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
   mediaKind(el) { mediaKind = el.dataset.k || ''; },

@@ -3,6 +3,7 @@
 // (apps-script/Code.gs, action 'email'): the script turns the document into a
 // PDF and sends it from the Google account that owns the script.
 
+import { act } from '../core/activity.js';   // v0.99.0 (G1)
 import { driveConfig } from './drive.js';
 
 /** True once the web app URL and shared secret are saved in this browser (Backup, Google Drive). */
@@ -90,6 +91,7 @@ export const pageHtml = (inner, title) =>
 export async function sendMail({ to, cc = '', subject, message, html = '', filename = 'document', files = [], replyTo = '', fromName = '', ics = null }) {
   const { endpoint, token } = driveConfig.get();
   if (!endpoint || !token) throw new Error('Email is not set up yet. Enter the web app URL and shared secret under Backup.');
+  act({ action: 'email', channel: 'Email', doc: subject || filename, to: [to, cc].filter(Boolean).join(', ') });   // v0.99.0 (G1)
   let text;
   try {
     const res = await fetch(endpoint, {

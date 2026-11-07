@@ -45,6 +45,9 @@ function loadLib(key) {
   return loading[key];
 }
 
+import { act } from '../core/activity.js';   // v0.99.0 (G1)
+/** v0.99.0: the number (or reference) printed on a sheet, for the activity record. */
+export const paperNo = paper => { try { return [...paper.querySelectorAll('dl.facts dt')].find(dt => /^(number|ref)$/i.test(dt.textContent.trim()))?.nextElementSibling?.textContent.trim() || ''; } catch { return ''; } };
 const clean = name => String(name || 'Document').replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 100);
 
 /** The title, number and company of a printable sheet, for the file name and the message that goes with it. */
@@ -144,6 +147,7 @@ function unbreakable(element) {
 
 /** A real PDF file of the sheet, A4, as wide as the page, in as many pages as it needs. Screen-only controls and the chart are left out, as in the emailed PDF. */
 export async function makePdf(paper, name) {
+  act({ action: 'generate', channel: 'PDF', doc: name, no: paperNo(paper) });   // v0.99.0 (G1)
   // v0.32.0: the Daily site report has no watermark
   const [html2canvas, JsPdf, mark] = await Promise.all([loadLib('html2canvas'), loadLib('jspdf'), paper?.classList?.contains('dsr') ? null : loadWatermark()]);
   const { host, element } = await prepareSheet(paper);
@@ -193,6 +197,7 @@ export const canShareFile = file => typeof navigator !== 'undefined' && typeof n
 export async function shareFile(file, text) {
   try {
     await navigator.share({ files: [file], title: file.name.replace(/\.pdf$/i, ''), text });
+    act({ action: 'share', channel: 'Share sheet', doc: file.name });   // v0.99.0
     return 'shared';
   } catch (err) {
     if (err?.name === 'AbortError') return 'cancelled';
@@ -205,6 +210,7 @@ export const whatsappUrl = text => `https://wa.me/?text=${encodeURIComponent(tex
 export const TELEGRAM_URL = 'https://web.telegram.org/';
 
 export function downloadFile(file) {
+  act({ action: 'download', channel: /\.pdf$/i.test(file.name) ? 'PDF' : 'File', doc: file.name });   // v0.99.0
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
   a.download = file.name;

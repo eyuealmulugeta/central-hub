@@ -68,6 +68,8 @@ export function money(v, currency, digits = 0) {
 }
 export const num = (v, digits = 2) => Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: digits });
 
+import { act } from './activity.js';   // v0.99.0 (G1)
+
 // ---- export ----
 
 export const toCSV = rows => rows.map(r => r.map(c => {
@@ -76,6 +78,7 @@ export const toCSV = rows => rows.map(r => r.map(c => {
 }).join(',')).join('\n');
 
 export function downloadText(name, text, type = 'text/csv') {
+  act({ action: 'download', channel: /csv/.test(type) ? 'Excel (CSV)' : 'File', doc: name });   // v0.99.0 (G1)
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], { type }));
   a.download = name;

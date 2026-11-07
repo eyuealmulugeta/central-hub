@@ -4,6 +4,7 @@
 
 import { store } from '../core/store.js';
 import { onlineNow, day as signDay } from '../engine/signlog.js';   // v0.98.0
+import { filtered, actionWord } from '../engine/activity.js';   // v0.99.0
 import { money, fmtDate, fmtFull, toDay, fromDay } from '../core/util.js';
 import { html, icon } from './dom.js';
 import { isGM, levelOf } from '../engine/expenses.js';
@@ -228,6 +229,13 @@ function signStrip(c) {
   return html`<p class="xsign"><a href="#signins"><b>${n}</b> signed in today · <b>${on.length}</b> online now${on.length ? `: ${on.slice(0, 5).map(e => e.name || e.email).join(', ')}${on.length > 5 ? ' …' : ''}` : ''}</a></p>`;
 }
 
+/** v0.99.0 (owner, G1): the latest 8 actions of the activity record, live, for the Admin and the top management. */
+function actBox(c) {
+  if (!(c.can ? c.can('activity') : false)) return '';
+  const list = filtered(store.activity).slice(0, 8);
+  return html`<section class="card xact"><h3>Activity <a class="xlink2" href="#activity">All</a></h3>${list.length ? html`<ul class="xlist">${list.map(x => html`<li><span class="tag">${actionWord(x.action)}</span><span class="xt"><b>${x.doc}</b><br><small>${[x.name || x.email, x.position, x.app, x.channel, new Date(+x.at + 3 * 3600e3).toISOString().slice(5, 16).replace('T', ' ')].filter(Boolean).join(' · ')}</small></span></li>`)}</ul>` : html`<p class="empty">Nothing printed, shared or sent yet.</p>`}</section>`;
+}
+
 function needRow(n, c) {
   const other = n.projectId !== c.project.id;
   return html`<li class="trow">
@@ -345,6 +353,7 @@ export function render(c) {
     </section>
     <section class="xkpis" style="--n:${kpis.length}">${kpis}</section>
     ${signStrip(c)}
+    ${actBox(c)}
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 

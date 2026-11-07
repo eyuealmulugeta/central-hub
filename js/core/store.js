@@ -27,6 +27,7 @@ import { isLimited, isActive } from '../engine/deployment.js';
 import { claim, sessionPath, newDeviceId, deviceName, isEnded, HEARTBEAT_MS } from '../engine/session.js';
 import { syncCrewPhotos } from './crewphotos.js';
 import { presence, newEntry, seesSignins, BEAT_MS, KEEP_DAYS } from '../engine/signlog.js';   // v0.98.0 (G2)
+import { entry as actEntry, isRepeat } from '../engine/activity.js';   // v0.99.0 (G1)
 
 const K = { meta: 'sf:meta', global: 'sf:global', company: 'sf:company', ws: id => `sf:ws:${id}`, active: 'sf:active' };
 const COMPANY_PATH = 'company/main';
@@ -81,6 +82,8 @@ let heartbeat = null;    // timer that keeps the session record fresh
 let sessions = [];       // every person's session record (the Owner sees these, to reset one)
 let signlogs = [];      // v0.98.0: the last 31 days of sign-ins of both apps (the Admin and Tier 1 read them)
 let here = null;        // v0.98.0: this device's presence loop (engine/signlog.js)
+let acts = [];          // v0.99.0: the last 31 days of the activity record (the Admin and Tier 1 read them)
+let lastAct = null;
 let lockedBy = null;     // the record of the device that holds this person's session, when this one was refused
 const endedSubscribers = [];
 let divisions = [];       // the divisions this person works in (empty = both); set by the Admin
@@ -122,6 +125,7 @@ function startPresence() {
   const t = setInterval(tick, BEAT_MS); t.unref?.();
   document.addEventListener('visibilitychange', vis);
   shared.push(() => { clearInterval(t); document.removeEventListener('visibilitychange', vis); });
+  if (seesSignins(role, ranks)) shared.push(api.watchCol('activity', docs => { acts = docs; emit(); }, () => {}, ['at', '>=', Date.now() - 31 * 864e5]));   // v0.99.0
   if (seesSignins(role, ranks)) shared.push(api.watchCol('signlog', docs => { signlogs = docs; emit(); }, () => {}, ['start', '>=', Date.now() - 31 * 864e5]));
 }
 function stopSession() { clearInterval(heartbeat); heartbeat = null; session = null; }
@@ -845,6 +849,16 @@ export const store = {
   /** Every person's session record: the Owner only. */
   get sessions() { return sessions; },
   get signlogs() { return signlogs; },   // v0.98.0
+  get activity() { return acts; },   // v0.99.0
+  /** v0.99.0 (G1): one line of the activity record, in this person's name, with the open project. */
+  logActivity(e) {
+    if (!api || !me?.email) return;
+    const now = Date.now(), p = live().find(x => x.id === meta.activeId) || null;
+    if (isRepeat(lastAct, { ...e, doc: String(e.doc || '').slice(0, 120), channel: String(e.channel || '').slice(0, 40) }, now)) return;
+    const rec = actEntry(e, { app: 'CH', email: me.email, name: profile?.name || me.name || '', position: profile?.title || (role === 'owner' ? 'Admin' : ''), project: p?.id || '', projectName: p?.name || '' }, now);
+    lastAct = rec;
+    api.set(`activity/${rec.id}`, rec).catch(() => {});
+  },
   /** v0.98.0: older sign-ins (before the last 31 days), read once when asked. */
   async signlogsSince(ms) { return api && api.query ? api.query('signlog', ['start', '>=', ms]) : signlogs; },
   keepDays: KEEP_DAYS,

@@ -5,6 +5,7 @@ import { store } from '../core/store.js';
 import { html } from './dom.js';
 import { perDay, onlineNow, minutesOf, endOf, isOnline, hm, day, APPS } from '../engine/signlog.js';
 import { fieldDevices } from '../sync/fieldreport.js';
+import { inSession, actionWord } from '../engine/activity.js';   // v0.99.0: what was done in each session
 
 let who = '', app = '', span = 7, older = null, refused = null, note = '';
 const t = ms => (ms ? new Date(ms + 3 * 3600e3).toISOString().slice(11, 16) : '');
@@ -44,7 +45,7 @@ export function render(c) {
       ${span === 365 && !older ? html`<button type="button" class="btn small" data-act="older">Load the last 12 months</button>` : ''}
     </section>
     <section class="card"><h3>Sessions · ${sessions.length}</h3>
-      ${sessions.length ? table(['Signed in', 'Person', 'App', 'Device', 'Place', 'Ended', 'How', 'Time'], sessions.map(e => [dt(+e.start), e.name || e.email, e.app, `${e.device || ''}${e.mode ? ` (${e.mode === 'app' ? 'installed' : 'browser'})` : ''}`, e.place || '', isOnline(e, now) ? html`<span class="tag ok">online</span>` : t(endOf(e, now)), e.how === 'signout' ? 'Signed out' : isOnline(e, now) ? '' : 'Closed', hm(minutesOf(e, now))])) : html`<p class="empty">No session in this period.</p>`}
+      ${sessions.length ? table(['Signed in', 'Person', 'App', 'Device', 'Place', 'Ended', 'How', 'Time', 'Did'], sessions.map(e => [dt(+e.start), e.name || e.email, e.app, `${e.device || ''}${e.mode ? ` (${e.mode === 'app' ? 'installed' : 'browser'})` : ''}`, e.place || '', isOnline(e, now) ? html`<span class="tag ok">online</span>` : t(endOf(e, now)), e.how === 'signout' ? 'Signed out' : isOnline(e, now) ? '' : 'Closed', hm(minutesOf(e, now)), didOf(e, now)])) : html`<p class="empty">No session in this period.</p>`}
     </section>
     ${store.isAdmin ? html`<section class="card"><h3>Refused sign-ins (Field Report)</h3>
       ${refused === null ? html`<button type="button" class="btn small" data-act="refused">Show the refused sign-ins</button>`
@@ -52,6 +53,9 @@ export function render(c) {
     </section>` : ''}`;
 }
 
+/** v0.99.0 (G1): the documents handled in a session (Activity record), as a count with the list in the tip. */
+const didOf = (e, now) => { const l = inSession(store.activity, e, endOf(e, now) || now); return l.length ? html`<span title="${l.map(x => `${actionWord(x.action)}: ${x.doc}`).join('
+')}">${l.length} ${l.length === 1 ? 'action' : 'actions'}</span>` : ''; };
 const table = (head, rows) => html`<div class="tscroll"><table class="table compact"><thead><tr>${head.map(h => html`<th>${h}</th>`)}</tr></thead><tbody>${rows.map(r => html`<tr>${r.map(x => html`<td>${x}</td>`)}</tr>`)}</tbody></table></div>`;
 
 export const changes = {

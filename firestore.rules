@@ -197,6 +197,17 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // v0.99.0 (owner, G1): the activity record of both apps (documents generated, printed, shared, emailed, downloaded):
+    // each person adds their own lines, never changes them; the Admin and Tier 1 read them; the Admin deletes.
+    match /activity/{id} {
+      allow read: if seesAll() || myTier() == 1;
+      allow create: if signedIn() && request.resource.data.email == me() && request.resource.data.id == id
+        && request.resource.data.keys().hasOnly(['id', 'app', 'email', 'name', 'position', 'project', 'projectName', 'page', 'action', 'channel', 'doc', 'no', 'to', 'at'])
+        && request.resource.data.app in ['CH', 'FR'] && request.resource.data.action in ['generate', 'print', 'share', 'email', 'download', 'save', 'view', 'send'];
+      allow update: if false;
+      allow delete: if isOwner();
+    }
+
     // Faults reported by devices (js/core/diagnostics.js): any signed-in person adds their own, small ones; the Admin reads and clears them.
     // v0.26.0: the recycle bin: what the Admin deleted, with who, when and from which page
     match /bin/{id} {

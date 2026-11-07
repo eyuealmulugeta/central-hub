@@ -12,7 +12,7 @@ import { calendarOf } from '../engine/calendar.js';
 
 export function derive(project, ws, global, today) {
   // v0.54.0: a report waiting for approval (Field Report or typed here) moves the schedule only once it is approved
-  const sched = schedule(ws.tasks, ws.reports.filter(r => r.review !== 'pending'), { today, workDays: calendarOf(project, ws.reports) });
+  const sched = schedule(ws.tasks, [...ws.reports.filter(r => r.review !== 'pending'), ...(ws.xlProgress || [])], { today, workDays: calendarOf(project, ws.reports) });
   const bom = buildBOM(ws.assemblies);
   const boq = priceBOM(bom, project, global);
   const led = summarize(ws, project, global, sched);

@@ -38,7 +38,25 @@ export async function readXlsx(buf) {
   const shared = files['xl/sharedStrings.xml'] ? [...(await files['xl/sharedStrings.xml']()).matchAll(/<si>([\s\S]*?)<\/si>/g)].map(m => textOf(m[1])) : [];
   const sheetName = Object.keys(files).filter(n => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a, z) => parseInt(a.match(/\d+/)) - parseInt(z.match(/\d+/)))[0];
   if (!sheetName) throw new Error('No sheet found in this Excel file.');
-  const xml = await files[sheetName]();
+  return rowsOf(await files[sheetName](), shared);
+}
+
+/** v1.10.0 (G7b): every sheet, by its name: { name: rows }. */
+export async function readSheets(buf) {
+  const files = zipEntries(buf);
+  const shared = files['xl/sharedStrings.xml'] ? [...(await files['xl/sharedStrings.xml']()).matchAll(/<si>([\s\S]*?)<\/si>/g)].map(m => textOf(m[1])) : [];
+  const wb = files['xl/workbook.xml'] ? await files['xl/workbook.xml']() : '', rels = files['xl/_rels/workbook.xml.rels'] ? await files['xl/_rels/workbook.xml.rels']() : '';
+  const target = {};
+  for (const m of rels.matchAll(/<Relationship\b([^>]*?)\/?>/g)) { const id = (m[1].match(/Id="([^"]+)"/) || [])[1], t = (m[1].match(/Target="([^"]+)"/) || [])[1]; if (id && t) target[id] = t.replace(/^\/?(xl\/)?/, 'xl/'); }
+  const out = {};
+  for (const m of wb.matchAll(/<sheet\b([^>]*?)\/?>/g)) {
+    const name = unxml((m[1].match(/name="([^"]*)"/) || [])[1] || ''), rid = (m[1].match(/r:id="([^"]+)"/) || [])[1], path = target[rid];
+    if (name && path && files[path]) out[name] = rowsOf(await files[path](), shared);
+  }
+  return out;
+}
+
+function rowsOf(xml, shared) {
   const rows = [];
   for (const [, inner] of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
     const row = [];

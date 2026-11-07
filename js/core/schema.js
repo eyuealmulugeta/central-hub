@@ -130,6 +130,7 @@ export const emptyWorkspace = () => ({
   logsheet: [],     // v0.51.0: the project's Log sheet rows (engine/logsheet.js): official documents and their archived file
   poOpen: [],      // v1.4.0 (R6): what the phone sees of each PO that went out (engine/purchases.js poPublic); Store receives against it
   purchChecks: [], // v1.4.0 (R6): the months the accountant marked checked on Money > Purchases
+  xlProgress: [],  // v1.10.0 (G7b): progress rows approved from the owner's Excel file ({ date, entries } like a report)
   workShots: [],   // v1.8.0 (FR 2.66.0): technicians' work photos (fr/model/shots.js), approved or rejected on the phone
   storeMoves: [],  // v1.3.0: the site store kept in Field Report (fr/model/store.js); written on the phone, read here
   penalties: [],   // v0.97.0: penalties given on site in Field Report, approved by the PE or GM (engine/penalty.js)

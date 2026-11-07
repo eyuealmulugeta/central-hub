@@ -67,6 +67,7 @@ const key = permKey;
 export function mayOpen(role, pages, page, ranks = []) {
   // v0.50.1: HR opens Spotlight and the office staff's attendance (names and positions only, never Employee data)
   if (page === 'spotlight' || page === 'officeatt') return role === 'owner' || ranks.includes('hr_assistant');
+  if (page === 'excel') return role === 'owner' || ranks.includes('general_manager');   // v1.9.0 (G7): the Admin and the GM (owner)
   if (page === 'engagement') return role === 'owner' || ranks.includes('general_manager');   // v1.7.0 (G3): the Admin and the GM only (owner)
   if (page === 'signins' || page === 'activity') return role === 'owner' || ['general_manager', 'owner', 'ceo', 'board_member'].some(r => ranks.includes(r));   // v0.98.0 (G2): the Admin and Tier 1
   if (page === 'datafeed') return role === 'owner' || role === 'office';   // v1.2.0 (G5): the Admin and Tier 1 all projects, the others their own

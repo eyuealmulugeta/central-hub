@@ -54,8 +54,7 @@ export function render(c) {
 }
 
 /** v0.99.0 (G1): the documents handled in a session (Activity record), as a count with the list in the tip. */
-const didOf = (e, now) => { const l = inSession(store.activity, e, endOf(e, now) || now); return l.length ? html`<span title="${l.map(x => `${actionWord(x.action)}: ${x.doc}`).join('
-')}">${l.length} ${l.length === 1 ? 'action' : 'actions'}</span>` : ''; };
+const didOf = (e, now) => { const l = inSession(store.activity, e, endOf(e, now) || now); return l.length ? html`<span title="${l.map(x => `${actionWord(x.action)}: ${x.doc}`).join('\n')}">${l.length} ${l.length === 1 ? 'action' : 'actions'}</span>` : ''; };
 const table = (head, rows) => html`<div class="tscroll"><table class="table compact"><thead><tr>${head.map(h => html`<th>${h}</th>`)}</tr></thead><tbody>${rows.map(r => html`<tr>${r.map(x => html`<td>${x}</td>`)}</tr>`)}</tbody></table></div>`;
 
 export const changes = {

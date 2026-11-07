@@ -9,6 +9,7 @@ import { billingOf } from './billing.js';
 import { dayRateOf, dayCurOf } from './people.js';
 import { isMonthly } from './paysteps.js';
 import { byDaysOf } from './payroll.js';
+import { penaltyOf } from './penalty.js';   // v0.97.0
 
 export const METHODS = [['cash', 'Cash'], ['bank', 'Bank transfer'], ['mobile', 'Mobile money']];
 export const methodLabel = k => METHODS.find(([m]) => m === k)?.[1] || k || '';
@@ -118,7 +119,9 @@ export function payLines(ctx, period) {
   for (const x of before) {
     const earned = earnedIn(ctx, x);
     for (const k of new Set([...earned.keys(), ...Object.keys(x.lines || {}), ...(ws.payments || []).filter(p => p.periodFrom === x.from).map(p => p.key)])) {
-      const due = (owed.get(k) || 0) + (earned.get(k) || 0) + (+x.lines?.[k]?.adjust || 0);
+      const who = rows.get(k) || { id: x.lines?.[k]?.personId || '', name: x.lines?.[k]?.name || '' };
+      const pen = penaltyOf(ws.penalties, who, x.from, x.to).total;   // v0.97.0: approved penalties of that period
+      const due = (owed.get(k) || 0) + (earned.get(k) || 0) + (+x.lines?.[k]?.adjust || 0) - pen;
       owed.set(k, r2(due - paidOf(ws.payments, k, p => p.periodFrom === x.from)));
     }
   }
@@ -128,21 +131,22 @@ export function payLines(ctx, period) {
     const earned = locked ? +locked.earned || 0 : earnedOf(row, pay, project, period);
     const adj = run?.lines?.[row.key] || {};
     const brought = owed.get(row.key) || 0;
-    const due = r2(brought + earned + (+adj.adjust || 0));
+    const pen = penaltyOf(ws.penalties, row, period.from, period.to);   // v0.97.0 (owner, R3): approved penalties are taken off
+    const due = r2(brought + earned + (+adj.adjust || 0) - pen.total);
     const paid = paidOf(ws.payments, row.key, p => p.periodFrom === period.from);
     return {
       key: row.key, id: row.id, name: row.name, role: row.role, ...pay,
       ...(locked ? { per: locked.per || pay.per, wage: +locked.wage || pay.wage } : {}),
-      present: row.present, absent: row.absent, ot: row.ot, earned, adjust: +adj.adjust || 0, note: adj.note || '',
+      present: row.present, absent: row.absent, ot: row.ot, earned, adjust: +adj.adjust || 0, penalty: pen.total, penalties: pen.n, note: adj.note || '',
       brought, due, paid, paidToDate: paidOf(ws.payments, row.key, p => p.periodFrom <= period.from), outstanding: r2(due - paid),
       review: ws.team.find(m => m.id === row.id)?.wageReview || null,
     };
   // v0.28.0: the salary sheet has everyone with at least one day present; people absent all period are left off
   // v0.48.0: monthly-paid people (Tiers 1, 2, 3, 5) are paid in Payroll; they stay here only for what was owed or paid before
-  }).filter(l => (l.per !== 'month' || l.brought || l.paid) && (l.present > 0 || l.ot > 0 || l.earned || l.brought || l.paid || l.adjust))
+  }).filter(l => (l.per !== 'month' || l.brought || l.paid || l.penalty) && (l.present > 0 || l.ot > 0 || l.earned || l.brought || l.paid || l.adjust || l.penalty))
     .sort((a, b) => a.name.localeCompare(b.name));
   const total = f => r2(lines.reduce((s, l) => s + l[f], 0));
-  return { run, lines, totals: { earned: total('earned'), adjust: total('adjust'), brought: total('brought'), due: total('due'), paid: total('paid'), outstanding: total('outstanding') } };
+  return { run, lines, totals: { earned: total('earned'), adjust: total('adjust'), penalty: total('penalty'), brought: total('brought'), due: total('due'), paid: total('paid'), outstanding: total('outstanding') } };
 }
 
 /** The run record of a period, made when anything is first done with it. */

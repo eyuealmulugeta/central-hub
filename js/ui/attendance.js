@@ -18,6 +18,7 @@ import { checkOf, checkRecord, checkId } from '../engine/paysteps.js';
 import { openMail } from './maildialog.js';
 import { tell } from '../core/image.js';
 import { siteEngineerSig } from '../engine/sitesig.js';   // v0.73.0
+import { approvedOf, penaltyOf, sorted as penSorted, reasonWord, PEN_WORD, decided } from '../engine/penalty.js';   // v0.97.0
 
 let at = '';            // a day inside the period on screen; '' = today
 let editing = null;     // { date, key } of the cell being corrected
@@ -92,6 +93,23 @@ function siteList(c) {
         <td><b>${word(f.state)}${f.ot ? `, ${f.ot} h` : ''}</b></td>
         <td>${String(f.by || '').replace(/^Site: /, '')}</td><td class="nowrap">${String(f.at || '').slice(0, 16).replace('T', ' ')}</td>
         <td class="nowrap"><button type="button" class="btn small primary" data-act="acceptFix" data-id="${f.id}">Accept</button> <button type="button" class="btn small ghost" data-act="rejectFix" data-id="${f.id}">Reject</button></td>
+      </tr>`)}</tbody></table>
+  </section>`;
+}
+
+/** v0.97.0 (owner, R3): penalties given on site; the PE or GM (approvers) approves or rejects them here or in Field Report. */
+function penList(c, p) {
+  const list = penSorted(c.ws.penalties).filter(x => x.status === 'waiting' || (x.date >= p.from && x.date <= p.to));
+  if (!list.length) return '';
+  const may = store.canApprove, me = String(store.user?.email || '').toLowerCase();
+  const n = list.filter(x => x.status === 'waiting').length;
+  return html`<section class="card no-print" id="att-pen">
+    <h3>Penalties${n ? ` · ${n} waiting` : ''} <span class="muted">given on site in Field Report; an approved one is taken off the pay (Payments, Payroll)</span></h3>
+    <table class="table compact"><thead><tr><th>Day</th><th>Person</th><th>Reason</th><th class="r">Amount</th><th>Given by</th><th>State</th><th></th></tr></thead>
+      <tbody>${list.map(x => html`<tr>
+        <td class="nowrap">${fmtFull(x.date)}</td><td>${x.name}</td><td>${reasonWord(x.reason)}</td><td class="r nowrap">${Number(x.amount || 0).toLocaleString('en-US')} ETB</td>
+        <td>${x.byName || x.by}</td><td>${PEN_WORD[x.status] || x.status}${x.decidedByName ? html`<br><span class="muted">${x.decidedByName}</span>` : ''}</td>
+        <td class="nowrap">${x.status === 'waiting' && may && String(x.by || '').toLowerCase() !== me ? html`<button type="button" class="btn small primary" data-act="penDecide" data-v="approved" data-id="${x.id}">Approve</button> <button type="button" class="btn small ghost" data-act="penDecide" data-v="rejected" data-id="${x.id}">Reject</button>` : ''}</td>
       </tr>`)}</tbody></table>
   </section>`;
 }
@@ -173,9 +191,12 @@ export function render(c) {
     const cell = row.cells[d];
     const on = editing && editing.date === d && editing.key === row.key;
     const cls = `att-c ${r.off.has(d) ? 'att-off' : ''} ${cell?.mark ? `att-${cell.mark}` : ''} ${cell?.fixed ? 'att-fixed' : ''} ${cell?.live ? 'att-live' : ''} ${on ? 'att-on' : ''} ${edit && d <= c.today ? 'att-edit' : ''}`;
-    const tip = cell ? `${cell.mark ? MARK_LABEL[cell.mark] : 'Cleared'}${cell.ot ? `, ${cell.ot} h overtime` : ''}${cell.fixed ? ', corrected by the office' : ''}${cell.live ? ', live from Field Report (report not sent yet)' : ''}` : '';
-    return html`<td class="${cls}" title="${tip}" ${edit && d <= c.today ? html`data-act="pick" data-d="${d}" data-k="${row.key}"` : ''}>${cell?.mark || ''}${cell?.ot ? html`<sup>${cell.ot}</sup>` : ''}</td>`;
+    const pens = approvedOf(c.ws.penalties, row, d, d);   // v0.97.0
+    const penTip = pens.map(x => `Penalty ${x.amount} ETB: ${reasonWord(x.reason)}`).join('; ');
+    const tip = [cell ? `${cell.mark ? MARK_LABEL[cell.mark] : 'Cleared'}${cell.ot ? `, ${cell.ot} h overtime` : ''}${cell.fixed ? ', corrected by the office' : ''}${cell.live ? ', live from Field Report (report not sent yet)' : ''}` : '', penTip].filter(Boolean).join('. ');
+    return html`<td class="${cls}${pens.length ? ' att-pen' : ''}" title="${tip}" ${edit && d <= c.today ? html`data-act="pick" data-d="${d}" data-k="${row.key}"` : ''}>${cell?.mark || ''}${cell?.ot ? html`<sup>${cell.ot}</sup>` : ''}${pens.length ? html`<i class="att-pen-dot" aria-label="Penalty">!</i>` : ''}</td>`;
   };
+  const penT = row => penaltyOf(c.ws.penalties, row, p.from, p.to).total;   // v0.97.0
   // v0.33.0: the photo and the Fayda ID (or passport) of each person, from Employee data, the main record
   const staff = c.company.staff || [];
   const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
@@ -196,27 +217,28 @@ export function render(c) {
     ${waitingNote(c.ws.reports, p) ? html`<p class="callout warn no-print"><b>!</b> <span>${waitingNote(c.ws.reports, p)}</span></p>` : ''}
     ${edit ? html`<p class="muted no-print att-help">Tap a day to correct it. The pay period (weekly, every two weeks or monthly) is set under Settings, This project, Calendar and rates.</p>` : ''}
     ${edit ? siteList(c) : ''}
+    ${penList(c, p)}
     ${editor(c, r)}
     <section class="card sheet att-sheet"><div class="paper att dsr land" data-foot="${footText(c, 'Attendance sheet', ref)}">
       ${checkBar(c, p)}
       ${docHead(c, { title: 'Attendance sheet', sub: p.label, ref, facts: [['Project', c.project.name], ['Period', p.label], ['Days reported', `${r.reportedDays} of ${working} working days`], ['People', String(r.rows.length)]] })}
       ${r.rows.length ? html`<div class="att-scroll"><table class="att-grid">
         <thead>
-          <tr><th class="att-name">Name</th>${r.days.map(d => html`<th class="${r.off.has(d) ? 'att-off' : ''}"><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}<th class="att-t">P</th><th class="att-t">A</th><th class="att-t">S</th><th class="att-t">L</th><th class="att-t">OT h</th></tr>
+          <tr><th class="att-name">Name</th>${r.days.map(d => html`<th class="${r.off.has(d) ? 'att-off' : ''}"><span>${dayNo(d)}</span><br><span class="muted">${weekday(d)}</span></th>`)}<th class="att-t">P</th><th class="att-t">A</th><th class="att-t">S</th><th class="att-t">L</th><th class="att-t">OT h</th><th class="att-t" title="Approved penalties, ETB">Pen.</th></tr>
           ${photoRow(c, r)}
           ${checkRow(r)}
         </thead>
         ${groups.map(g => html`<tbody>
-          <tr class="att-group"><td class="att-name" colspan="${span + 6}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · by the month (Tiers 2, 3, 5): absent days go to Payroll as unpaid days' : ' · by the day (Tier 4): days and overtime make the crew pay'}</span></td></tr>
+          <tr class="att-group"><td class="att-name" colspan="${span + 7}">${g.title} <span class="muted">${g.rows.length} ${g.rows.length === 1 ? 'person' : 'people'}${g.per === 'month' ? ' · by the month (Tiers 2, 3, 5): absent days go to Payroll as unpaid days' : ' · by the day (Tier 4): days and overtime make the crew pay'}</span></td></tr>
           ${g.rows.map(row => html`<tr>
           <td class="att-name">${pics(row)}<b>${row.name}</b>${row.role ? html`<br><span class="muted">${row.role}</span>` : ''}</td>
           ${r.days.map(d => cellFor(row, d))}
-          <td class="att-t"><b>${row.present}</b></td><td class="att-t">${row.absent || ''}</td><td class="att-t">${row.sick || ''}</td><td class="att-t">${row.leave || ''}</td><td class="att-t">${row.ot || ''}</td></tr>`)}
-          ${groups.length > 1 ? html`<tr class="att-sub"><td class="att-name">Subtotal</td><td colspan="${span}"></td><td class="att-t"><b>${g.totals.present}</b></td><td class="att-t">${g.totals.absent || ''}</td><td class="att-t">${g.totals.sick || ''}</td><td class="att-t">${g.totals.leave || ''}</td><td class="att-t">${g.totals.ot || ''}</td></tr>` : ''}
+          <td class="att-t"><b>${row.present}</b></td><td class="att-t">${row.absent || ''}</td><td class="att-t">${row.sick || ''}</td><td class="att-t">${row.leave || ''}</td><td class="att-t">${row.ot || ''}</td><td class="att-t">${penT(row) ? html`<span class="bad">${penT(row).toLocaleString('en-US')}</span>` : ''}</td></tr>`)}
+          ${groups.length > 1 ? html`<tr class="att-sub"><td class="att-name">Subtotal</td><td colspan="${span}"></td><td class="att-t"><b>${g.totals.present}</b></td><td class="att-t">${g.totals.absent || ''}</td><td class="att-t">${g.totals.sick || ''}</td><td class="att-t">${g.totals.leave || ''}</td><td class="att-t">${g.totals.ot || ''}</td><td class="att-t"></td></tr>` : ''}
         </tbody>`)}
-        <tfoot><tr><td class="att-name">Present per day</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t">${r.rows.reduce((s, x) => s + x.absent, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.sick, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.leave, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.ot, 0) || ''}</td></tr></tfoot>
+        <tfoot><tr><td class="att-name">Present per day</td>${r.days.map(d => html`<td class="${r.off.has(d) ? 'att-off' : ''}">${r.heads[d] || ''}</td>`)}<td class="att-t"><b>${r.rows.reduce((s, x) => s + x.present, 0)}</b></td><td class="att-t">${r.rows.reduce((s, x) => s + x.absent, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.sick, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.leave, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + x.ot, 0) || ''}</td><td class="att-t">${r.rows.reduce((s, x) => s + penT(x), 0).toLocaleString('en-US').replace(/^0$/, '')}</td></tr></tfoot>
       </table></div>
-      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site. Crew photo: ✓ on time, L late, ✗ missing; the time is below, the tag and place in the tip.</p>
+      <p class="muted p-notes">P present, A absent, S sick, L on leave; a small number is overtime hours; ! a penalty that day (Pen.: approved penalties in ETB, taken off the pay); an underlined mark was corrected by the office. Shaded days are not working days; a blank working day was not reported. Attendance comes from the daily reports filed from site. Crew photo: ✓ on time, L late, ✗ missing; the time is below, the tag and place in the tip.</p>
       ${signoff([{ label: 'Prepared by · Site engineer', name: holder(c, /site engineer/i) || siteEngineerSig(c.ws)?.name || '', sig: siteEngineerSig(c.ws)?.sig || '' }, { label: 'Approved by · Project engineer', name: holder(c, /project engineer/i) }])}
       ${docFoot(footText(c, 'Attendance sheet', ref))}`
       : html`<p class="empty">Nobody is on this project's site team yet, and no attendance was reported for ${p.label}.</p>`}
@@ -249,6 +271,15 @@ export const changes = {
 };
 
 export const actions = {
+  // v0.97.0 (owner, R3): the PE or GM (approvers) approves or rejects a penalty given on site
+  penDecide(el, c) {
+    if (!store.canApprove) return;
+    const x = (c.ws.penalties || []).find(p => p.id === el.dataset.id && p.status === 'waiting');
+    if (!x || !confirm(`${el.dataset.v === 'approved' ? 'Approve' : 'Reject'} the penalty of ${x.name}, ${x.amount} ETB?`)) return;
+    const who = { email: store.user?.email || 'this computer', name: store.signature || store.user?.name || '', at: new Date().toISOString() };
+    store.update(ws => { const i = (ws.penalties || []).findIndex(p => p.id === x.id); if (i >= 0) ws.penalties[i] = decided(ws.penalties[i], el.dataset.v, who); });
+    tell(el.dataset.v === 'approved' ? 'Penalty approved: it is taken off the pay.' : 'Penalty rejected.');
+  },
   officeOn() { office = true; editing = null; },
   officeOff() { office = false; },
   officeMark(el, c) {

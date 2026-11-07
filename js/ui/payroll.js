@@ -15,6 +15,7 @@ import { docHead, docFoot, footText, signoff } from './print.js';
 import { sealBar, sealOf } from './seal.js';
 import { companyCode } from '../engine/docref.js';
 import { withFixes, officeReports } from '../engine/attendance.js';
+import { staffPenalty } from '../engine/penalty.js';   // v0.97.0
 import { paidOnSite } from '../engine/crewpay.js';
 import { SITE_DEPARTMENTS, normDepartment } from '../engine/positions.js';
 import { openMail, emailIn } from './maildialog.js';
@@ -25,6 +26,8 @@ import { METHODS, methodLabel } from '../engine/crewpay.js';
 const etbIn = run => (run.lines || []).some(l => l.currency === 'ETB');
 // the attendance as the office corrected it on the Attendance sheet
 // v0.50.0: with the office staff's marks (Attendance, Office staff)
+// v0.97.0 (owner, R3): approved site penalties go in as Other deductions (with a note); the Admin may still change them
+const penaltyFor = c => (staff, from, to) => staffPenalty(c.ws.penalties, c.ws.team, staff, from, to);
 const sheetReports = c => [...withFixes(c.ws.reports, c.ws.attendance), ...officeReports(c.company.officeAttendance)];
 // site crew of a project that pays through Payments is paid there, not here
 const onSitePay = p => paidOnSite(p, store.projects, d => SITE_DEPARTMENTS.includes(normDepartment(d)));
@@ -346,7 +349,7 @@ export const submits = {
     if (rates) { settings.pensionEmployee = rates.pensionEmployee; settings.pensionEmployer = rates.pensionEmployer; settings.bands = rates.bands || []; }
     const run = {
       id: uid('pr'), month, ...stamp(), status: 'draft', settings, createdOn: c.today, checkedBy: '', approvedBy: '', approvedOn: '', paidOn: '',
-      lines: newLines(c.company.staff.filter(p => !onSitePay(p)), month, sheetReports(c)),
+      lines: newLines(c.company.staff.filter(p => !onSitePay(p)), month, sheetReports(c), penaltyFor(c)),
     };
     const left = c.company.staff.filter(onSitePay).length;
     if (!run.lines.length) { notice = 'Nobody on the staff list was employed in that month. Add people under HR first.'; return false; }
@@ -357,6 +360,6 @@ export const submits = {
     const run = find(c.company);
     const staff = c.company.staff.find(p => p.id === fd.get('staffId'));
     if (!run || !staff || run.status !== 'draft') return false;
-    store.updateCompany(co => { const r = find(co); r.lines.push(newLine(staff, r.month, sheetReports(c))); });
+    store.updateCompany(co => { const r = find(co); r.lines.push(newLine(staff, r.month, sheetReports(c), penaltyFor(c))); });
   },
 };

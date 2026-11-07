@@ -128,6 +128,7 @@ export const emptyWorkspace = () => ({
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)
   payments: [],     // Payments: what was paid to whom, for which period (each is also a labour cost in ledger)
   logsheet: [],     // v0.51.0: the project's Log sheet rows (engine/logsheet.js): official documents and their archived file
+  penalties: [],   // v0.97.0: penalties given on site in Field Report, approved by the PE or GM (engine/penalty.js)
   siteInstr: [],   // v0.77.0: the site book's Site instructions (engine/siteinstr.js)
   reportfiles: [],  // the Drive ids of each Field Report PDF ({ id: report id, pdfId, folderId }); never read by Site (v0.22.6)
 });

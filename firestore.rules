@@ -423,12 +423,16 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
-          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance'] && fieldOn(pid))
+          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties'] && fieldOn(pid))
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
         allow create: if isOwner()
-          || (officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
+          // v0.97.0 (owner, R3): a penalty is given on a Field Report phone, waiting, in its giver's own name (never by a viewer)
+          || (section == 'penalties' && fieldOn(pid) && get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec']
+            && request.resource.data.status == 'waiting' && request.resource.data.by == me() && request.resource.data.get('site', false) == true
+            && request.resource.data.amount is number && request.resource.data.amount > 0)
+          || (section != 'penalties' && officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
             // v0.55.0: an office version of a Field Report report is written by approvers only
             && (!(section in ['fieldReports', 'fieldVersions']) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
@@ -446,7 +450,16 @@ service cloud.firestore {
           // v0.38.0: a Field Report phone writes a request of its project as a draft, in its own name
           || (section == 'requests' && fieldOn(pid) && request.resource.data.get('site', false) == true && request.resource.data.status == 'draft' && request.resource.data.by == me());
         allow update: if isOwner()
-          || (officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
+          // v0.97.0 (owner, R3): a waiting penalty is approved or rejected by the PE (coordinator), the GM (exec) or the Admin on a phone,
+          // never by its giver, or by an approver here; its giver may cancel it while it waits
+          || (section == 'penalties' && resource.data.status == 'waiting'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedBy', 'decidedByName', 'decidedAt', 'log', '_o'])
+            && ((request.resource.data.status in ['approved', 'rejected'] && resource.data.by != me()
+                && ((fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'exec', 'admin']) || (officeOn(pid) && canApprove())))
+              || (request.resource.data.status == 'cancelled' && resource.data.by == me() && fieldOn(pid))))
+          // Central Hub gives every record its order (_o) on the first save
+          || (section == 'penalties' && (seesAll() || officeOn(pid)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_o']))
+          || (section != 'penalties' && officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
             // v0.55.0: a kept version is never changed; the newest is changed by approvers only
             && section != 'fieldVersions' && (section != 'fieldReports' || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])

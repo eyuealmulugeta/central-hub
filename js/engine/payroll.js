@@ -79,17 +79,18 @@ export function attendanceFor(reports, month, staff, period = null) {
 }
 
 /** One empty line for a person: how they are paid, and the figures typed or filled in for the month. */
-export function newLine(staff, month, reports = []) {
+export function newLine(staff, month, reports = [], penaltyFor = null) {
   const per = payPeriod(staff, month);
   const a = payOn(staff, per.to);   // v0.48.0: the pay in force that month (pay history), never today's for an old month
   const att = attendanceFor(reports, month, staff, per);
+  const pen = penaltyFor ? penaltyFor(staff, per.from, per.to) : { total: 0, n: 0 };   // v0.97.0 (owner, R3): approved site penalties
   return {
     id: `pl-${staff.id}`, staffId: staff.id, name: staff.name || '', title: staff.title || '',
     from: per.from, to: per.to, due: per.due,   // v0.86.0
     currency: a.currency || '', payPer: a.payPer || 'month', rate: num(a.pay),
     days: att.days, ot: att.ot, unpaidDays: 0,   // v0.85.0: the 90% rule replaces taking off each absent day (the Admin may still type unpaid days)
     ...monthRule(a.payPer || 'month', att),
-    allowances: 0, tax: 0, other: 0, notes: '',
+    allowances: 0, tax: 0, other: pen.total, notes: pen.n ? `Penalties: ${pen.total} (${pen.n})` : '', penalty: pen.total,
     fromAttendance: att.found,
   };
 }
@@ -98,7 +99,7 @@ export function newLine(staff, month, reports = []) {
 export const monthRule = (payPer, att) => (payPer === 'month' ? { share: presentShare(att), byDays: byDaysOf(att) } : { share: null, byDays: false });
 
 /** The lines of a new run: everyone employed in the month. */
-export const newLines = (staffList, month, reports) => staffList.filter(p => employedIn(p, month)).map(p => newLine(p, month, reports))
+export const newLines = (staffList, month, reports, penaltyFor = null) => staffList.filter(p => employedIn(p, month)).map(p => newLine(p, month, reports, penaltyFor))
   .sort((a, b) => a.name.localeCompare(b.name));
 
 /** What one line comes to. Rounded to cents. */

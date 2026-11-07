@@ -10,6 +10,7 @@ import { performanceReport } from '../engine/performance.js';
 import { paySheet, delayRecord } from '../engine/site.js';
 import { uid, money, num, fmtDate, fmtFull, fmtDay, toDay, fromDay, sum, clamp } from '../core/util.js';
 import { html, options, field, chip, meter } from './dom.js';
+import { register, outBar, outMark, outActions, guard, sendOk, iApprove } from './outgoing.js';   // v1.1.0 (G4)
 import { paperHtml } from '../sync/mail.js';
 import { openMail, emailIn } from './maildialog.js';
 import { statusPaper } from './status.js';
@@ -150,6 +151,7 @@ function docPaper(d, c) {
   let group = null;
   return html`
     <article class="paper dsr bill-paper" data-foot="${foot}">
+      ${outMark(d.type, d)}
       ${docHead(c, {
         title: TITLE[d.type], sub: fmtFull(d.date), ref: d.number,
         status: d.status === 'draft' ? 'Draft' : STATUS_WORD[d.status] || '', tone: STATUS_TONE[d.status] || '',
@@ -231,6 +233,7 @@ function reportPaper(c, kind, d, doc) {
 
   return html`
     <article class="paper dsr doc-paper" data-foot="${foot}">
+      ${doc ? outMark('report', doc) : ''}
       ${docHead(c, { title, ref, facts, status: doc ? (doc.status === 'issued' ? 'Issued' : 'Draft') : 'Preview', tone: doc?.status === 'issued' ? 'ok' : 'warn' })}
       <section class="p-to">
         ${party('Client', doc?.party || c.project.client || {})}
@@ -603,6 +606,7 @@ export function render(c) {
         ${draft && store.canApprove ? html`<button class="btn primary" data-act="advance">Approve and issue</button>` : ''}
         ${draft || store.canApprove ? html`<button class="btn danger" data-act="remove">Delete</button>` : ''}
       </div>
+      ${outBar('report', doc)}
       ${emailed(doc)}
       ${draft ? html`<label class="no-print">Remarks to the client
         <textarea data-chg="docField" data-f="remarks" data-fk="d-remarks" rows="3" placeholder="Summary, explanations, decisions needed from the client">${doc.remarks || ''}</textarea></label>` : ''}
@@ -622,6 +626,7 @@ export function render(c) {
       </div>
       ${doc.type === 'invoice' && doc.status === 'sent' ? html`<p class="muted no-print">${doc.due < c.today ? `Overdue by ${toDay(c.today) - toDay(doc.due)} days.` : `Due ${fmtFull(doc.due)}.`}
         ${doc.reminders?.length ? `Reminded ${doc.reminders.length} time${doc.reminders.length > 1 ? 's' : ''}, last on ${fmtFull(doc.reminders.at(-1))}.` : 'No reminder sent yet.'}</p>` : ''}
+      ${outBar(doc.type, doc)}
       ${emailed(doc)}
       <label class="no-print">Notes shown on the document
         <textarea data-chg="docField" data-f="notes" data-fk="d-notes" rows="2" placeholder="Payment terms, delivery address, scope notes">${doc.notes}</textarea></label>
@@ -692,8 +697,11 @@ export function render(c) {
 }
 
 const current = ws => ws.docs.find(d => d.id === sel?.id);
+// v1.1.0 (G4): invoices, quotations, purchase orders and client reports are outgoing documents
+register(['invoice', 'quote', 'po', 'report'], id => { const d = store.ws.docs.find(x => x.id === id); return d && { rec: d, no: d.number, title: `${TITLE[d.type]} ${d.number}`, to: d.party?.name || store.project?.client?.name || '', project: store.project?.id || '', projectName: store.project?.name || '' }; });
 
 export const actions = {
+  ...outActions,
   tab(el) { tab = el.dataset.t; notice = ''; },
   open(el) { sel = { kind: 'doc', id: el.dataset.id }; notice = ''; },
   report() { tab = 'docs'; sel = { kind: 'report' }; notice = ''; },
@@ -762,6 +770,12 @@ export const actions = {
     const d = current(c.ws);
     const next = d && NEXT[d.type][d.status]?.[0];
     if (!next) return;
+    // v1.1.0 (owner, G4): out of draft only when the GM or higher management approved it (an approver approves here)
+    if (d.status === 'draft' && !sendOk(d.type, d)) {
+      if (!iApprove()) { notice = 'Ask for approval first: only the GM, Owner, CEO or Board approves outgoing documents.'; return; }
+      outActions.outApprove({ dataset: { kind: d.type, id: d.id } });
+      if (!sendOk(d.type, d)) return;
+    }
     if (d.type === 'report' && !store.canApprove) { notice = 'Only the Admin or an assigned approver can issue a client report.'; return; }
     // v0.66.0: a weekly report goes out with 6 to 12 photos (all of them when the week has fewer)
     const pool = d.data?.weekly ? photoPool(c.ws, d.period.from, d.period.to).length : 0;
@@ -787,6 +801,7 @@ export const actions = {
     const paper = document.querySelector('#view .paper');
     if (!paper) return;
     const d = current(c.ws);
+    if (d && !guard(d.type, d, m => { notice = m; })) return;   // v1.1.0 (G4)
     const p = c.project;
     const sender = c.global.company?.name || 'Amistad Prefab';
     const kind = d ? TITLE[d.type] : { schedule: 'Project schedule', pay: 'Site pay sheet', claim: 'Record of delays', status: 'Project status report' }[sel?.kind] || 'Performance report';

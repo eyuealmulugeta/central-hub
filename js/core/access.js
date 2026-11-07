@@ -68,6 +68,7 @@ export function mayOpen(role, pages, page, ranks = []) {
   // v0.50.1: HR opens Spotlight and the office staff's attendance (names and positions only, never Employee data)
   if (page === 'spotlight' || page === 'officeatt') return role === 'owner' || ranks.includes('hr_assistant');
   if (page === 'signins' || page === 'activity') return role === 'owner' || ['general_manager', 'owner', 'ceo', 'board_member'].some(r => ranks.includes(r));   // v0.98.0 (G2): the Admin and Tier 1
+  if (page === 'outgoing') return role === 'owner' || role === 'office';   // v1.1.0 (G4): everyone in the office; each sees their own, Tier 1 all
   if (page === 'crewforms') return role === 'owner' || ranks.includes('general_manager');   // v0.41.0: crew form links: the Admin and the GM only
   if (page === 'logsheet') return role === 'owner' || (role === 'office' && pages.includes('docs'));   // v0.51.0: Office with Invoices and documents; Site never loads it
   if (page === 'directory') return role === 'owner' || pages.includes('directory');   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory

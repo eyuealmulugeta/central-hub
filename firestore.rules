@@ -199,6 +199,18 @@ service cloud.firestore {
 
     // v0.99.0 (owner, G1): the activity record of both apps (documents generated, printed, shared, emailed, downloaded):
     // each person adds their own lines, never changes them; the Admin and Tier 1 read them; the Admin deletes.
+    // v1.1.0 (owner, G4): the outgoing register. Only the Admin and Tier 1 (GM, Owner, CEO, Board) approve or send back.
+    match /outgoing/{id} {
+      allow read: if seesAll() || myTier() == 1 || (signedIn() && resource.data.by == me());
+      allow create: if signedIn() && request.resource.data.id == id
+        && ((request.resource.data.by == me() && request.resource.data.status == 'waiting') || seesAll() || myTier() == 1);
+      allow update: if seesAll() || myTier() == 1
+        || (signedIn() && resource.data.by == me() && request.resource.data.status == 'waiting' && request.resource.data.by == me()
+          && request.resource.data.decidedBy == '' && request.resource.data.ref == resource.data.ref)
+        || (signedIn() && resource.data.status in ['approved', 'sent'] && request.resource.data.status == 'sent'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'sentAt', 'sentBy', 'channel', 'log']));
+      allow delete: if isOwner();
+    }
     match /activity/{id} {
       allow read: if seesAll() || myTier() == 1;
       allow create: if signedIn() && request.resource.data.email == me() && request.resource.data.id == id

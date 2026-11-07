@@ -14,6 +14,7 @@ import { prefs } from './core/prefs.js';
 import * as home from './ui/home.js';
 import * as signins from './ui/signins.js';   // v0.98.0 (G2)
 import * as activity from './ui/activity.js';   // v0.99.0 (G1)
+import * as outgoing from './ui/outgoing.js';   // v1.1.0 (G4)
 import { setSink, act } from './core/activity.js';
 import { paperNo } from './sync/share.js';
 import * as dashboard from './ui/dashboard.js';
@@ -80,14 +81,14 @@ import { offerInstall } from './core/install.js';   // v0.70.0
 import { watchUrgent } from './ui/urgent.js';   // v0.72.0
 
 const APP = 'Central Hub';
-const VIEWS = { activity, signins, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { outgoing, activity, signins, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
 const COMPANY_VIEWS = { home: 'The open project at a glance: photos, money, requests and people', notifications: 'New sign-ins, requests from site and reports to review', discuss: 'Messages between the people of Amistad', meetings: 'Meetings with colleagues, and those booked by clients and suppliers', finance: 'Construction and trading, in one currency', trade: 'Trading: buying and shipping', stock: 'Trading: stock and sales', hr: 'Staff and agreements, Admin only', letters: 'Letters of the office, Admin only', payroll: 'Monthly payroll, Admin only', contracts: 'Clients, suppliers and subcontractors',
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Trading: stock, sales and what is owed', owners: 'The owners of the company, Admin only' });
-const TITLES = { activity: 'Activity record', signins: 'Sign-in history', mine: 'My settings', home: 'Dashboard', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
+const TITLES = { outgoing: 'Outgoing register', activity: 'Activity record', signins: 'Sign-in history', mine: 'My settings', home: 'Dashboard', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Overview', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'People and access', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
 Object.assign(TITLES, { siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
@@ -647,6 +648,9 @@ root.addEventListener('click', async e => {
   if (!button || sharing) return;
   const paper = root.querySelector('.paper');
   if (!paper) { toast('There is no document on this page to send.'); return; }
+  // v1.1.0 (owner, G4): an outgoing document is sent only after the GM or higher management approved it
+  const out = root.querySelector('.out-bar');
+  if (out && out.dataset.outOk !== '1') { toast(outgoing.iApprove() ? 'Approve it first: the button above the document.' : 'Not approved yet. Ask for approval first: only the GM, Owner, CEO or Board approves.'); return; }
   sharing = true;
   button.disabled = true;
   toast('Preparing the PDF…');
@@ -703,7 +707,10 @@ function showShareBar(file, text) {
 }
 // v0.99.0 (owner, G1): the activity record: the page and project are added here; every print is recorded, from the
 // app's Print buttons or the browser's own menu, with the sheet on the page
-setSink(e => store.logActivity({ ...e, page: e.page || TITLES[route()] || route() }));
+setSink(e => {
+  store.logActivity({ ...e, page: e.page || TITLES[route()] || route() });
+  if (e.action === 'share' || e.action === 'email') outgoing.markSent(root.querySelector('.out-bar'), e.channel || e.action);   // v1.1.0 (G4)
+});
 addEventListener('beforeprint', () => {
   const paper = root.querySelector('.paper');
   let doc = TITLES[route()] || route();

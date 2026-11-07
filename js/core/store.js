@@ -49,6 +49,7 @@ let company = emptyCompany();   // company-wide records (shipments, ...), not ti
 export const ROUTES = ['script', 'read', 'both'];   // v0.44.0: Both (E3a)
 const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Report's "something changed")
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
+let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
@@ -125,6 +126,9 @@ function startPresence() {
   const t = setInterval(tick, BEAT_MS); t.unref?.();
   document.addEventListener('visibilitychange', vis);
   shared.push(() => { clearInterval(t); document.removeEventListener('visibilitychange', vis); });
+  // v1.1.0 (G4): the outgoing register
+  if (seesSignins(role, ranks)) shared.push(api.watchCol('outgoing', docs => { outs = docs; emit(); }, () => {}));
+  else if (me?.email) shared.push(api.watchCol('outgoing', docs => { outs = docs; emit(); }, () => {}, ['by', '==', String(me.email).toLowerCase()]));
   if (seesSignins(role, ranks)) shared.push(api.watchCol('activity', docs => { acts = docs; emit(); }, () => {}, ['at', '>=', Date.now() - 31 * 864e5]));   // v0.99.0
   if (seesSignins(role, ranks)) shared.push(api.watchCol('signlog', docs => { signlogs = docs; emit(); }, () => {}, ['start', '>=', Date.now() - 31 * 864e5]));
 }
@@ -850,6 +854,12 @@ export const store = {
   get sessions() { return sessions; },
   get signlogs() { return signlogs; },   // v0.98.0
   get activity() { return acts; },   // v0.99.0
+  get outgoing() { return outs; },   // v1.1.0 (G4)
+  /** v1.1.0 (G4): one record of the outgoing register (engine/outgoing.js), shown at once and saved. */
+  putOutgoing(rec) {
+    outs = [...outs.filter(x => x.id !== rec.id), rec]; emit();
+    if (api) api.set(`outgoing/${rec.id}`, rec).catch(e => console.warn('outgoing', e));
+  },
   /** v0.99.0 (G1): one line of the activity record, in this person's name, with the open project. */
   logActivity(e) {
     if (!api || !me?.email) return;

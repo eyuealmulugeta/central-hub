@@ -14,9 +14,11 @@ import { companyCode } from '../engine/docref.js';
 import { openMail, emailIn } from './maildialog.js';
 import { archiveDoc } from './archive.js';
 import { sealBar, sealOf } from './seal.js';
+import { register, outBar, outMark, outActions, guard, sendOk, iApprove } from './outgoing.js';   // v1.1.0 (G4)
 
 let selected = null;
 let notice = '';
+register('letter', id => { const l = store.company.letters.find(x => x.id === id); return l && { rec: l, no: letterRef({ global: store.global }, l), title: l.subject || 'Letter', to: l.to || '' }; });
 
 const find = company => company.letters.find(l => l.id === selected);
 /** Open one letter from outside this screen (search). */
@@ -85,7 +87,9 @@ function detail(l, c) {
       <label>Title of the signer <input data-chg="set" data-f="signTitle" data-fk="lt-stitle" value="${l.signTitle || ''}"></label>
     </div>
     <label>Letter <textarea data-chg="set" data-f="body" data-fk="lt-body" rows="14">${l.body || ''}</textarea></label></section>` : ''}
+    ${outBar('letter', l)}
     <section class="card sheet"><div class="paper dsr doc-paper letter-paper" data-foot="${footText(c, 'Letter', letterRef(c, l), { project: false })}">
+      ${outMark('letter', l)}
       ${docHead(c, { title: 'Letter', ref: letterRef(c, l), status: draft ? 'Draft' : '', tone: 'warn', facts: [['Date', fmtFull(l.date)], ['Signed by', sender.join(', ')]] })}
       <div class="letter-body">
         ${l.to ? html`<p class="letter-to"><span>To</span><b class="pre">${l.to}</b></p>` : ''}
@@ -99,12 +103,15 @@ function detail(l, c) {
 }
 
 export const actions = {
+  ...outActions,
   open(el) { selected = el.dataset.id; notice = ''; },
   back() { selected = null; notice = ''; },
   print() { print(); },
   issue(el, c) {
     const l = find(c.company);
     if (!l) return;
+    // v1.1.0 (G4): issued means gone out: approved first (the Admin approves here and now)
+    if (!sendOk('letter', l)) { if (!iApprove()) { notice = 'Ask for approval first: only the GM, Owner, CEO or Board approves.'; return; } outActions.outApprove({ dataset: { kind: 'letter', id: l.id } }); if (!sendOk('letter', l)) return; }
     const open = unfilled(l.subject, l.body, l.to);
     if (open.length && !confirm(`Part of the letter is unfinished (${open.slice(0, 3).join(', ')}). Mark it as issued anyway?`)) return;
     store.updateCompany(co => { find(co).status = 'issued'; });
@@ -115,6 +122,7 @@ export const actions = {
   email(el, c) {
     const l = find(c.company);
     if (!l) return;
+    if (!guard('letter', l, m => { notice = m; })) return;   // v1.1.0 (G4)
     const staff = staffOf(c.company, l);
     const sender = c.global.company?.name || 'Amistad Prefab';
     const name = `${l.number}${l.subject ? `, ${l.subject}` : ''}`.replace(/[\\/:*?"<>|]/g, '-');

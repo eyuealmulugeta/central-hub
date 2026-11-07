@@ -1931,3 +1931,8 @@ body.viewing { overflow: hidden; }
 .acc-grid td.acc-cell.own button { font-weight: 700; }
 .acc-grid .linkish { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; font: inherit; text-align: left; }
 .acc-see p { margin: .35rem 0; } .acc-see .chip { margin: 0 .25rem .25rem 0; }
+
+/* v1.1.0 (G4): the outgoing register strip */
+.out-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .55rem .8rem; margin: 0 0 .75rem; border-radius: 8px; border: 1px solid var(--line, #ddd); background: var(--card, #fff); }
+.out-bar.tone-info { border-color: #90caf9; } .out-bar.tone-ok { border-color: #a5d6a7; } .out-bar.tone-bad, .out-bar.tone-warn { border-color: #ef9a9a; }
+.out-bar .grow { flex: 1; }

@@ -6,6 +6,7 @@ import { store } from '../core/store.js';
 import { KINDS, STATUS_LABEL, kindLabel, isIncome, nextRef, contractsSummary } from '../engine/contracts.js';
 import { uid, money, fmtFull, clamp } from '../core/util.js';
 import { html, options, field, chip } from './dom.js';
+import { register, outBar, outActions, guard } from './outgoing.js';   // v1.1.0 (G4)
 import { currentDivision, stamp, TRADING } from '../core/division.js';
 import { pageHtml } from '../sync/mail.js';
 import { openMail, emailIn } from './maildialog.js';
@@ -22,6 +23,7 @@ const STATUS_CLS = { draft: 'warn', active: 'ok', ended: 'high', completed: '', 
 const TEXT = new Set(['title', 'party', 'contact', 'paymentTerms', 'link', 'notes']);
 const NUMBERS = new Set(['value', 'noticeDays']);
 const find = company => company.contracts.find(x => x.id === selected);
+register('agreement', id => { const x = store.company.contracts.find(k => k.id === id); return x && { rec: x, no: x.ref, title: x.title || 'Contract', to: x.party || '', project: x.projectId || '', projectName: store.projects.find(p => p.id === x.projectId)?.name || '' }; });
 const isLink = v => /^https?:\/\//i.test(v || '');
 
 export function render(c) {
@@ -92,6 +94,7 @@ function detail({ c: x, status, alerts }, c, currencies) {
         <button class="btn" data-act="close" data-k="terminated">Mark as terminated</button>`}
       <button class="btn danger" data-act="remove">Delete</button>
     </div>
+    ${outBar('agreement', x)}
     ${alerts.length ? html`<ul class="plain">${alerts.map(a => html`<li>${chip(a.sev === 'high' ? 'Overdue' : 'Soon', a.sev)} ${a.text}</li>`)}</ul>` : ''}
 
     <div class="form">
@@ -172,12 +175,14 @@ function summaryPage(x, c, status) {
 
 export const actions = {
   ...sign.actions,
+  ...outActions,
   select(el) { selected = el.dataset.id; notice = ''; },
   back() { selected = null; notice = ''; },
   /** Email a one-page summary of the contract. Internal notes are not included. */
   email(el, c) {
     const x = find(c.company);
     if (!x) return;
+    if (!guard('agreement', x, m => { notice = m; })) return;   // v1.1.0 (G4)
     const status = contractsSummary([x], c.global.fx, c.today, c.global.fx.base).rows[0].status;
     const sender = c.global.company?.name || 'Amistad Prefab';
     openMail({

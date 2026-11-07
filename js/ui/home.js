@@ -8,6 +8,7 @@ import { filtered, actionWord } from '../engine/activity.js';   // v0.99.0
 import { money, fmtDate, fmtFull, toDay, fromDay } from '../core/util.js';
 import { html, icon } from './dom.js';
 import { homeBox as outBox } from './outgoing.js';   // v1.1.0 (G4)
+import { homeBox as feedBox } from './datafeed.js';   // v1.2.0 (G5)
 import { isGM, levelOf } from '../engine/expenses.js';
 import { tradeActuals, tradeLines, tradeWarnings } from '../engine/tradebudget.js';
 import { weeklyDue } from '../engine/report.js';
@@ -355,6 +356,7 @@ export function render(c) {
     <section class="xkpis" style="--n:${kpis.length}">${kpis}</section>
     ${signStrip(c)}
     ${outBox()}
+    ${feedBox()}
     ${actBox(c)}
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }

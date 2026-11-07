@@ -50,6 +50,7 @@ export const ROUTES = ['script', 'read', 'both'];   // v0.44.0: Both (E3a)
 const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Report's "something changed")
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
 let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
+let feed = null;   // v1.2.0 (G5): datafeed/latest
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
@@ -126,6 +127,8 @@ function startPresence() {
   const t = setInterval(tick, BEAT_MS); t.unref?.();
   document.addEventListener('visibilitychange', vis);
   shared.push(() => { clearInterval(t); document.removeEventListener('visibilitychange', vis); });
+  // v1.2.0 (G5): the data tracker's summary, made by the server
+  if (role === 'owner' || role === 'office') shared.push(api.watchDoc('datafeed/latest', d => { feed = d; emit(); }, () => {}));
   // v1.1.0 (G4): the outgoing register
   if (seesSignins(role, ranks)) shared.push(api.watchCol('outgoing', docs => { outs = docs; emit(); }, () => {}));
   else if (me?.email) shared.push(api.watchCol('outgoing', docs => { outs = docs; emit(); }, () => {}, ['by', '==', String(me.email).toLowerCase()]));
@@ -279,7 +282,7 @@ export const store = {
   async connect(adapter, user, today = todayISO()) {
     [...shared, ...opened].forEach(off => off());
     stopSession(); lockedBy = null; sessions = [];
-    shared = []; opened = []; openId = null; users = []; requests = []; profile = { name: '', title: '' };
+    shared = []; opened = []; openId = null; users = []; requests = []; profile = { name: '', title: '' }; feed = null;
     api = adapter; me = user; connectedAt = Date.now();
     api.get(prefsPath(me.email)).then(d => { prefs.attach(api, me.email, d); emit(); }).catch(() => prefs.attach(api, me.email, null));
     company = emptyCompany();
@@ -855,6 +858,7 @@ export const store = {
   get signlogs() { return signlogs; },   // v0.98.0
   get activity() { return acts; },   // v0.99.0
   get outgoing() { return outs; },   // v1.1.0 (G4)
+  get datafeed() { return feed; },   // v1.2.0 (G5)
   /** v1.1.0 (G4): one record of the outgoing register (engine/outgoing.js), shown at once and saved. */
   putOutgoing(rec) {
     outs = [...outs.filter(x => x.id !== rec.id), rec]; emit();

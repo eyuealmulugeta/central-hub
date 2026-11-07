@@ -211,6 +211,11 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'sentAt', 'sentBy', 'channel', 'log']));
       allow delete: if isOwner();
     }
+    // v1.2.0 (owner, G5): the data tracker's summary, written only by the server (functions/datafeed.js)
+    match /datafeed/{id} {
+      allow read: if seesAll() || isOffice();
+      allow write: if false;
+    }
     match /activity/{id} {
       allow read: if seesAll() || myTier() == 1;
       allow create: if signedIn() && request.resource.data.email == me() && request.resource.data.id == id

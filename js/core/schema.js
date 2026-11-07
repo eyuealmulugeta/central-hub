@@ -128,6 +128,8 @@ export const emptyWorkspace = () => ({
   payruns: [],      // Payments: one record per pay period that was worked on, approved or paid (see engine/crewpay.js)
   payments: [],     // Payments: what was paid to whom, for which period (each is also a labour cost in ledger)
   logsheet: [],     // v0.51.0: the project's Log sheet rows (engine/logsheet.js): official documents and their archived file
+  poOpen: [],      // v1.4.0 (R6): what the phone sees of each PO that went out (engine/purchases.js poPublic); Store receives against it
+  purchChecks: [], // v1.4.0 (R6): the months the accountant marked checked on Money > Purchases
   storeMoves: [],  // v1.3.0: the site store kept in Field Report (fr/model/store.js); written on the phone, read here
   penalties: [],   // v0.97.0: penalties given on site in Field Report, approved by the PE or GM (engine/penalty.js)
   siteInstr: [],   // v0.77.0: the site book's Site instructions (engine/siteinstr.js)

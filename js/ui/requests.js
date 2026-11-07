@@ -4,6 +4,8 @@
 // prints on the letterhead and can be emailed as a PDF, for example to a supplier.
 
 import { store } from '../core/store.js';
+import { poFromRequest } from '../engine/purchases.js';   // v1.4.0 (R6)
+import { makeDoc } from '../engine/billing.js';
 import {
   sent, KINDS, PRIORITIES, DEFAULT_UNIT, kindLabel, statusLabel, isOpen, moves, editable, overdue, nextNumber, check, titleOf, followUp, summary,
 } from '../engine/requests.js';
@@ -119,6 +121,7 @@ function detail(r, c) {
       <span class="muted">${r.number}${r.emails?.length ? `. Emailed to ${r.emails.at(-1).to} on ${fmtFull(r.emails.at(-1).at)}` : ''}</span>
       <span class="grow"></span>
       ${moves(r.status, can).map(([to, label]) => html`<button class="btn ${to === 'approved' || to === 'fulfilled' ? 'primary' : ''}" data-act="move" data-to="${to}">${label}</button>`)}
+      ${can && r.kind === 'material' && ['approved', 'arranging'].includes(r.status) ? (c.ws.docs || []).some(d => d.type === 'po' && d.reqId === r.id) ? html`<span class="muted">PO ${c.ws.docs.filter(d => d.type === 'po' && d.reqId === r.id).map(d => d.number).join(', ')}</span>` : html`<button class="btn primary" data-act="reqPo">Make purchase order</button>` : ''}
       <button class="btn" data-act="email">Email as PDF</button>
       <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
       <button class="btn" data-act="print">Print</button>
@@ -208,6 +211,21 @@ function expenseDetail(r, c) {
 const reqRef = (c, r) => docRef({ company: c.global.company, project: c.project, key: r.number });
 
 export const actions = {
+  /** v1.4.0 (R6): a draft PO from this approved material request (PM or office); the GM approves it before it goes out. */
+  reqPo(el, c) {
+    const r = find(c.ws);
+    if (!r || r.kind !== 'material' || !approver()) return;
+    const f = poFromRequest(r);
+    const doc = { ...makeDoc({ type: 'po', project: c.project, docs: c.ws.docs, today: c.today, lines: f.lines, due: f.due || c.today, notes: f.notes }), reqId: r.id };
+    const who = me();
+    store.update(ws => {
+      ws.docs.push(doc);
+      const x = find(ws);
+      if (x.status === 'approved') { x.status = 'arranging'; x.log = [...(x.log || []), { at: stamp(), by: who.email, byName: who.name, status: 'arranging', note: `Purchase order ${doc.number}` }]; }
+    });
+    store.logActivity?.({ action: 'save', channel: 'Purchases', doc: `${doc.number} from ${r.number}` });
+    notice = `${doc.number} made as a draft (Money, Quotations and POs). Add the supplier and the prices, then ask the GM to approve it.`;
+  },
   open(el) { selected = el.dataset.id; notice = ''; problems = []; },
   back() { selected = null; notice = ''; problems = []; },
   filter(el) { filter = el.dataset.k; },

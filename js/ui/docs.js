@@ -4,6 +4,7 @@
 // company letterhead through the Print button.
 
 import { store } from '../core/store.js';
+import { isOut, poPublic } from '../engine/purchases.js';   // v1.4.0 (R6)
 import { METHODS, invoiceLines, makeDoc, nextNumber, docTotals } from '../engine/billing.js';
 import { reportSnapshot, weekOf, photoPool, PHOTOS_MIN, PHOTOS_MAX } from '../engine/report.js';
 import { performanceReport } from '../engine/performance.js';
@@ -794,6 +795,7 @@ export const actions = {
       if (doc.type === 'po' && next === 'delivered') {
         for (const l of doc.lines) if (l.materialId) ws.procurement[l.materialId] = { ...ws.procurement[l.materialId], status: 'delivered' };
       }
+      if (doc.type === 'po' && isOut(doc)) ws.poOpen = [...(ws.poOpen || []).filter(x => x.id !== doc.id), poPublic(doc)];   // v1.4.0 (R6): the site receives against it
     });
   },
   /** Email the document on screen: the dialog opens with the client's address and a covering note, both editable. */
@@ -880,6 +882,7 @@ ${body}`).catch(() => {});
       ws.docs = ws.docs.filter(x => x.id !== d.id);
       // what the document caused elsewhere goes with it
       if (d.ledgerId) ws.ledger = ws.ledger.filter(l => l.id !== d.ledgerId);
+      if (d.type === 'po') ws.poOpen = (ws.poOpen || []).filter(x => x.id !== d.id);   // v1.4.0
       if (d.type === 'po') {
         for (const [id, line] of Object.entries(ws.procurement)) {
           if (line.poId !== d.id) continue;

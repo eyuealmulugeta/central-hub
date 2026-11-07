@@ -72,6 +72,7 @@ export function moveRecord(f, { email, byName, at, pid, id, book = {}, projects 
     ...base, key: itemKey(item, unit), item, unit, qty: num(f.qty),
     supplier: f.kind === 'receive' ? String(f.supplier || '').trim().slice(0, 120) : '',
     reqId: f.kind === 'receive' ? String(f.reqId || '') : '',
+    poId: f.kind === 'receive' ? String(f.poId || '') : '', poNo: f.kind === 'receive' ? String(f.poNo || '') : '',
     to: ['issue', 'return'].includes(f.kind) ? String(f.to || '').trim().slice(0, 120) : '',
     zone: f.kind === 'issue' ? String(f.zone || '').trim().slice(0, 120) : '',
     toProject: f.kind === 'transfer' ? f.toProject : '', toProjectName: to ? to.name || to.code : '',
@@ -140,3 +141,26 @@ export function cardOf(list, key) {
 
 /** A one-line description for the activity record and the confirm box. */
 export const moveLine = m => (m.kind === 'count' ? `Stock count, ${(m.lines || []).length} items` : `${kindWord(m.kind)} ${m.qty} ${m.unit} ${m.item}${m.to ? ` · ${m.to}` : ''}${m.toProjectName ? ` · to ${m.toProjectName}` : ''}`);
+
+/**
+ * 2.62.0 (owner, 7 Nov, R6): purchase orders. Central Hub publishes each PO that went out (projects/<id>/poOpen/<id>:
+ * { id, number, supplier, date, due, status, lines: [{ item, unit, qty }] }); a Receive may name it. What is still to come
+ * per line = ordered - received (approved); received but waiting for the PM shows apart.
+ */
+export function poLeft(po, list) {
+  const got = {};
+  for (const m of moves(list)) {
+    if (m.kind !== 'receive' || m.poId !== po.id || !['approved', 'waiting'].includes(m.status)) continue;
+    const g = (got[m.key] ||= { ok: 0, wait: 0 });
+    g[m.status === 'approved' ? 'ok' : 'wait'] += Number(m.qty) || 0;
+  }
+  const lines = (po.lines || []).map(l => {
+    const key = itemKey(l.item, l.unit), g = got[key] || { ok: 0, wait: 0 };
+    return { ...l, key, got: num(g.ok), waiting: num(g.wait), left: num(Math.max(0, Number(l.qty) - g.ok)) };
+  });
+  return { ...po, lines, open: lines.some(l => l.left > 0) };
+}
+
+/** The POs with something still to come, late ones (past the delivery date) first. */
+export const openPOs = (pos, list, today) => (pos || []).filter(p => p && p.id && p.status !== 'closed').map(p => poLeft(p, list)).filter(p => p.open)
+  .map(p => ({ ...p, late: !!p.due && !!today && p.due < today })).sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.due || '9').localeCompare(String(b.due || '9')));

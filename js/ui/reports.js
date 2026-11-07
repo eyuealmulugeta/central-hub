@@ -508,10 +508,11 @@ export function render(c) {
         <li class="stack">
           <div class="row top">
             <span class="row-main">
-              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${engChip(r, c)} ${r.review === 'pending' ? chip('To approve', 'warn') : ''}</span>
+              <span><b>${fmtDate(r.date)}</b> ${r.field?.no ? html`<span class="muted">No. ${r.field.no}</span>` : ''} ${r.source === 'field' ? chip('Field Report', 'info') : ''} ${engChip(r, c)} ${r.review === 'pending' && !store.canApprove ? chip('To approve', 'warn') : ''}</span>
               <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}`
                 : `${r.by}${r.weather ? `, ${r.weather}` : ''}, ${sum(r.manpower || [], m => m.count)} on site, ${r.entries?.length || 0} task${r.entries?.length === 1 ? '' : 's'} updated`}</span>
             </span>
+            ${r.review === 'pending' && store.canApprove ? html`<button class="btn small primary" data-act="review" data-fresh data-id="${r.id}" title="Opens the report to approve, send back or comment">Approve</button>` : ''}
             <button class="btn small" data-act="openReport" data-fresh data-id="${r.id}" title="Read it with its PDF on top and the history beside it">Open</button>
             ${isSiteUser(c) ? '' : html`<button class="btn small" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
             <button class="btn ghost small" data-act="toggle" data-id="${r.id}">${expanded.has(r.id) ? 'Hide' : 'Show all'}</button>
@@ -848,7 +849,7 @@ export const actions = {
     binNotice = `Report of ${fmtDate(r.date)} moved to the recycle bin.`;
   },
   toggle(el) { if (!expanded.delete(el.dataset.id)) expanded.add(el.dataset.id); },
-  review(el) { reviewing = el.dataset.id; viewing = null; sentBack = null; notice = ''; replyNotice = ''; },
+  review(el) { reviewing = el.dataset.id; viewing = null; sentBack = null; notice = ''; replyNotice = ''; setTimeout(() => { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* fine */ } }, 0); },   // v1.4.0: also from the Approve button on Submitted reports
   /** From a list or the history: a report that needs confirming opens for review, any other opens for reading. */
   openReport(el, c) {
     const r = c.ws.reports.find(x => x.id === el.dataset.id);

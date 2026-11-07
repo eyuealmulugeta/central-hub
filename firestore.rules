@@ -465,7 +465,7 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
-          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties', 'storeMoves'] && fieldOn(pid))
+          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties', 'storeMoves', 'poOpen'] && fieldOn(pid))
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));

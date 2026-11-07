@@ -512,7 +512,7 @@ export function render(c) {
               <span class="muted">${r.field?.nowork ? `No work: ${r.field.reason}`
                 : `${r.by}${r.weather ? `, ${r.weather}` : ''}, ${sum(r.manpower || [], m => m.count)} on site, ${r.entries?.length || 0} task${r.entries?.length === 1 ? '' : 's'} updated`}</span>
             </span>
-            ${r.review === 'pending' && store.canApprove ? html`<button class="btn small primary" data-act="review" data-fresh data-id="${r.id}" title="Opens the report to approve, send back or comment">Approve</button>` : ''}
+            ${r.review === 'pending' && store.canApprove ? html`<button class="btn small primary" data-act="quickApprove" data-fresh data-id="${r.id}" title="Approves the report as the site sent it (Open to read it, correct it or send it back)">Approve</button>` : ''}
             <button class="btn small" data-act="openReport" data-fresh data-id="${r.id}" title="Read it with its PDF on top and the history beside it">Open</button>
             ${isSiteUser(c) ? '' : html`<button class="btn small" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
             <button class="btn ghost small" data-act="toggle" data-id="${r.id}">${expanded.has(r.id) ? 'Hide' : 'Show all'}</button>
@@ -849,6 +849,17 @@ export const actions = {
     binNotice = `Report of ${fmtDate(r.date)} moved to the recycle bin.`;
   },
   toggle(el) { if (!expanded.delete(el.dataset.id)) expanded.add(el.dataset.id); },
+  /** v1.12.0 (owner, 8 Nov): Approve on the list approves the report as the site sent it, in one tap after a short question;
+   *  the same approval as the review form (signature, figures, the site told), so Field Report shows it at once. */
+  async quickApprove(el, c) {
+    const r = (c.ws.reports || []).find(x => x.id === el.dataset.id);
+    if (!r || r.review !== 'pending') return;
+    if (!confirm(`Approve the report of ${fmtDate(r.date)}${r.field?.no ? ` (No. ${r.field.no})` : ''} as the site sent it?\n\nThe schedule, attendance, pay and labour cost are updated and the site is told. Use Open to correct it or send it back.`)) return;
+    reviewing = r.id; viewing = null; sentBack = null; notice = ''; replyNotice = ''; store.notify();
+    await new Promise(res => setTimeout(res, 80));
+    const f = document.querySelector('form[data-form="report"]');
+    if (f && f.requestSubmit) f.requestSubmit(); else notice = 'Press Approve below to finish.';
+  },
   review(el) { reviewing = el.dataset.id; viewing = null; sentBack = null; notice = ''; replyNotice = ''; setTimeout(() => { try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch { /* fine */ } }, 0); },   // v1.4.0: also from the Approve button on Submitted reports
   /** From a list or the history: a report that needs confirming opens for review, any other opens for reading. */
   openReport(el, c) {

@@ -34,7 +34,8 @@ const sealUses = () => {
 };
 import { assign, unassign, dayRateOf, dayCurOf, setDayRate, assignmentOf, unlinked, accountOf, activeProjects } from '../engine/people.js';
 import { transferMember } from '../engine/sitecrew.js';
-import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo } from '../engine/accessrules.js';
+import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo, copyLevel, seeAs } from '../engine/accessrules.js';
+import { act as logAct } from '../core/activity.js';   // v1.0.0 (G6): access changes go to the activity record
 import { fieldReady, fieldUserDo } from '../sync/fieldreport.js';
 
 /** v0.28.0: the projects a team member can be moved to. */
@@ -403,6 +404,7 @@ function permsTab() {
       <div class="actions left"><button class="btn primary" type="button" data-act="accStart">Start the access rules</button></div>
     </section>`;
   }
+  if (accScope === 'grid') return gridView(r, users);   // v1.0.0 (G6)
   const lists = { tier: TIERS.map(([k, w]) => [String(k), w]), pos: POSITIONS.map(p => [p.key, `${p.words} (Tier ${p.tier})`]), person: users.map(u => [u.email, `${u.name || u.email} · ${positionWords(positionOf(u))}`]) };
   const list = lists[accScope];
   if (!list.some(([k]) => k === accPick)) accPick = list[0]?.[0] || '';
@@ -421,15 +423,42 @@ function permsTab() {
   return html`<section class="card" id="panel-perms">
     <div class="toolbar"><h2>Access rules</h2><span class="muted">The nearest wins: person, then position, then tier. You (Admin and GM) have everything.</span></div>
     <div class="actions left">
-      ${tabStrip([['tier', 'By tier'], ['pos', 'By position'], ['person', 'By person']], accScope, 'accScope')}
+      ${tabStrip([['grid', 'All positions'], ['tier', 'By tier'], ['pos', 'By position'], ['person', 'By person']], accScope, 'accScope')}
       <label>${accScope === 'tier' ? 'Tier' : accScope === 'pos' ? 'Position' : 'Person'} <select data-chg="accPick" aria-label="Which one">${options(list, accPick)}</select></label>
       <span class="muted">${accScope === 'person' ? '' : `${who.length} ${who.length === 1 ? 'person' : 'people'} here`}</span>
+      ${accScope === 'pos' ? html`<label>Start from <select data-chg="accCopy" aria-label="Copy every tick from another position"><option value="">another position…</option>${options(POSITIONS.filter(p => p.key !== accPick).map(p => [p.key, p.words]), '')}</select></label>` : ''}
     </div>
+    ${accScope === 'person' && accPick ? seeAsBox(r, people().find(u => u.email === accPick)) : ''}
     ${table('fr', 'Field Report (the phone app)')}
     ${table('ch', 'Central Hub (the office app)')}
     <h3>Changes</h3>
-    ${(r.log || []).length ? html`<ul class="plain">${r.log.slice(0, 25).map(x => html`<li><span class="muted">${String(x.at).slice(0, 16).replace('T', ' ')}</span> · ${x.by || 'Admin'} · ${x.scope === 'all' ? 'The access rules started' : html`${scopeWords(x.scope, x.id)} · ${FEATURES.find(f => f.key === x.feat)?.label || x.feat}: ${x.from || 'none'} → ${x.to || 'none'}`}</li>`)}</ul>` : html`<p class="muted">No changes yet.</p>`}
+    ${(r.log || []).length ? html`<ul class="plain">${r.log.slice(0, 25).map(x => html`<li><span class="muted">${String(x.at).slice(0, 16).replace('T', ' ')}</span> · ${x.by || 'Admin'} · ${x.scope === 'all' ? 'The access rules started' : x.feat === '*' ? html`${scopeWords(x.scope, x.id)} · ${x.to}` : html`${scopeWords(x.scope, x.id)} · ${FEATURES.find(f => f.key === x.feat)?.label || x.feat}: ${x.from || 'none'} → ${x.to || 'none'}`}</li>`)}</ul>` : html`<p class="muted">No changes yet.</p>`}
   </section>`;
+}
+
+/** v1.0.0 (owner, G6): every position against every page of CH and FR on one grid. A cell opens that position. */
+function gridView(r, users) {
+  const pos = POSITIONS.filter(p => p.key !== 'owner');
+  const cell = (p, f) => { if (f.admin) return html`<td class="c muted">—</td>`; const { v, from } = levelValue(r, 'pos', p.key, f.key, users); return html`<td class="c acc-cell ${v.includes('S') ? 'on' : ''} ${from === 'set here' ? 'own' : ''}"><button type="button" class="linkish" data-act="accOpen" data-id="${p.key}" title="${f.label} · ${p.words}: ${v || 'none'}">${v || '·'}</button></td>`; };
+  const head = app => FEATURES.filter(f => f.app === app).map(f => html`<th class="c acc-h" title="${f.about}">${f.label}</th>`);
+  return html`<section class="card" id="panel-perms">
+    <div class="toolbar"><h2>Access rules</h2><span class="muted">S sees · D does · N is told · bold: set here. A page nobody may see is hidden in CH and FR: not in the menu, search, Quick, links or notifications.</span></div>
+    <div class="actions left">${tabStrip([['grid', 'All positions'], ['tier', 'By tier'], ['pos', 'By position'], ['person', 'By person']], accScope, 'accScope')}</div>
+    <div class="table-wrap"><table class="table compact acc-grid">
+      <thead><tr><th>Position</th><th class="c">People</th><th class="c acc-app" colspan="${FEATURES.filter(f => f.app === 'fr').length}">Field Report</th><th class="c acc-app" colspan="${FEATURES.filter(f => f.app === 'ch').length}">Central Hub</th></tr>
+        <tr><th></th><th></th>${head('fr')}${head('ch')}</tr></thead>
+      <tbody>${pos.map(p => html`<tr><th><button type="button" class="linkish" data-act="accOpen" data-id="${p.key}">${p.words}</button></th><td class="c muted">${users.filter(u => positionOf(u) === p.key).length || ''}</td>${FEATURES.filter(f => f.app === 'fr').map(f => cell(p, f))}${FEATURES.filter(f => f.app === 'ch').map(f => cell(p, f))}</tr>`)}</tbody>
+    </table></div>
+  </section>`;
+}
+/** v1.0.0 (G6): See as this person: the pages and rights they get, in CH and in FR, and their projects. */
+function seeAsBox(r, u) {
+  if (!u) return '';
+  const x = seeAs(r, u), projs = (store.projects || []).filter(p => (u.projects || []).includes(p.id)).map(p => p.name || p.code);
+  const list = l => l.length ? l.map(f => html`<span class="chip" title="${f.v}">${f.label} · ${f.v}</span>`) : html`<span class="muted">nothing</span>`;
+  return html`<div class="note acc-see"><b>See as ${u.name || u.email}</b> (${positionWords(positionOf(u))}, Tier ${tierOf(u)})
+    <p><b>Central Hub:</b> ${list(x.ch)}</p><p><b>Field Report:</b> ${list(x.fr)}</p>
+    <p class="muted">Hidden from them: ${x.none.join(', ') || 'nothing'}.${projs.length ? ` Projects: ${projs.join(', ')}.` : ''} More projects per person: Allocated Crew.</p></div>`;
 }
 
 // Allocated Crew: everyone who works on the projects, one row each, one column per project.
@@ -813,6 +842,7 @@ export const actions = {
   projTab(el) { projTab = el.dataset.t; },
   accTab(el) { accTab = el.dataset.t; },
   accScope(el) { accScope = el.dataset.t; accPick = ''; },
+  accOpen(el) { accScope = 'pos'; accPick = el.dataset.id; },   // v1.0.0 (G6): a cell of the grid opens its position
   openRules(el) { accTab = 'perms'; accScope = 'person'; accPick = el.dataset.id; },
   /** Start the access rules: every person's pages follow them from now on. */
   accStart() {
@@ -1077,7 +1107,20 @@ export const changes = {
     store.updateGlobal(g => { next = setFlag(g.access, accScope, accPick, feat, flag, on, store.user?.name || 'Admin', new Date().toISOString(), people()); next.started = g.access?.started; g.access = next; });
     syncPages(hit, next);
     sendRules();
+    logAct({ action: 'save', channel: 'Access rules', page: 'Access rules', doc: `${scopeWords(accScope, accPick)} · ${FEATURES.find(f => f.key === feat)?.label}: ${next.log[0].from || 'none'} → ${next.log[0].to || 'none'}` });   // v1.0.0
     tell(`✓ Applied. ${hit.length} ${hit.length === 1 ? 'person' : 'people'} reached.`);
+  },
+  /** v1.0.0 (G6): a position starts from another position's ticks, asked first. */
+  accCopy(el) {
+    const from = el.value; if (!from || accScope !== 'pos') return;
+    const hit = people().filter(u => u.role !== 'owner' && positionOf(u) === accPick);
+    if (!confirm(`Give ${scopeWords('pos', accPick)} every tick of ${scopeWords('pos', from)}?\n\nThis changes the access of ${hit.length} ${hit.length === 1 ? 'person' : 'people'}${hit.length ? `: ${hit.slice(0, 12).map(u => u.name || u.email).join(', ')}` : ''}. A tick set for one person stays.\n\nPress OK to apply, Cancel to leave it as it is.`)) { el.value = ''; store.notify(); return; }
+    let next;
+    store.updateGlobal(g => { next = copyLevel(g.access, from, accPick, store.user?.name || 'Admin'); next.started = g.access?.started; g.access = next; });
+    syncPages(people(), next);
+    sendRules();
+    logAct({ action: 'save', channel: 'Access rules', page: 'Access rules', doc: `${positionWords(accPick)}: copied from ${positionWords(from)}` });
+    tell('✓ Applied.');
   },
   accClear(el) {
     const feat = el.dataset.f, hit = reached(rulesNow(), people(), accScope, accPick, feat);
@@ -1086,6 +1129,7 @@ export const changes = {
     store.updateGlobal(g => { next = clearAt(g.access, accScope, accPick, feat, store.user?.name || 'Admin', new Date().toISOString(), people()); next.started = g.access?.started; g.access = next; });
     syncPages(people(), next);
     sendRules();
+    logAct({ action: 'save', channel: 'Access rules', page: 'Access rules', doc: `${scopeWords(accScope, accPick)} · ${FEATURES.find(f => f.key === feat)?.label}: follows the level above` });   // v1.0.0
   },
   payPeriod(el) { store.updateProject(p => { p.payPeriod = el.value; }); },
   payWeekStart(el) { store.updateProject(p => { p.payWeekStart = +el.value; }); },

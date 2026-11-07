@@ -1922,3 +1922,12 @@ body.viewing { overflow: hidden; }
 /* v0.95.2: a new phone of a known account, decided on its row; the day's photos scroll when there are many */
 .fu-newphone { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .xbox-today .xmedia { max-height: 560px; overflow-y: auto; }
+
+/* v1.0.0 (G6): the access grid */
+.acc-grid th.acc-h { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-weight: 500; font-size: .78rem; padding: .4rem .15rem; }
+.acc-grid .acc-app { border-bottom: 1px solid var(--line, #ddd); }
+.acc-grid td.acc-cell { font-family: ui-monospace, monospace; font-size: .78rem; padding: .2rem .25rem; }
+.acc-grid td.acc-cell.on { background: color-mix(in srgb, var(--ok, #2e7d32) 12%, transparent); }
+.acc-grid td.acc-cell.own button { font-weight: 700; }
+.acc-grid .linkish { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.acc-see p { margin: .35rem 0; } .acc-see .chip { margin: 0 .25rem .25rem 0; }

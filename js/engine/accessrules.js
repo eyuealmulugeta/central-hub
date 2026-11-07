@@ -20,6 +20,11 @@ export const FEATURES = [
   ['fr_hours', 'fr', 9, 'Working hours and reminder', 'Start hour, working days, the daily reminder'],
   ['fr_users', 'fr', 10, 'Sign-up, devices, FR users', 'Approve new people and phones', null, true],
   ['fr_missing', 'fr', 11, 'Missing report alerts', 'No report or no-work notice by evening'],
+  // v1.0.0 (owner, G6): every FR page and right has its own tick. A page a person may not see is hidden in FR by any means.
+  ['fr_review', 'fr', 11, 'Review tab', 'Reports and requests of the project, in FR'],
+  ['fr_penalty', 'fr', 11, 'Penalties', 'Sees the penalties tab; Does gives a penalty (deciding stays with the approvers)'],
+  ['fr_quick', 'fr', 11, 'Quick tab', 'The + tab: quick notes, photos and requests'],
+  ['fr_media', 'fr', 11, 'FR Dashboard', 'Photos and videos of all projects (GM)'],
   ['ch_projects', 'ch', 12, 'Projects', 'Create and set up projects; others see the ones they are on', ['dashboard']],
   ['ch_delete', 'ch', 13, 'Delete', 'Anything deleted goes to the recycle bin', null, true],
   ['ch_reports', 'ch', 14, 'Daily reports in CH', 'Read, approve, send back, comment', ['reports']],
@@ -33,7 +38,7 @@ export const FEATURES = [
   ['ch_contracts', 'ch', 22, 'Contracts and trading', 'Agreements, shipments, stock and sales', ['contracts', 'trade']],
   ['ch_talk', 'ch', 23, 'Meetings and contacts', 'Discuss is open to everyone on a project', ['meetings', 'contacts']],
   ['ch_directory', 'ch', 23, 'Staff directory', 'Names and phone numbers of the staff', ['directory']],
-].map(([key, app, no, label, about, pages = null, admin = false]) => ({ key, app, no, label, about, pages: pages || [], admin }));
+].map(([key, app, no, label, about, pages = null, admin = false], i) => ({ key, app, no: i + 1, label, about, pages: pages || [], admin }));   // v1.0.0: numbered in order
 export const feature = key => FEATURES.find(f => f.key === key);
 
 /** The tiers, the same five as the evaluations. */
@@ -71,6 +76,17 @@ const START = {
 for (const k of ['owner', 'ceo', 'board_member']) START[k] ||= START.general_manager;   // v0.47.0: Tier 1 starts like the GM
 START.draft_person ||= START.architect;
 for (const k of OFFICE) START[k] ||= { ch_schedule: 'S', ...(k === '_office' ? {} : { ch_eval: 'D' }), ...ALL_TALK };
+// v1.0.0 (G6): FR showed these pages to every FR account before; they start as seen, so nobody loses a page when FR follows
+// the rules. Doing (D) stays as the owner set it. Positions with an FR account only; the office has none.
+const FR_SEEN = ['fr_report', 'fr_crewphoto', 'fr_crew', 'fr_photos', 'fr_spot', 'fr_incidents', 'fr_hours', 'fr_review', 'fr_penalty', 'fr_media'];
+const FR_DOES = { fr_quick: 'D', fr_penalty: { site_engineer: 'D', project_manager: 'D' } };
+export const FR_USERS = ['project_manager', 'coordinator', 'chief_engineer', 'hse_officer', 'site_engineer', 'foreman', '_site'];
+for (const k of FR_USERS) {
+  const m = (START[k] = { ...(START[k] || {}) });
+  for (const f of FR_SEEN) m[f] = m[f] || 'S';
+  m.fr_quick = m.fr_quick || 'D';
+  if (FR_DOES.fr_penalty[k]) m.fr_penalty = 'SD';
+}
 export const startOf = (pos, feat) => (START[pos] || {})[feat] || '';
 
 /** Flags kept in a fixed order, D bringing S with it. */
@@ -159,6 +175,24 @@ export function frRules(rules, users) {
   const out = {};
   for (const u of users) if (u.email && u.role !== 'owner') out[String(u.email).toLowerCase()] = Object.fromEntries(fr.map(k => [k, valueOf(rules, u, k).v]).filter(([, v]) => v));
   return out;
+}
+/** v1.0.0 (G6): a position starts from another: every feature of `from` is copied to `to`, in one log line. */
+export function copyLevel(rules, from, to, by = '', at = new Date().toISOString()) {
+  const r = structuredClone(rules || blank());
+  const box = (r.pos ||= {});
+  box[to] = Object.fromEntries(FEATURES.filter(f => !f.admin).map(f => [f.key, levelValue(rules, 'pos', from, f.key).v]));
+  r.log = [{ at, by, scope: 'pos', id: to, feat: '*', from: '', to: `copied from ${positionWords(from)}` }, ...(r.log || [])].slice(0, 300);
+  return r;
+}
+/** v1.0.0 (G6): what one person sees, as the Admin checks it ("See as this person"). */
+export function seeAs(rules, user) {
+  const v = f => valueOf(rules, user, f.key).v;
+  return {
+    ch: FEATURES.filter(f => f.app === 'ch' && v(f).includes('S')).map(f => ({ key: f.key, label: f.label, v: v(f) })),
+    fr: FEATURES.filter(f => f.app === 'fr' && v(f).includes('S')).map(f => ({ key: f.key, label: f.label, v: v(f) })),
+    none: FEATURES.filter(f => !f.admin && !v(f).includes('S')).map(f => f.label),
+    pages: pagesFrom(rules, user),
+  };
 }
 /** May this person do (D) the feature? */
 export const mayDo = (rules, user, feat) => valueOf(rules, user, feat).v.includes('D');

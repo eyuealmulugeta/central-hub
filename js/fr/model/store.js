@@ -28,7 +28,7 @@ export const maySetKeeper = role => ['coordinator', 'exec', 'admin'].includes(ro
 const num = v => Math.round(Number(v) * 1000) / 1000;
 
 /** Why this movement cannot be saved, or ''. f = { kind, item, unit, qty, date, supplier, to, zone, toProject, sig, photo, lines } */
-export function moveProblem(f, { book = {}, projects = [], code = '' } = {}) {
+export function moveProblem(f, { book = {}, projects = [], code = '', tasks = [] } = {}) {
   if (!KINDS.some(([v]) => v === f.kind)) return 'Choose what you are recording.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.date || ''))) return 'Choose the day.';
   if (f.kind === 'count') {
@@ -45,6 +45,7 @@ export function moveProblem(f, { book = {}, projects = [], code = '' } = {}) {
   if (f.kind === 'receive' && !String(f.supplier || '').trim()) return 'Enter the supplier (or "Transfer from …").';
   if (f.kind === 'receive' && !f.photo) return 'Take a photo of the delivery note.';
   if (f.kind === 'issue' && !String(f.to || '').trim()) return 'Enter who receives it.';
+  if (f.kind === 'issue' && tasks.length && !tasks.some(t => t.id === f.taskId)) return 'Choose the task it is for.';   // 2.63.0 (R7)
   if (f.kind === 'issue' && !f.sig) return 'The receiver signs on the phone.';
   if (f.kind === 'return' && !String(f.to || '').trim()) return 'Enter who brings it back.';
   if (f.kind === 'transfer' && (!f.toProject || f.toProject === code || !projects.some(p => p.code === f.toProject))) return 'Choose the project it goes to.';
@@ -75,6 +76,7 @@ export function moveRecord(f, { email, byName, at, pid, id, book = {}, projects 
     poId: f.kind === 'receive' ? String(f.poId || '') : '', poNo: f.kind === 'receive' ? String(f.poNo || '') : '',
     to: ['issue', 'return'].includes(f.kind) ? String(f.to || '').trim().slice(0, 120) : '',
     zone: f.kind === 'issue' ? String(f.zone || '').trim().slice(0, 120) : '',
+    taskId: f.kind === 'issue' ? String(f.taskId || '') : '', taskName: f.kind === 'issue' ? String(f.taskName || '').slice(0, 120) : '',   // 2.63.0 (R7): materials used vs work done
     toProject: f.kind === 'transfer' ? f.toProject : '', toProjectName: to ? to.name || to.code : '',
     sig: f.kind === 'issue' ? f.sig || '' : '', photo: f.kind === 'receive' ? f.photo || '' : '',
   };
@@ -140,7 +142,7 @@ export function cardOf(list, key) {
 }
 
 /** A one-line description for the activity record and the confirm box. */
-export const moveLine = m => (m.kind === 'count' ? `Stock count, ${(m.lines || []).length} items` : `${kindWord(m.kind)} ${m.qty} ${m.unit} ${m.item}${m.to ? ` · ${m.to}` : ''}${m.toProjectName ? ` · to ${m.toProjectName}` : ''}`);
+export const moveLine = m => (m.kind === 'count' ? `Stock count, ${(m.lines || []).length} items` : `${kindWord(m.kind)} ${m.qty} ${m.unit} ${m.item}${m.taskName ? ` · for ${m.taskName}` : ''}${m.to ? ` · ${m.to}` : ''}${m.toProjectName ? ` · to ${m.toProjectName}` : ''}`);
 
 /**
  * 2.62.0 (owner, 7 Nov, R6): purchase orders. Central Hub publishes each PO that went out (projects/<id>/poOpen/<id>:

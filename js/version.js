@@ -1,2 +1,2 @@
 // The version shown under the logo. Raise it with each release (see docs/HANDOVER.md).
-export const APP_VERSION = 'v1.10.2';
+export const APP_VERSION = 'v1.11.0';

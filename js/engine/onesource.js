@@ -1,0 +1,136 @@
+// v1.11.0 (owner, 7 Nov): One source. The Manpower Directory is the only place a person is entered. Their sign-in email
+// (accountEmail), position (title) and project assignments decide their Field Report access (role and projects) and
+// their Central Hub projects. Nobody is added by hand on the Field users page. The Admin's own account and the GM
+// (Field Report roles admin and exec) are shown, never changed. Field Report people found outside the Directory are
+// brought in once (importPlan, reviewed by the Admin), then the server keeps every change in step (syncPlan). Pure.
+
+const low = s => String(s || '').trim().toLowerCase();
+const norm = s => low(s).replace(/[^a-z0-9]+/g, ' ').trim();
+const up = s => String(s || '').trim().toUpperCase();
+
+/** Field Report roles the sync never changes or removes. */
+export const KEEP_ROLES = ['admin', 'exec'];
+export const NEEDS_PROJECT = ['engineer', 'coordinator', 'viewer', 'technician'];
+/** The owner's words for the Field Report roles (exec is shown as GM). */
+export const FR_ROLE_WORD = { engineer: 'Site engineer', coordinator: 'Project engineer', admin: 'Admin', exec: 'GM', viewer: 'Viewer', technician: 'Technician' };
+
+/** The Field Report role from the Directory position (owner, 7 Nov). */
+export function frRoleOf(title) {
+  const t = norm(title);
+  if (/\bgeneral manager\b|^gm$/.test(t)) return 'exec';
+  if (/\b(project engineer|project manager|pe|pm)\b/.test(t)) return 'coordinator';
+  if (/\bsite engineer\b|^se$/.test(t)) return 'engineer';
+  if (/\btechnician\b/.test(t)) return 'technician';
+  return 'viewer';
+}
+/** A position from a Field Report role, for a person brought in without one. */
+const titleOfRole = role => ({ engineer: 'Site Engineer', coordinator: 'Project Engineer', exec: 'General Manager', technician: 'Technician', admin: 'Admin' }[role] || '');
+
+export const accountOf = p => low(p && p.accountEmail);
+const left = p => !p || p.status === 'left';
+
+/** Field Report code <-> Central Hub project id, for connected projects only. */
+export function codeMaps(projects = []) {
+  const toPid = new Map(), toCode = new Map();
+  for (const p of projects) if (p && p.id && p.fieldCode && p.fieldLabel) { toPid.set(up(p.fieldCode), p.id); toCode.set(p.id, up(p.fieldCode)); }
+  return { toPid, toCode };
+}
+
+/** The Directory person behind a Field Report email: by sign-in email, then work email, then the same name. */
+export function personFor(fr, staff = []) {
+  const e = low(fr.email);
+  const live = staff.filter(p => !left(p));
+  const byAcct = live.find(p => accountOf(p) === e) || staff.find(p => accountOf(p) === e);
+  if (byAcct) return { p: byAcct, by: 'email' };
+  const byMail = live.find(p => low(p.email) === e || low(p.privateEmail) === e);
+  if (byMail) return { p: byMail, by: 'work email' };
+  const names = [fr.full, fr.uName].map(norm).filter(n => n && n.includes(' '));
+  const byName = names.length ? live.filter(p => names.includes(norm(p.name))) : [];
+  if (byName.length === 1 && !accountOf(byName[0])) return { p: byName[0], by: 'name' };
+  return null;
+}
+
+/**
+ * The one-time list the Admin approves: each Field Report person (not the Admin's own, not GM or Admin roles' missing
+ * projects) as { email, kind: 'add' | 'link' | 'projects' | 'ok', personId, name, title, pids, why }.
+ *   add       not in the Directory: a new person with this email, position and projects
+ *   link      found by work email or name: the sign-in email is set on that person, missing projects added
+ *   projects  linked already, but on Field Report projects the Directory does not have: those assignments are added
+ */
+export function importPlan({ people = [], staff = [], projects = [] }) {
+  const { toPid } = codeMaps(projects), out = [];
+  for (const fr of people) {
+    const email = low(fr.email);
+    if (!email.includes('@')) continue;
+    const pids = (fr.projects || []).map(c => toPid.get(up(c))).filter(Boolean);
+    const hit = personFor(fr, staff);
+    const name = String(fr.full || fr.uName || '').trim() || email.split('@')[0];
+    if (!hit) { out.push({ email, kind: 'add', personId: '', name, title: String(fr.pos || fr.uPos || '').trim() || titleOfRole(fr.role), role: fr.role, pids, why: 'Not in the Directory' }); continue; }
+    const have = new Set((hit.p.assignments || []).filter(a => a.active !== false).map(a => a.projectId));
+    const more = pids.filter(id => !have.has(id));
+    if (hit.by !== 'email') out.push({ email, kind: 'link', personId: hit.p.id, name: hit.p.name, title: hit.p.title || '', role: fr.role, pids: more, why: `Same ${hit.by}: the sign-in email is set on ${hit.p.name}` });
+    else if (more.length && !KEEP_ROLES.includes(fr.role)) out.push({ email, kind: 'projects', personId: hit.p.id, name: hit.p.name, title: hit.p.title || '', role: fr.role, pids: more, why: 'On Field Report projects the Directory does not list' });
+  }
+  return out;
+}
+
+/** The Directory after the approved list: new people, sign-in emails set, assignments added. Returns { staff, touched }. */
+export function applyImport(staff = [], plan = [], { newId, today = '', by = '' } = {}) {
+  const next = staff.map(p => ({ ...p, assignments: [...(p.assignments || [])] })), touched = [];
+  for (const x of plan) {
+    let p = x.personId && next.find(y => y.id === x.personId);
+    if (x.kind === 'add' || !p) {
+      p = { id: newId(), name: x.name, title: x.title, department: '', projectId: x.pids[0] || '', status: 'active', started: today, agreement: {}, documents: [], notes: '',
+        level: 'crew', accountEmail: x.email, email: x.email, assignments: [], addedBy: by, addedOn: today, from: 'Field Report users (one source)' };
+      next.push(p);
+    } else if (x.kind === 'link') p.accountEmail = x.email;
+    for (const pid of x.pids) {
+      const a = p.assignments.find(y => y.projectId === pid);
+      if (a) a.active = true; else p.assignments.push({ projectId: pid, role: p.title || '', dayRate: 0, active: true });
+    }
+    touched.push({ person: p, pids: x.pids });
+  }
+  return { staff: next, touched };
+}
+
+/**
+ * What the server changes so Field Report and Central Hub follow the Directory.
+ * frPeople: the script's access list; admins: the Admin's own emails. managed: emails the sync set before (removable).
+ * -> { set: [{ email, role, projects, name }], remove: [email], users: [{ email, projects }], strays: [fr], kept: [fr], managed }
+ */
+export function syncPlan({ staff = [], frPeople = [], projects = [], users = [], admins = [], managed = [] }) {
+  const { toCode } = codeMaps(projects);
+  const fr = new Map(frPeople.map(x => [low(x.email), x]));
+  const adminSet = new Set(admins.map(low));
+  const out = { set: [], remove: [], users: [], strays: [], kept: [], managed: [] };
+  const want = new Map();
+  for (const p of staff) {
+    const email = accountOf(p);
+    if (!email || left(p) || want.has(email)) continue;
+    const pids = [...new Set((p.assignments || []).filter(a => a.active !== false).map(a => a.projectId))];
+    want.set(email, { p, pids });
+  }
+  for (const [email, { p, pids }] of want) {
+    const cur = fr.get(email);
+    const u = users.find(x => low(x.email) === email);
+    // Central Hub: the Directory's projects are added to the person's access (added only: an office person may hold more by hand)
+    if (u && u.role !== 'owner' && !adminSet.has(email)) {
+      const have = new Set(u.projects || []), more = pids.filter(id => !have.has(id));
+      if (more.length) out.users.push({ email, projects: [...(u.projects || []), ...more] });
+    }
+    if (adminSet.has(email) || (cur && KEEP_ROLES.includes(cur.role))) { if (cur) out.kept.push(cur); continue; }
+    const role = frRoleOf(p.title);
+    if (KEEP_ROLES.includes(role)) { if (cur) out.kept.push(cur); continue; }   // a GM is set up by the Admin once, then kept
+    const codes = pids.map(id => toCode.get(id)).filter(Boolean).sort();
+    if (!codes.length) { if (cur && managed.includes(email)) out.remove.push(email); continue; }
+    out.managed.push(email);
+    if (!cur || cur.role !== role || [...(cur.projects || [])].map(up).sort().join(',') !== codes.join(',')) out.set.push({ email, role, projects: codes, name: p.name });
+  }
+  for (const [email, cur] of fr) {
+    if (want.has(email)) continue;
+    if (adminSet.has(email) || KEEP_ROLES.includes(cur.role)) { out.kept.push(cur); continue; }
+    if (managed.includes(email)) out.remove.push(email);   // left, or the sign-in email taken off in the Directory
+    else out.strays.push(cur);
+  }
+  return out;
+}

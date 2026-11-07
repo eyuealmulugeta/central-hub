@@ -13,11 +13,13 @@ import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
 import { uid } from '../core/util.js';
 import { compareReports, clean } from '../engine/compare.js';
 import { personByEmail, addedStamp, addedName } from '../engine/manpower.js';
-import { fromTeam } from '../engine/people.js';
+import { fromTeam, assign } from '../engine/people.js';
+import { importPlan, applyImport, frRoleOf, codeMaps, NEEDS_PROJECT, FR_ROLE_WORD } from '../engine/onesource.js';   // v1.11.0
 
-export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)'], ['technician', 'Technician (shares work photos)']];   // technician: v1.8.0
+export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'GM'], ['technician', 'Technician (shares work photos)']];   // technician: v1.8.0
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
-const ACTIONS = [['', 'No change'], ['approve', 'Approve new device'], ['deny', 'Deny new device'], ['activate', 'Activate'], ['suspend', 'Suspend'], ['block', 'Block'], ['remove', 'Remove']];
+// v1.11.0 (owner): no Remove here: access is taken away in the Manpower Directory (status Left, or the sign-in email cleared)
+const ACTIONS = [['', 'No change'], ['approve', 'Approve new device'], ['deny', 'Deny new device'], ['activate', 'Activate'], ['suspend', 'Suspend'], ['block', 'Block']];
 const ONE_PER_PROJECT = ['engineer', 'coordinator', 'technician'];   // these need projects; admin and exec see every project
 
 let feed = null;        // { people, catalog, devices, inbox, at }
@@ -108,17 +110,24 @@ function signupRow(r, catalog) {
     <div><b>${r.name || 'No name given'}</b> <span class="muted">${r.email}</span>${r.phone ? html` <span class="muted">· ${r.phone}</span>` : ''}
       <span class="muted note">${place(r)} · asked ${when(r.at)}${r.ua ? ` · ${r.ua}` : ''}</span></div>
     <div class="entry">
-      <select data-su="role" aria-label="Field Report role for ${r.email}">${options(ROLE_WORDS, 'engineer')}</select>
-      <select data-su="proj" aria-label="Project for ${r.email}">${options([['', 'Project…'], ...catalog.map(x => [x.code, `${x.code} ${x.label || ''}`])], '')}</select>
+      <select data-su="person" aria-label="The person in the Manpower Directory for ${r.email}">${options([['', 'Person in the Manpower Directory…'], ...suPeople(r).map(p => [p.id, `${p.name}${p.title ? ` · ${p.title}` : ''}`])], suGuess(r))}</select>
       <button class="btn small primary" type="button" data-act="fuSignup" data-e="${r.email}" data-v="approve" ${busy ? 'disabled' : ''}>Approve</button>
       <button class="btn small ghost" type="button" data-act="fuSignup" data-e="${r.email}" data-v="reject" ${busy ? 'disabled' : ''}>Reject</button>
     </div></li>`;
+}
+// v1.11.0: the Directory people a sign-up may be (no sign-in email yet, or this one), the same name first
+const suPeople = r => (store.company?.staff || []).filter(p => p.status !== 'left' && (!p.accountEmail || String(p.accountEmail).toLowerCase() === r.email)).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+const suGuess = r => { const n = String(r.name || '').trim().toLowerCase(); return (suPeople(r).find(p => String(p.accountEmail || '').toLowerCase() === r.email || (n && String(p.name || '').trim().toLowerCase() === n)) || {}).id || ''; };
+/** v1.11.0: the Field Report access a Directory person gets: { role, projects (codes) }. */
+export function accessFromDirectory(p) {
+  const { toCode } = codeMaps(store.projects);
+  return { role: frRoleOf(p.title), projects: [...new Set((p.assignments || []).filter(a => a.active !== false).map(a => toCode.get(a.projectId)).filter(Boolean))].sort() };
 }
 function signupsCard(catalog) {
   const all = feed?.signups || [], wait = all.filter(r => r.st === 'wait'), done = all.filter(r => r.st !== 'wait').slice(0, 8);
   if (!all.length) return '';
   return html`<h4>Sign-up requests ${wait.length ? html`<span class="chip high">${wait.length} waiting</span>` : ''}</h4>
-    <p class="muted small">People who signed in to Field Report with a Google account that has no access yet. Approve gives the role and project you choose and approves the phone they asked from. Either way they get an email with the result.</p>
+    <p class="muted small">People who signed in to Field Report with a Google account that has no access yet. Choose who they are in the Manpower Directory: Approve sets this email as their sign-in, and their position and projects there give the role and projects. Someone not in the Directory is added there first (Manpower, Employee data). Either way they get an email with the result.</p>
     ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>
       ${wait.length > 1 ? html`<div class="actions left"><button class="btn small ghost" type="button" data-act="fuRejectAll" ${busy ? 'disabled' : ''}>Reject all ${wait.length}</button></div>` : ''}` : html`<p class="muted">No request is waiting.</p>`}
     ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span></li>`)}</ul></details>` : ''}`;
@@ -206,14 +215,19 @@ export const deviceRow = d => html`<li class="fu-dev">
 const rowOf = p => {
   const e = edits[p.email] || {};
   const dir = personByEmail(store.company?.staff, p.email)?.title;   // v0.45.1: the directory's position wins
-  return { full: e.full ?? (p.full || p.uName || ''), pos: dir || e.pos || p.pos || p.uPos || '', inDir: !!dir, role: e.role ?? p.role, projects: e.projects ?? p.projects ?? [], act: e.act || '' };
+  const who = personByEmail(store.company?.staff, p.email);   // v1.11.0: the Directory's name too, and role/projects as Field Report holds them
+  return { full: who?.name || e.full || p.full || p.uName || '', pos: dir || e.pos || p.pos || p.uPos || '', inDir: !!who, role: p.role, projects: p.projects ?? [], act: e.act || '' };
 };
 const changed = p => {
   const r = rowOf(p);
   return !p.ok || r.full !== (p.full || '') || r.pos !== (p.pos || '') || r.role !== p.role || r.projects.join() !== (p.projects || []).join() || !!r.act;
 };
 
-function accessCell(p, r, catalog) {
+function accessCell(p, r) {   // v1.11.0: shown only; the Manpower Directory's assignments set it
+  if (!ONE_PER_PROJECT.includes(r.role) && r.role !== 'viewer') return html`<span class="muted">Every project</span>`;
+  return r.projects.length ? r.projects.join(', ') : html`<span class="bad">None</span>`;
+}
+function accessCellOld(p, r, catalog) {
   if (!ONE_PER_PROJECT.includes(r.role)) return html`<span class="muted">Every project</span>`;
   const codes = catalog.map(x => x.code), all = codes.length && codes.every(k => r.projects.includes(k));
   return html`<details class="fu-access" ${openAccess === p.email ? 'open' : ''}>
@@ -228,14 +242,14 @@ function personRow(p, catalog, devs = []) {
   const typed = [p.uName, p.uPos].filter(Boolean).join(', ');
   const acts = ACTIONS.filter(([k]) => (k !== 'approve' && k !== 'deny') || waits > 0).filter(([k]) => !(k === 'activate' && p.st === 'active') && !(k === 'suspend' && p.st === 'suspended') && !(k === 'block' && p.st === 'blocked'));
   return html`<tr class="${p.st !== 'active' ? 'muted-row' : ''}">
-    <td><input data-chg="fuEdit" data-e="${p.email}" data-f="full" value="${r.full}" aria-label="Name of ${p.email}" placeholder="Full name" class="fu-name">
+    <td>${r.inDir ? html`<b>${r.full}</b>` : html`<input data-chg="fuEdit" data-e="${p.email}" data-f="full" value="${r.full}" aria-label="Name of ${p.email}" placeholder="Full name" class="fu-name">`}
       ${typed && !p.ok ? html`<br><span class="muted small">Typed in the app: ${typed}</span>` : ''}</td>
     <td class="small">${p.email}${devs.map(d => html`<div class="fu-newphone"><span class="chip warn">New phone</span> <span class="muted">${d.ua || 'Unknown device'} · ${when(d.first)}</span>
       <span class="actions"><button class="btn small primary" type="button" data-act="fuDecide" data-e="${d.email}" data-dev="${d.dev}" data-v="approve">Approve</button>
       <button class="btn small ghost" type="button" data-act="fuDecide" data-e="${d.email}" data-dev="${d.dev}" data-v="deny">Reject</button></span></div>`)}</td>
     <td>${r.pos || html`<span class="muted">No position</span>`}${r.inDir ? '' : html`<br><span class="chip warn small" title="Add this email to the person in the Manpower Directory (Employee data)">Not in the directory</span>`}</td>
-    <td>${accessCell(p, r, catalog)}</td>
-    <td><select data-chg="fuEdit" data-e="${p.email}" data-f="role" aria-label="Field Report role of ${p.email}">${options(ROLE_WORDS, r.role)}</select></td>
+    <td>${accessCell(p, r)}</td>
+    <td>${FR_ROLE_WORD[r.role] || r.role}</td>
     <td><span class="chip ${stTone}">${stWord}</span><br>${p.ok ? html`<span class="ok small" title="${p.okBy ? `By ${p.okBy}` : ''}${p.okAt ? `, ${when(p.okAt)}` : ''}">✓ Confirmed</span>` : html`<span class="warn small">Not confirmed</span>`}</td>
     <td><select data-chg="fuEdit" data-e="${p.email}" data-f="act" aria-label="Action for ${p.email}">${options(acts, r.act)}</select></td>
     <td><button class="btn small ${changed(p) ? 'primary' : 'ghost'}" type="button" data-act="fuSave" data-e="${p.email}" ${busy || !changed(p) ? 'disabled' : ''}>${p.ok && !changed(p) ? 'Saved' : p.ok ? 'Save' : 'Confirm'}</button></td>
@@ -286,6 +300,37 @@ async function compareLoad() {
   cmpBusy = false; store.notify();
 }
 
+/* v1.11.0 (owner, 7 Nov): One source. Field Report people outside the Manpower Directory are brought in once (the Admin
+   reviews the list), then the server keeps Field Report and Central Hub in step with the Directory every 2 minutes. */
+const KIND_WORDS = { add: ['New in the Directory', 'info'], link: ['Linked to', 'ok'], projects: ['Projects added', 'warn'] };
+let osState = null, osBusy = false;
+async function osLoad() {
+  if (osBusy || !store.getDoc) return;
+  osBusy = true;
+  try { const [flag, st] = await Promise.all([store.getDoc('global/oneSource').catch(() => null), store.getDoc('system/oneSource').catch(() => null)]); osState = { flag: flag || {}, st: st || null }; }
+  catch { osState = { flag: {}, st: null }; }
+  osBusy = false; store.notify();
+}
+function oneSourceCard(people) {
+  if (store.role !== 'owner' || !feed) return '';
+  if (!osState && !osBusy) osLoad();
+  const on = !!osState?.flag?.on, st = osState?.st, plan = importPlan({ people, staff: store.company?.staff || [], projects: store.projects });
+  const pname = id => store.projects.find(p => p.id === id)?.name || id;
+  const list = plan.length ? html`<div class="table-wrap"><table class="table compact"><thead><tr><th>Who</th><th>Email</th><th>Position</th><th>What happens</th><th>Projects added</th></tr></thead><tbody>
+    ${plan.map(x => html`<tr><td>${x.name}</td><td class="small">${x.email}</td><td>${x.title || html`<span class="muted">none</span>`}</td><td>${chip(...KIND_WORDS[x.kind])} <span class="muted small">${x.why}</span></td><td>${x.pids.map(pname).join(', ') || '–'}</td></tr>`)}
+  </tbody></table></div>` : '';
+  if (!on) return html`<section class="card set-box"><h3>One source <span class="muted">the Manpower Directory decides who uses Field Report</span></h3>
+    <p class="muted">${plan.length ? `${plan.length} Field Report ${plan.length === 1 ? 'person needs' : 'people need'} a place in the Manpower Directory first. Check the list, then press the button: they are added or linked, and from then on Field Report and Central Hub follow the Directory (sign-in email, position, projects). The Admin and the GM are kept as they are.` : 'Everyone on Field Report is in the Manpower Directory. Switch on to make the Directory the only source.'}</p>
+    ${list}<div class="actions left"><button class="btn primary" type="button" data-act="fuOneSource" ${busy ? 'disabled' : ''}>${plan.length ? `Add ${plan.length} to the Directory and switch on` : 'Switch on'}</button></div></section>`;
+  const strays = st?.strays || [], errs = st?.errors || [];
+  return html`<section class="card set-box"><h3>One source <span class="chip ok">On</span></h3>
+    <p class="muted small">Field Report and Central Hub follow the Manpower Directory${st ? `. Last check ${when(st.at)}: ${st.set} set, ${st.removed} removed, ${st.users} Central Hub ${st.users === 1 ? 'record' : 'records'} given projects` : ': the first check runs within 2 minutes'}.</p>
+    ${errs.length ? html`<div class="callout warn small"><b>Not applied</b><ul>${errs.map(e => html`<li>${e.name || e.email}: ${e.text}</li>`)}</ul></div>` : ''}
+    ${strays.length || plan.length ? html`<div class="callout warn small"><b>Not from the Directory</b>: ${[...new Set([...strays.map(x => x.email), ...plan.map(x => x.email)])].join(', ')}. Bring them in, or remove the sign-in email in Field Report's own list.</div>${list}
+      ${plan.length ? html`<div class="actions left"><button class="btn" type="button" data-act="fuOneSource" ${busy ? 'disabled' : ''}>Add ${plan.length} to the Directory</button></div>` : ''}` : html`<p class="ok small">✓ Everyone on Field Report comes from the Directory.</p>`}
+  </section>`;
+}
+
 export function body() {
   if (!feed && !busy) load();
   const people = feed?.people || [], catalog = feed?.catalog || [], waits = waiting();
@@ -293,6 +338,7 @@ export function body() {
   const fresh = waits.filter(d => !people.some(p => p.email === d.email));
   return html`
     ${routeCard()}
+    ${oneSourceCard(people)}
     <section class="card set-box">
       <h3>Field Report users <span class="muted">who may sign in to Field Report</span></h3>
       <p class="muted">Each person's name and position as they typed them in the Field Report app. Check them, correct them and press Confirm: from then on Field Report puts this name and position on every report the person sends, and the person can no longer change them. Suspend stops someone signing in for now (you get an alert if they try); Block stops them for good, without alerts; Remove takes away their access.</p>
@@ -305,15 +351,8 @@ export function body() {
       ${people.length ? html`<div class="table-wrap"><table class="table compact fu-table">
         <thead><tr><th>Name</th><th>Email</th><th>Position</th><th>Access</th><th>Role</th><th>Status</th><th>Action</th><th></th></tr></thead>
         <tbody>${people.map(p => personRow(p, catalog, waits.filter(d => d.email === p.email)))}</tbody>
-      </table></div>` : feed ? html`<p class="empty">Nobody may sign in to Field Report yet. Add a person below.</p>` : ''}
-      <h4>Add a person</h4>
-      <form data-form="fuAdd" class="entry">
-        <input type="email" name="email" placeholder="name@gmail.com" required aria-label="Google email" class="wide">
-        <select name="role" aria-label="Field Report role">${options(ROLE_WORDS, 'engineer')}</select>
-        <select name="proj" aria-label="Project">${options([['', 'Project…'], ...catalog.map(x => [x.code, `${x.code} ${x.label || ''}`])], '')}</select>
-        <button class="btn">Add</button>
-      </form>
-      <p class="muted small">A Site engineer or Project engineer needs at least one project; the Admin and Executives see every project. Field Report allows one Site engineer and one Project engineer per project.</p>
+      </table></div>` : feed ? html`<p class="empty">Nobody may sign in to Field Report yet.</p>` : ''}
+      <p class="muted small">Nobody is added here (owner, 7 Nov). A person gets Field Report from the Manpower Directory: their sign-in email, position (Site Engineer, Project Engineer, Technician; anyone else is a Viewer) and projects. The Admin and the GM are kept as they are.</p>
     </section>`;
 }
 
@@ -322,7 +361,25 @@ const person = email => (feed?.people || []).find(p => p.email === email);
 
 export const actions = {
   fuLoad() { return load(true); },
-  fuCompare() { return compareLoad(); },   // v0.44.3: a click (it was wrongly among the changes)
+  fuCompare() { return compareLoad(); },
+  /** v1.11.0: the approved list into the Manpower Directory (team members too), then One source switched on. */
+  async fuOneSource() {
+    const plan = importPlan({ people: feed?.people || [], staff: store.company?.staff || [], projects: store.projects });
+    if (busy || !confirm(`${plan.length ? `Add or link ${plan.length} ${plan.length === 1 ? 'person' : 'people'} in the Manpower Directory, then ` : ''}make the Directory the only source of Field Report access?
+
+From then on, a person's sign-in email, position and projects in the Directory decide what they get in Field Report; nobody is added on this page.`)) return;
+    busy = true; store.notify();
+    try {
+      const today = new Date().toISOString().slice(0, 10), by = store.profile?.name || store.user?.email || 'Admin';
+      let touched = [];
+      if (plan.length) store.updateCompany(co => { const out = applyImport(co.staff || [], plan, { newId: () => uid('st'), today, by }); co.staff.splice(0, co.staff.length, ...out.staff); touched = out.touched; });
+      for (const t of touched) for (const pid of t.pids) { const a = (t.person.assignments || []).find(x => x.projectId === pid); if (a) await store.updateOther(pid, ws => assign(ws, t.person, a)); }
+      if (!isDemo()) await store.setDoc('global/oneSource', { on: true, at: new Date().toISOString(), by });
+      osState = { flag: { on: true }, st: osState?.st || null };
+      say(true, `${plan.length ? `${plan.length} ${plan.length === 1 ? 'person' : 'people'} added or linked in the Manpower Directory. ` : ''}One source is on: Field Report follows the Directory from the next check (2 minutes).`);
+    } catch (err) { say(false, err.message); }
+    finally { busy = false; store.notify(); }
+  },   // v0.44.3: a click (it was wrongly among the changes)
   /** v0.27.0: reject every waiting sign-up request at once; each person gets the email. */
   async fuRejectAll() {
     const wait = signupsWaiting();
@@ -344,20 +401,23 @@ Each person gets an email saying it was not approved, and cannot ask again from 
   async fuSignup(el) {
     const r = (feed?.signups || []).find(x => x.email === el.dataset.e);
     if (!r || busy) return;
-    const row = el.closest('.su-row'), role = row?.querySelector('[data-su=role]')?.value || 'engineer', proj = row?.querySelector('[data-su=proj]')?.value || '';
-    const yes = el.dataset.v === 'approve';
-    if (yes && ONE_PER_PROJECT.includes(role) && !proj) return say(false, `Choose the project ${r.name || r.email} reports on.`);
+    const row = el.closest('.su-row'), pid = row?.querySelector('[data-su=person]')?.value || '';
+    const yes = el.dataset.v === 'approve', who = (store.company?.staff || []).find(p => p.id === pid);
+    if (yes && !who) return say(false, `Choose who ${r.name || r.email} is in the Manpower Directory. Add them there first if they are not in it.`);
+    const { role, projects } = who ? accessFromDirectory(who) : { role: 'viewer', projects: [] };
+    if (yes && NEEDS_PROJECT.includes(role) && !projects.length) return say(false, `Put ${who.name} on a project in the Manpower Directory first (Employee data, Projects).`);
     if (!yes && !confirm(`Reject the request of ${r.name || r.email}?\n\nThey get an email saying it was not approved, and cannot ask again from that account.`)) return;
     busy = true; store.notify();
     try {
       if (yes) {
-        await apply('accessSet', { email: r.email, role, projects: proj ? [proj] : [] });
-        if (r.name) await apply('userSet', { email: r.email, full: r.name, ok: true });
+        if (!isDemo()) store.updateCompany(co => { const x = co.staff.find(y => y.id === who.id); if (x) x.accountEmail = r.email; });   // v1.11.0: the sign-in email on the Directory person
+        await apply('accessSet', { email: r.email, role, projects: NEEDS_PROJECT.includes(role) ? projects : [] });
+        await apply('userSet', { email: r.email, full: who.name, pos: who.title || '', ok: true });
       }
       const out = await apply('signupDecide', { email: r.email, decision: yes ? 'approve' : 'reject', by: store.profile.name || store.user?.name || 'Admin' });
       const mail = out?.demo ? ' (demo: no email is sent)' : out?.mailed ? ` An email went to ${r.email}.` : ` The email could not be sent (${out?.mailError || 'unknown reason'}): tell them yourself.`;
-      say(true, `${yes ? 'Approved' : 'Rejected'}: ${r.name || r.email}.${mail}`);
-      if (yes && isDemo()) feed.people.push({ email: r.email, id: r.email.split('@')[0].toUpperCase().slice(0, 6), role, projects: proj ? [proj] : [], st: 'active', full: r.name || '', pos: '', uName: r.name || '', uPos: '', ok: true });
+      say(true, `${yes ? `Approved: ${who.name}, ${FR_ROLE_WORD[role]}${projects.length ? ` on ${projects.join(', ')}` : ''}` : `Rejected: ${r.name || r.email}`}.${mail}`);
+      if (yes && isDemo()) feed.people.push({ email: r.email, id: r.email.split('@')[0].toUpperCase().slice(0, 6), role, projects, st: 'active', full: who.name, pos: who.title || '', uName: r.name || '', uPos: '', ok: true });
     } catch (err) { say(false, err.message); }
     finally { busy = false; store.notify(); }
   },
@@ -371,12 +431,9 @@ Each person gets an email saying it was not approved, and cannot ask again from 
     if (!p || busy) return;
     const r = rowOf(p), email = p.email;
     if (!r.full.trim()) return say(false, `Write the name of ${email} first.`);
-    if (ONE_PER_PROJECT.includes(r.role) && !r.projects.length && r.act !== 'remove') return say(false, `Choose at least one project for ${email}.`);
-    if (r.act === 'remove' && !confirm(`Remove ${email} from Field Report?\n\nThey are signed out at once and can no longer sign in. Their reports stay.`)) return;
+
     busy = true; store.notify();
     try {
-      if (r.act === 'remove') { await apply('accessRemove', { email }); delete edits[email]; return say(true, `${email} was removed from Field Report.`); }
-      if (r.role !== p.role || r.projects.join() !== (p.projects || []).join()) await apply('accessSet', { email, id: p.id, role: r.role, projects: ONE_PER_PROJECT.includes(r.role) ? r.projects : [] });
       const st = { activate: 'active', suspend: 'suspended', block: 'blocked' }[r.act];
       await apply('userSet', { email, full: r.full.trim(), pos: r.pos, ok: true, ...(st ? { st } : {}) });
       if (r.act === 'approve' || r.act === 'deny') {
@@ -407,7 +464,8 @@ export const changes = {
 };
 
 export const submits = {
-  async fuAdd(fd) {
+  // v1.11.0 (owner): nobody is added by hand; the old form handler is kept unused for older open pages
+  async fuAddOld(fd) {
     const email = String(fd.get('email') || '').trim().toLowerCase(), role = String(fd.get('role') || 'engineer'), proj = String(fd.get('proj') || '');
     if (ONE_PER_PROJECT.includes(role) && !proj) { say(false, 'Choose the project this person reports on.'); return false; }
     try {

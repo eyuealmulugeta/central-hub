@@ -164,5 +164,11 @@ export function poLeft(po, list) {
 }
 
 /** The POs with something still to come, late ones (past the delivery date) first. */
+/** 2.67.0: approved or paid cash material expenses of the project not yet received in the store (Central Hub's "Cash, no receipt"). */
+export const cashReqs = (reqs, list) => {
+  const got = new Set((list || []).filter(m => m && m.kind === 'receive' && m.reqId && ['approved', 'waiting'].includes(m.status)).map(m => m.reqId));
+  return (reqs || []).filter(r => r && r.id && r.kind === 'expense' && (r.category || '') === 'material' && ['approved', 'paid'].includes(r.status) && !got.has(r.id))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+};
 export const openPOs = (pos, list, today) => (pos || []).filter(p => p && p.id && p.status !== 'closed').map(p => poLeft(p, list)).filter(p => p.open)
   .map(p => ({ ...p, late: !!p.due && !!today && p.due < today })).sort((a, b) => (b.late ? 1 : 0) - (a.late ? 1 : 0) || String(a.due || '9').localeCompare(String(b.due || '9')));

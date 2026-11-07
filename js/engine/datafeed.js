@@ -13,6 +13,7 @@ export const WHO = {
   se: { label: 'Site Engineer', re: /site engineer|site supervisor|foreman/i },
   pm: { label: 'Project Manager / Coordinator', re: /project manager|coordinator|project engineer/i },
   acc: { label: 'Accountant', re: /accountant|finance/i },
+  gm: { label: 'General Manager (every item)', re: /general manager|\bgm\b/i },   // v1.3.0 (owner, 7 Nov): GM for all
 };
 /** The items, how often each is due, and who answers for it (the owner's list, 7 Nov). */
 export const ITEMS = [
@@ -91,13 +92,14 @@ export function itemState(item, fed, b, today) {
 
 /** The project's people who answer for each position: { se: [{ name, email }], pm: [...], acc: [...] }. */
 export function whoFor(team = [], users = []) {
-  const out = { se: [], pm: [], acc: [] };
+  const out = { se: [], pm: [], acc: [], gm: [] };
   for (const m of team) {
     if (m?.active === false) continue;
     const email = String(m.contact || m.email || '').includes('@') ? String(m.contact || m.email).toLowerCase() : '';
     for (const k of ['se', 'pm']) if (WHO[k].re.test(m.role || '')) out[k].push({ name: m.name || '', email });
   }
   for (const u of users) if ((u.ranks || []).includes('accountant') && u.email) out.acc.push({ name: u.name || u.email, email: String(u.email).toLowerCase() });
+  for (const u of users) if ((u.ranks || []).includes('general_manager') && u.email) out.gm.push({ name: u.name || u.email, email: String(u.email).toLowerCase(), all: true });
   return out;
 }
 
@@ -117,7 +119,7 @@ export function projectRow(b, users, today) {
   const fed = feedDates(b), who = whoFor(b.team, users);
   const items = ITEMS.map(it => {
     const s = paused ? { key: it.key, status: 'paused', last: (fed[it.key] || []).filter(d => d <= today).pop() || '', late: 0, due: '', note: '' } : itemState(it, fed, b, today);
-    return { ...s, who: who[it.who] };
+    return { ...s, who: [...who[it.who], ...who.gm.filter(g => !who[it.who].some(w => w.email === g.email))] };   // v1.3.0: the GM answers for every item
   });
   const t = toDay(today), mon = sundayOn(t) + 1 - (dow(t) === 0 ? 7 : 0);
   const trend = [4, 3, 2, 1].map(w => ({ week: fromDay(mon - 7 * w), score: paused ? null : weekScore(fed, b, fromDay(mon - 7 * w), today) }));
@@ -140,7 +142,7 @@ export function personScores(sum) {
   for (const p of sum?.projects || []) for (const i of p.items) {
     if (!(i.status in POINTS)) continue;
     for (const w of i.who || []) {
-      const k = w.email || w.name; if (!k) continue;
+      const k = w.email || w.name; if (!k || w.all) continue;   // the GM is copied on every item, not scored on them
       const e = m.get(k) || { email: w.email, name: w.name, pts: 0, items: 0, red: 0 };
       e.pts += POINTS[i.status]; e.items++; if (i.status === 'red') e.red++;
       m.set(k, e);

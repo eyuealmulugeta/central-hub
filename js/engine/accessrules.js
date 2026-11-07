@@ -25,6 +25,7 @@ export const FEATURES = [
   ['fr_penalty', 'fr', 11, 'Penalties', 'Sees the penalties tab; Does gives a penalty (deciding stays with the approvers)'],
   ['fr_quick', 'fr', 11, 'Quick tab', 'The + tab: quick notes, photos and requests'],
   ['fr_media', 'fr', 11, 'FR Dashboard', 'Photos and videos of all projects (GM)'],
+  ['fr_store', 'fr', 11, 'Store', 'Sees the site store; Does records receive, issue, return, transfer and the count (the PM approves)'],   // v1.3.0 (FR R5)
   ['ch_projects', 'ch', 12, 'Projects', 'Create and set up projects; others see the ones they are on', ['dashboard']],
   ['ch_delete', 'ch', 13, 'Delete', 'Anything deleted goes to the recycle bin', null, true],
   ['ch_reports', 'ch', 14, 'Daily reports in CH', 'Read, approve, send back, comment', ['reports']],
@@ -78,7 +79,7 @@ START.draft_person ||= START.architect;
 for (const k of OFFICE) START[k] ||= { ch_schedule: 'S', ...(k === '_office' ? {} : { ch_eval: 'D' }), ...ALL_TALK };
 // v1.0.0 (G6): FR showed these pages to every FR account before; they start as seen, so nobody loses a page when FR follows
 // the rules. Doing (D) stays as the owner set it. Positions with an FR account only; the office has none.
-const FR_SEEN = ['fr_report', 'fr_crewphoto', 'fr_crew', 'fr_photos', 'fr_spot', 'fr_incidents', 'fr_hours', 'fr_review', 'fr_penalty', 'fr_media'];
+const FR_SEEN = ['fr_report', 'fr_crewphoto', 'fr_crew', 'fr_photos', 'fr_spot', 'fr_incidents', 'fr_hours', 'fr_review', 'fr_penalty', 'fr_media', 'fr_store'];
 const FR_DOES = { fr_quick: 'D', fr_penalty: { site_engineer: 'D', project_manager: 'D' } };
 export const FR_USERS = ['project_manager', 'coordinator', 'chief_engineer', 'hse_officer', 'site_engineer', 'foreman', '_site'];
 for (const k of FR_USERS) {
@@ -86,6 +87,7 @@ for (const k of FR_USERS) {
   for (const f of FR_SEEN) m[f] = m[f] || 'S';
   m.fr_quick = m.fr_quick || 'D';
   if (FR_DOES.fr_penalty[k]) m.fr_penalty = 'SD';
+  if (['site_engineer', 'project_manager', 'coordinator', 'foreman', '_site'].includes(k)) m.fr_store = 'SD';   // v1.3.0
 }
 export const startOf = (pos, feat) => (START[pos] || {})[feat] || '';
 

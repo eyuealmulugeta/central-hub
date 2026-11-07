@@ -44,6 +44,8 @@ service cloud.firestore {
     // Phase E1: a Field Report phone signed in to Firebase. fieldAccess/<email> is the server's copy of the Field
     // Report access list (functions/access-mirror.js); it reads its projects and their reports, nothing else.
     function fieldDoc() { return /databases/$(database)/documents/fieldAccess/$(me()); }
+    // v1.3.0 (FR R5): the store keeper the PM named for a project ('' when none)
+    function storeKeeper(pid) { let k = /databases/$(database)/documents/projects/$(pid)/storeMoves/keeper; return exists(k) ? get(k).data.get('keeper', '') : ''; }
     function fieldOn(pid) {
       return signedIn() && exists(fieldDoc()) && get(fieldDoc()).data.st == 'active' && pid in get(fieldDoc()).data.pids && projectOpen(pid);
     }
@@ -463,7 +465,7 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
-          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties'] && fieldOn(pid))
+          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties', 'storeMoves'] && fieldOn(pid))
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
@@ -472,7 +474,13 @@ service cloud.firestore {
           || (section == 'penalties' && fieldOn(pid) && get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec']
             && request.resource.data.status == 'waiting' && request.resource.data.by == me() && request.resource.data.get('site', false) == true
             && request.resource.data.amount is number && request.resource.data.amount > 0)
-          || (section != 'penalties' && officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
+          // v1.3.0 (owner, FR R5): a store movement is recorded on a phone, waiting for the PM, in its recorder's own name, by the
+          // SE, PE/PM, GM or Admin, or by the store keeper the PM named (projects/<pid>/storeMoves/keeper); the keeper by the PM, PE, GM
+          || (section == 'storeMoves' && record != 'keeper' && fieldOn(pid) && request.resource.data.status == 'waiting' && request.resource.data.by == me()
+            && request.resource.data.get('site', false) == true
+            && (get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec'] || storeKeeper(pid) == me()))
+          || (section == 'storeMoves' && record == 'keeper' && fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'admin', 'exec'])
+          || (!(section in ['penalties', 'storeMoves']) && officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
             // v0.55.0: an office version of a Field Report report is written by approvers only
             && (!(section in ['fieldReports', 'fieldVersions']) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
@@ -499,7 +507,16 @@ service cloud.firestore {
               || (request.resource.data.status == 'cancelled' && resource.data.by == me() && fieldOn(pid))))
           // Central Hub gives every record its order (_o) on the first save
           || (section == 'penalties' && (seesAll() || officeOn(pid)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_o']))
-          || (section != 'penalties' && officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
+          // v1.3.0 (FR R5): a waiting store movement is approved or rejected by the PM (coordinator), the GM or the Admin on a phone, never by
+          // its recorder; the recorder may cancel it while it waits; the keeper record is changed by the PM, PE or GM; Central Hub adds _o
+          || (section == 'storeMoves' && record != 'keeper' && resource.data.status == 'waiting'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedBy', 'decidedByName', 'decidedAt', 'log', '_o'])
+            && ((request.resource.data.status in ['approved', 'rejected'] && resource.data.by != me()
+                && ((fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'exec', 'admin']) || (officeOn(pid) && canApprove())))
+              || (request.resource.data.status == 'cancelled' && resource.data.by == me() && fieldOn(pid))))
+          || (section == 'storeMoves' && record == 'keeper' && fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'admin', 'exec'])
+          || (section == 'storeMoves' && (seesAll() || officeOn(pid)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_o']))
+          || (!(section in ['penalties', 'storeMoves']) && officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
             // v0.55.0: a kept version is never changed; the newest is changed by approvers only
             && section != 'fieldVersions' && (section != 'fieldReports' || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])

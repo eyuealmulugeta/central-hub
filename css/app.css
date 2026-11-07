@@ -1948,3 +1948,7 @@ body.viewing { overflow: hidden; }
 .df-w.ok { background: color-mix(in srgb, #2e9d57 18%, transparent); }
 .df-w.warn { background: color-mix(in srgb, #e0a100 22%, transparent); }
 .df-w.bad { background: color-mix(in srgb, #d23c3c 20%, transparent); }
+
+/* v1.3.0 (FR R5): Site store */
+.ss-img { max-height: 48px; max-width: 90px; border: 1px solid var(--line, #ddd); border-radius: 4px; background: #fff; margin-right: 4px; vertical-align: middle; }
+.ss-img:hover { max-height: 260px; max-width: 360px; }

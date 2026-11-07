@@ -117,10 +117,8 @@ function wall(sum, c, cur) {
             <b>${p.name || 'New employee'}</b>
             <span>${p.title || 'No job position'}</span>
             <span class="muted">${[departmentOf(p), projectsOf(p)].filter(Boolean).join(' · ') || 'Head office'}</span>
-            ${(r => (r == null ? html`<span class="muted emp-stars">Not rated yet</span>` : html`<span class="emp-stars" title="${scaleLabel(r)}">${stars(r)} ${score(r)}</span>`))(ratingOf(p, evals))}
-            ${p.email ? html`<span class="muted">${p.email}</span>` : ''}
-            ${p.phone ? html`<span class="muted">${p.phone}</span>` : ''}
-            <span class="emp-tags">${p.status === 'left' ? chip('Left') : ''}${alerts.length ? chip(alerts.length === 1 ? alerts[0].text : `${alerts.length} things need attention`, alerts.some(a => a.sev === 'high') ? 'high' : 'warn') : ''}</span>
+            <span class="emp-line2">${(r => (r == null ? html`<span class="muted emp-stars">Not rated yet</span>` : html`<span class="emp-stars" title="${scaleLabel(r)}">${stars(r)} ${score(r)}</span>`))(ratingOf(p, evals))}${p.status === 'left' ? chip('Left') : ''}${alerts.length ? chip(alerts.length === 1 ? alerts[0].text : `${alerts.length} things need attention`, alerts.some(a => a.sev === 'high') ? 'high' : 'warn') : ''}</span>
+            ${p.email || p.phone ? html`<span class="muted">${[p.email, p.phone].filter(Boolean).join(' · ')}</span>` : ''}
           </span>
         </button></div>`)
       : html`<p class="empty">${c.company.staff.length ? 'Nobody matches.' : 'No employees yet. Add the first one with "New employee".'}</p>`}
@@ -434,7 +432,7 @@ function form({ p, alerts, monthly }, c) {
           <span class="emp-job">${p.title || 'No position'}</span>
           <label class="emp-line"><span>Email</span><input type="email" data-chg="set" data-f="email" data-fk="hr-email-h" value="${p.email || ''}" placeholder="Work email" aria-label="Work email"></label>
           <label class="emp-line"><span>Phone</span><input type="tel" data-chg="set" data-f="phone" data-fk="hr-phone-h" value="${p.phone || ''}" placeholder="Work phone" aria-label="Work phone"></label>
-          <span class="emp-tags">${p.status === 'left' ? chip('Left') : chip('Working', 'ok')} ${chip(agreementLabel(a.type), a.type ? 'info' : 'warn')}
+          <span class="emp-tags">${p.status === 'left' ? chip('Left') : chip('Working', 'ok')} ${(a.type ? chip(agreementLabel(a.type), 'info') : '')   /* v1.11.2 (owner): no "No agreement recorded" tag */}
             ${p.started ? html`<span class="muted">With the company since ${fmtFull(p.started)}</span>` : ''}</span>
         </div>
       </header>

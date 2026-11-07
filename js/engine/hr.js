@@ -41,9 +41,7 @@ export function staffAlerts(person, today) {
       if (days >= 0 && days <= PROBATION_WARN_DAYS) out.push({ sev: 'warn', days, text: `Probation ends in ${days} day${days === 1 ? '' : 's'}: confirm or end` });
     }
     if (!a.signedOn) out.push({ sev: 'warn', days: 0, text: 'Agreement is not signed yet' });
-  } else {
-    out.push({ sev: 'warn', days: 0, text: 'No agreement recorded' });
-  }
+  }   // v1.11.2 (owner, 8 Nov): no "No agreement recorded" tag
   return out.sort((x, y) => x.days - y.days);
 }
 

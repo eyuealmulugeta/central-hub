@@ -54,7 +54,6 @@ const shot = (label, key, capture, cls = '') => `<div class="shot ${cls}">${esc(
   `<label class="btn">Gallery<input type="file" accept="image/*" data-shot="${key}" hidden></label></div></div>`;
 
 function draw() {
-  const fayda = form.doc !== 'passport';
   const list = Array.isArray(link.trades) && link.trades.length ? link.trades : TRADES;   // v0.57.0: the directory's list, carried by the link
   const trades = [...list, ...(form.trade && !list.includes(form.trade) ? [form.trade] : [])];
   app.innerHTML = `<div class="card">
@@ -63,33 +62,37 @@ function draw() {
     <p class="muted">For ${esc(link.projectName || 'Amistad Prefab')}${link.byName ? `, from ${esc(link.byName)}` : ''}. ${link.kind !== 'one' ? 'Fill in one form per person; after sending, the form is empty for the next one.' : 'One form, for you.'}${sent ? ` <b class="ok">${sent} sent from this phone.</b>` : ''}</p>
   </div>
   <div class="card">
-    <h2>1. Your ID</h2>
-    <div class="seg"><button type="button" data-doc="fayda" class="${fayda ? 'on' : ''}">Fayda ID</button><button type="button" data-doc="passport" class="${fayda ? '' : 'on'}">Passport</button></div>
-    <p class="muted">${fayda ? 'Take a straight, well-lit picture of each side. The name, number, date of birth and the rest are read from the card.' : 'Take a picture of the page with your photo, with the two lines of letters at the bottom showing. The details are read from them.'}</p>
-    <div class="shots">${fayda ? shot('Front', 'idFront', 'environment') + shot('Back', 'idBack', 'environment') : shot('Photo page', 'passportImage', 'environment')}</div>
+    <h2>1. Your Fayda ID *</h2>
+    <p class="muted">Take a straight, well-lit picture of each side. The name, number, date of birth and the rest are read from the card.</p>
+    <div class="shots">${shot('Front *', 'idFront', 'environment') + shot('Back *', 'idBack', 'environment')}</div>
+    <h2>Passport (optional)</h2>
+    <p class="muted">Only if you have one: the page with your photo, with the two lines of letters at the bottom showing.</p>
+    <div class="shots">${shot('Photo page', 'passportImage', 'environment')}</div>
     ${said ? `<p class="note">${esc(said)}</p>` : ''}
   </div>
   <div class="card">
-    <h2>2. Your photo</h2>
+    <h2>2. Your photo *</h2>
     <div class="shots">${shot('Face, looking at the camera', 'photo', 'user', 'face')}</div>
   </div>
   <div class="card">
     <h2>3. Your details</h2>
-    <p class="muted">Check what was read and fill in the rest.</p>
+    <p class="muted">Check what was read and fill in the rest. Everything marked * is needed to finish the registration.</p>
     <div class="grid">
       ${field('Full name *', 'name', 'text', 'autocomplete="name"')}
       ${choose('Trade *', 'trade', trades.map(t => [t, t]))}
       ${field('Phone *', 'phone', 'tel', 'autocomplete="tel"')}
-      ${choose('Gender', 'gender', [['male', 'Male'], ['female', 'Female']])}
-      ${field('Date of birth', 'birthday', 'date')}
-      ${choose('Nationality', 'nationality', NATIONALITIES.map(n => [n, n]))}
-      ${fayda ? field('Fayda number (FAN)', 'idNumber', 'text', 'inputmode="numeric"') + field('FIN', 'fin', 'text', 'inputmode="numeric"') : field('Passport number', 'passportNumber') + field('Passport expiry', 'passportExpiry', 'date')}
-      ${field('Address', 'address')}
-      ${field('Highest certificate (if any)', 'certificate')}
-      ${field('Emergency contact name', 'emergency')}
-      ${field('Emergency contact phone', 'emergencyPhone', 'tel')}
+      ${choose('Gender *', 'gender', [['male', 'Male'], ['female', 'Female']])}
+      ${field('Date of birth *', 'birthday', 'date')}
+      ${choose('Nationality *', 'nationality', NATIONALITIES.map(n => [n, n]))}
+      ${field('Fayda number (FAN) *', 'idNumber', 'text', 'inputmode="numeric"') + field('FIN *', 'fin', 'text', 'inputmode="numeric"')}
+      ${field('Passport number (optional)', 'passportNumber') + field('Passport expiry (optional)', 'passportExpiry', 'date')}
+      ${field('Address *', 'address')}
+      ${field('Highest certificate * (write None if none)', 'certificate')}
+      ${field('Emergency contact name *', 'emergency')}
+      ${field('Emergency contact phone *', 'emergencyPhone', 'tel')}
     </div>
     <label class="check"><input type="checkbox" id="agree" ${form.agree ? 'checked' : ''}><span>I agree that Amistad Prefab keeps these details and pictures for my employment records.</span></label>
+    ${said && /^(Write|Take|Choose|Check|The )/.test(said) ? `<p class="bad">${esc(said)}</p>` : ''}
     <div class="row"><button type="button" class="primary" id="send" ${busy ? 'disabled' : ''}>${busy ? 'Working…' : 'Send to the office'}</button></div>
   </div>`;
 }
@@ -121,7 +124,7 @@ app.addEventListener('click', async e => {
   if (e.target.id === 'again') { form = blank(); said = ''; return draw(); }
   if (e.target.id !== 'send' || busy) return;
   const missing = formMissing(form) || (form.agree ? '' : 'Tick that you agree, then send.');
-  if (missing) { said = missing; draw(); scrollTo({ top: 0, behavior: 'smooth' }); return; }
+  if (missing) { said = missing; draw(); document.getElementById('send')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
   busy = true; draw();
   try {
     await data.send(formRecord(form, { id: formIdOf(link), link: link.id }));

@@ -113,13 +113,26 @@ export function fillForm(form, facts) {
   return { patch, filled };
 }
 
-/** What is still missing before a form can be sent ('' when it can). */
+/**
+ * What is still missing before a form can be sent ('' when it can).
+ * v1.3.1 (owner, 7 Nov): every step is needed to finish the registration, except the passport (optional): both sides
+ * of the Fayda ID, the photo, and every detail (the certificate may be "None").
+ */
+export const REQUIRED = [
+  ['idFront', 'Take a picture of the front of your Fayda ID.'], ['idBack', 'Take a picture of the back of your Fayda ID.'],
+  ['photo', 'Take your photo.'], ['name', 'Write your full name.'], ['trade', 'Choose your trade.'], ['phone', 'Write your phone number.'],
+  ['gender', 'Choose your gender.'], ['birthday', 'Write your date of birth.'], ['nationality', 'Choose your nationality.'],
+  ['idNumber', 'Write your Fayda number (FAN).'], ['fin', 'Write your FIN.'], ['address', 'Write your address.'],
+  ['certificate', 'Write your highest certificate (or None).'], ['emergency', 'Write the emergency contact name.'], ['emergencyPhone', 'Write the emergency contact phone.'],
+];
+const nDigits = v => String(v || '').replace(/\D/g, '').length;
 export function formMissing(f) {
-  if (!String(f.name || '').trim()) return 'Write your full name.';
-  if (!String(f.phone || '').trim()) return 'Write your phone number.';
-  if (!f.trade) return 'Choose your trade.';
-  if (!f.photo) return 'Take your photo.';
-  if (f.doc === 'passport' ? !f.passportImage : !f.idFront) return f.doc === 'passport' ? 'Take a picture of your passport.' : 'Take a picture of the front of your Fayda ID.';
+  for (const [k, msg] of REQUIRED) if (!String(f[k] || '').trim()) return msg;
+  if (nDigits(f.idNumber) !== 16) return 'The Fayda number (FAN) has 16 digits.';
+  if (nDigits(f.fin) !== 12) return 'The FIN has 12 digits.';
+  if (nDigits(f.phone) < 9) return 'Check the phone number.';
+  if (nDigits(f.emergencyPhone) < 9) return 'Check the emergency contact phone.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.birthday)) || f.birthday > new Date(Date.now() - 16 * 365.25 * 864e5).toISOString().slice(0, 10)) return 'Check the date of birth.';
   return '';
 }
 

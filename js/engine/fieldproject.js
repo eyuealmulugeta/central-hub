@@ -35,8 +35,8 @@ export function fieldProjectOf(project, { regions = [], existing = null } = {}) 
     address: cleanText(project.client?.address, 160),
     subs: cleanActivities(activitiesOf(project)).map(s => s.slice(0, 40)).slice(0, SUBS_MAX),
     siteName: cleanText(project.location, 80),
-    siteLa: existing?.siteLa ?? null,
-    siteLo: existing?.siteLo ?? null,
+    siteLa: project.site?.lat ?? existing?.siteLa ?? null,   // v1.6.0 (R8): set on Reports > Weather
+    siteLo: project.site?.lng ?? existing?.siteLo ?? null,
     defStart: existing?.defStart || '08:00',
     defEnd: existing?.defEnd || '17:00',
     nwDow,
@@ -55,8 +55,8 @@ export function problemsOf(payload) {
   return out;
 }
 
-const FIELDS = ['cc', 'pn', 'name', 'job', 'client', 'address', 'subs', 'siteName', 'nwDow', 'nonWorking', 'hold'];
-const LABEL = { cc: 'country', pn: 'short name', name: 'name', job: 'job number', client: 'client', address: 'address', subs: 'activities', siteName: 'site', nwDow: 'weekly days off', nonWorking: 'non-working dates', hold: 'hold' };
+const FIELDS = ['cc', 'pn', 'name', 'job', 'client', 'address', 'subs', 'siteName', 'siteLa', 'siteLo', 'nwDow', 'nonWorking', 'hold'];   // v1.6.0: siteLa, siteLo
+const LABEL = { cc: 'country', pn: 'short name', name: 'name', job: 'job number', client: 'client', address: 'address', subs: 'activities', siteName: 'site', siteLa: 'site latitude', siteLo: 'site longitude', nwDow: 'weekly days off', nonWorking: 'non-working dates', hold: 'hold' };
 const same = (a, b) => JSON.stringify(Array.isArray(a) ? [...a].map(x => String(x).toLowerCase()).sort() : a ?? '') === JSON.stringify(Array.isArray(b) ? [...b].map(x => String(x).toLowerCase()).sort() : b ?? '');
 
 /** The differences between what Field Report holds and what it should hold: [{ field, label, from, to }]. Empty when they match. */

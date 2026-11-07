@@ -22,8 +22,22 @@ export function newEntry({ app, email, name = '', position = '', projects = [], 
   return {
     id: id || entryId(app, now), app, email: String(email || '').toLowerCase(), name: String(name || '').slice(0, 80), position: String(position || '').slice(0, 60),
     projects: (projects || []).map(String).slice(0, 20), device: String(device || '').slice(0, 80), mode: mode === 'app' || mode === 'browser' ? mode : '',
-    start: now, last: now, end: 0, how: '',
+    start: now, last: now, end: 0, how: '', act: 0,
   };
+}
+
+/**
+ * v1.7.0 (owner, 7 Nov, G3): active minutes. Each minute the app is in front counts only when the person tapped, typed or
+ * scrolled in the last IDLE_MS; a session kept open without use does not add up. Sessions from before have no act.
+ */
+export const IDLE_MS = 5 * 60 * 1000;
+export const activeOf = (e, now) => (e.act != null ? Math.min(+e.act || 0, minutesOf(e, now)) : minutesOf(e, now));
+/** The input clock of one page: busy(now) says whether the person used it in the last IDLE_MS. */
+export function inputClock(doc, start = Date.now()) {
+  let at = start;
+  const mark = () => { at = Date.now(); };
+  if (doc && doc.addEventListener) for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'scroll']) doc.addEventListener(ev, mark, { passive: true, capture: true });
+  return { busy: now => now - at < IDLE_MS, mark };
 }
 
 /** Is this session still going (seen in the last few minutes, not signed out)? */
@@ -43,7 +57,7 @@ export function perDay(list, now) {
     const k = `${dayOf(+e.start)}|${e.email}`;
     const r = m.get(k) || { day: dayOf(+e.start), email: e.email, name: e.name || e.email, position: e.position || '', projects: new Set(), apps: new Set(), sessions: 0, minutes: 0, first: +e.start, last: 0, online: false };
     (e.projects || []).forEach(p => r.projects.add(p));
-    r.apps.add(e.app); r.sessions++; r.minutes += minutesOf(e, now);
+    r.apps.add(e.app); r.sessions++; r.minutes += minutesOf(e, now); r.active = (r.active || 0) + activeOf(e, now);
     r.first = Math.min(r.first, +e.start); r.last = Math.max(r.last, endOf(e, now) || now); r.online ||= isOnline(e, now);
     if (e.name) r.name = e.name; if (e.position) r.position = e.position;
     m.set(k, r);
@@ -67,14 +81,17 @@ export const hm = min => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 
  * and a new one starts after the app was away longer than STALE_MS. io: { create(entry), touch(id, last), close(id, end),
  * place(id) }. Returns { tick(now), hide(now), signOut(now), current() }.
  */
-export function presence(make, io) {
+export function presence(make, io, busy = null) {
   let cur = null;
   return {
     tick(now = Date.now()) {
       if (!cur || now - cur.last > STALE_MS) {
         cur = make(now);
         Promise.resolve(io.create(cur)).then(() => io.place && io.place(cur.id)).catch(() => {});
-      } else if (now - cur.last >= BEAT_MS - 5000) { cur.last = now; Promise.resolve(io.touch(cur.id, now)).catch(() => {}); }
+      } else if (now - cur.last >= BEAT_MS - 5000) {
+        if (busy && busy(now)) cur.act = (cur.act || 0) + 1;   // v1.7.0 (G3)
+        cur.last = now; Promise.resolve(io.touch(cur.id, now, cur.act)).catch(() => {});
+      }
     },
     hide(now = Date.now()) { if (cur && now - cur.last <= STALE_MS) { cur.last = now; Promise.resolve(io.touch(cur.id, now)).catch(() => {}); } },
     async signOut(now = Date.now()) { const c = cur; cur = null; if (c) await Promise.resolve(io.close(c.id, now)).catch(() => {}); },

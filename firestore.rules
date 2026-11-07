@@ -192,10 +192,10 @@ service cloud.firestore {
     match /signlog/{id} {
       allow read: if seesAll() || myTier() == 1;
       allow create: if signedIn() && request.resource.data.email == me() && request.resource.data.end == 0
-        && request.resource.data.keys().hasOnly(['id', 'app', 'email', 'name', 'position', 'projects', 'device', 'mode', 'start', 'last', 'end', 'how'])
+        && request.resource.data.keys().hasOnly(['id', 'app', 'email', 'name', 'position', 'projects', 'device', 'mode', 'start', 'last', 'end', 'how', 'act'])
         && request.resource.data.app in ['CH', 'FR'] && request.resource.data.id == id;
       allow update: if signedIn() && resource.data.email == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'end', 'how']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'end', 'how', 'act']);
       allow delete: if isOwner();
     }
 

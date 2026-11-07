@@ -26,7 +26,7 @@ import { binEntry, projectEntry, restoreEntry, binExpired, binDays } from '../en
 import { isLimited, isActive } from '../engine/deployment.js';
 import { claim, sessionPath, newDeviceId, deviceName, isEnded, HEARTBEAT_MS } from '../engine/session.js';
 import { syncCrewPhotos } from './crewphotos.js';
-import { presence, newEntry, seesSignins, BEAT_MS, KEEP_DAYS } from '../engine/signlog.js';   // v0.98.0 (G2)
+import { presence, newEntry, seesSignins, BEAT_MS, KEEP_DAYS, inputClock } from '../engine/signlog.js';   // v0.98.0 (G2)
 import { entry as actEntry, isRepeat } from '../engine/activity.js';   // v0.99.0 (G1)
 
 const K = { meta: 'sf:meta', global: 'sf:global', company: 'sf:company', ws: id => `sf:ws:${id}`, active: 'sf:active' };
@@ -116,10 +116,10 @@ function startPresence() {
   const standalone = (() => { try { return matchMedia('(display-mode: standalone)').matches; } catch { return false; } })();
   here = presence(now => newEntry({ app: 'CH', email: me.email, name: profile?.name || me.name || '', position: profile?.title || (role === 'owner' ? 'Admin' : ''), projects: role === 'owner' ? [] : assigned, device: deviceName(ua), mode: standalone ? 'app' : 'browser', now }), {
     create: e => api.set(`signlog/${e.id}`, e),
-    touch: (id, last) => api.merge(`signlog/${id}`, { last }),
+    touch: (id, last, act) => api.merge(`signlog/${id}`, act != null ? { last, act } : { last }),
     close: (id, end) => api.merge(`signlog/${id}`, { last: end, end, how: 'signout' }),
     place: id => api.call('signPlace', { id }).catch(() => {}),
-  });
+  }, inputClock(typeof document === 'undefined' ? null : document).busy);   // v1.7.0 (G3): active minutes
   const front = () => document.visibilityState === 'visible' && navigator.onLine !== false;
   const tick = () => { if (here && front()) here.tick(Date.now()); };
   const vis = () => { if (!here) return; if (document.visibilityState === 'visible') tick(); else here.hide(Date.now()); };

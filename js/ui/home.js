@@ -3,6 +3,7 @@
 // "Waiting on others". Each person sees only what their role may open; Site users never see money.
 
 import { store } from '../core/store.js';
+import { onlineNow, day as signDay } from '../engine/signlog.js';   // v0.98.0
 import { money, fmtDate, fmtFull, toDay, fromDay } from '../core/util.js';
 import { html, icon } from './dom.js';
 import { isGM, levelOf } from '../engine/expenses.js';
@@ -219,6 +220,14 @@ function peopleBox(list, rated) {
   { n: `${list.length} ${list.length === 1 ? 'person' : 'people'}`, link: ['attendance', 'Attendance'] });
 }
 
+/** v0.98.0 (owner, G2): signed in today and online now, for the Admin and the top management (Sign-in history). */
+function signStrip(c) {
+  if (!(c.can ? c.can('signins') : false)) return '';
+  const now = Date.now(), list = store.signlogs || [], today = signDay(now);
+  const n = new Set(list.filter(e => signDay(+e.start) === today).map(e => e.email)).size, on = onlineNow(list, now);
+  return html`<p class="xsign"><a href="#signins"><b>${n}</b> signed in today · <b>${on.length}</b> online now${on.length ? `: ${on.slice(0, 5).map(e => e.name || e.email).join(', ')}${on.length > 5 ? ' …' : ''}` : ''}</a></p>`;
+}
+
 function needRow(n, c) {
   const other = n.projectId !== c.project.id;
   return html`<li class="trow">
@@ -335,6 +344,7 @@ export function render(c) {
       <button type="button" class="btn small" data-act="present" title="Full screen for a meeting (Esc to leave)">${presenting() ? 'Leave full screen' : 'Present'}</button>
     </section>
     <section class="xkpis" style="--n:${kpis.length}">${kpis}</section>
+    ${signStrip(c)}
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 

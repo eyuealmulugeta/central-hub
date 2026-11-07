@@ -474,6 +474,12 @@ export async function fieldUsers() {
   }
   return { people: out.people || [], catalog: out.catalog || [], devices: out.devices || [], inbox: out.inbox || [], signups: out.signups || [], crewReqs: out.crewReqs || [] };
 }
+/** v0.98.0 (G2): Field Report's devices and its last refused sign-ins (script devices), for Sign-in history. */
+export async function fieldDevices() {
+  const out = await post({ action: 'devices' });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not give its sign-ins.');
+  return { devices: out.devices || [], refused: out.refused || [] };
+}
 /** v0.23.1: one site photo from Drive (script 7.31.0), as base64 JPEG. proj = Field Report code, report = the PDF name. */
 /** v0.55.0: a photo from the gallery into the report's Drive folder (script photoPut), for an office version. */
 export async function fieldPhotoPut(proj, report, id, data) {

@@ -26,6 +26,7 @@ import { binEntry, projectEntry, restoreEntry, binExpired, binDays } from '../en
 import { isLimited, isActive } from '../engine/deployment.js';
 import { claim, sessionPath, newDeviceId, deviceName, isEnded, HEARTBEAT_MS } from '../engine/session.js';
 import { syncCrewPhotos } from './crewphotos.js';
+import { presence, newEntry, seesSignins, BEAT_MS, KEEP_DAYS } from '../engine/signlog.js';   // v0.98.0 (G2)
 
 const K = { meta: 'sf:meta', global: 'sf:global', company: 'sf:company', ws: id => `sf:ws:${id}`, active: 'sf:active' };
 const COMPANY_PATH = 'company/main';
@@ -78,6 +79,8 @@ let ranks = OWNER_RANKS;   // Site Engineer, Project Manager, General Manager: d
 let session = null;      // the record this device holds in sessions/<email>: one signed-in device per person (not the Admin)
 let heartbeat = null;    // timer that keeps the session record fresh
 let sessions = [];       // every person's session record (the Owner sees these, to reset one)
+let signlogs = [];      // v0.98.0: the last 31 days of sign-ins of both apps (the Admin and Tier 1 read them)
+let here = null;        // v0.98.0: this device's presence loop (engine/signlog.js)
 let lockedBy = null;     // the record of the device that holds this person's session, when this one was refused
 const endedSubscribers = [];
 let divisions = [];       // the divisions this person works in (empty = both); set by the Admin
@@ -100,6 +103,26 @@ function deviceId() {
     if (!id) { id = newDeviceId(); localStorage.setItem('sf:device', id); }
     return id;
   } catch { return 'device-unknown'; }
+}
+/** v0.98.0 (G2): the sign-in history of this device; the server adds the approximate place. */
+function startPresence() {
+  if (!api || !me?.email || typeof document === 'undefined') return;
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  const standalone = (() => { try { return matchMedia('(display-mode: standalone)').matches; } catch { return false; } })();
+  here = presence(now => newEntry({ app: 'CH', email: me.email, name: profile?.name || me.name || '', position: profile?.title || (role === 'owner' ? 'Admin' : ''), projects: role === 'owner' ? [] : assigned, device: deviceName(ua), mode: standalone ? 'app' : 'browser', now }), {
+    create: e => api.set(`signlog/${e.id}`, e),
+    touch: (id, last) => api.merge(`signlog/${id}`, { last }),
+    close: (id, end) => api.merge(`signlog/${id}`, { last: end, end, how: 'signout' }),
+    place: id => api.call('signPlace', { id }).catch(() => {}),
+  });
+  const front = () => document.visibilityState === 'visible' && navigator.onLine !== false;
+  const tick = () => { if (here && front()) here.tick(Date.now()); };
+  const vis = () => { if (!here) return; if (document.visibilityState === 'visible') tick(); else here.hide(Date.now()); };
+  tick();
+  const t = setInterval(tick, BEAT_MS); t.unref?.();
+  document.addEventListener('visibilitychange', vis);
+  shared.push(() => { clearInterval(t); document.removeEventListener('visibilitychange', vis); });
+  if (seesSignins(role, ranks)) shared.push(api.watchCol('signlog', docs => { signlogs = docs; emit(); }, () => {}, ['start', '>=', Date.now() - 31 * 864e5]));
 }
 function stopSession() { clearInterval(heartbeat); heartbeat = null; session = null; }
 /** This device holds the session: keep it fresh, and notice when it is taken away. */
@@ -300,6 +323,9 @@ export const store = {
       if (!got.ok) { lockedBy = got.by; return 'locked'; }
       if (got.record) beginSession(got.record);
     }
+
+    // v0.98.0 (owner, G2): this session in the sign-in history, kept fresh every minute while Central Hub is in front
+    startPresence();
 
     global = await reading('global/main', api.get('global/main'));
     if (!global) {
@@ -806,6 +832,7 @@ export const store = {
   /** Let go of this device's session (so the person can sign in elsewhere), then sign out. */
   async signOut() {
     prefs.detach();
+    if (here) { const h = here; here = null; await h.signOut(Date.now()); }   // v0.98.0: the end of this session in the history
     if (session) {
       const rec = { ...session, released: true, lastSeen: Date.now() };
       stopSession();
@@ -817,6 +844,10 @@ export const store = {
   get lockedBy() { return lockedBy; },
   /** Every person's session record: the Owner only. */
   get sessions() { return sessions; },
+  get signlogs() { return signlogs; },   // v0.98.0
+  /** v0.98.0: older sign-ins (before the last 31 days), read once when asked. */
+  async signlogsSince(ms) { return api && api.query ? api.query('signlog', ['start', '>=', ms]) : signlogs; },
+  keepDays: KEEP_DAYS,
   /** Call fn('taken' | 'reset') when this device loses its session to another device or to the Admin. */
   onSessionEnded(fn) { endedSubscribers.push(fn); },
   /** Owner only: end someone's session so they can sign in on another device. */

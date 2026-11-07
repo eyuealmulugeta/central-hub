@@ -54,6 +54,8 @@ export async function connectCloud(config) {
     merge: (path, data) => F.setDoc(ref(path), data, { merge: true }),   // v0.72.0: one person's answer to an urgent notice
     remove: path => F.deleteDoc(ref(path)),
     async list(path) { return (await F.getDocs(F.collection(db, path))).docs.map(d => d.data()); },
+    /** v0.98.0: one read of the records matching where = [field, op, value]. */
+    async query(path, where) { return (await F.getDocs(F.query(F.collection(db, path), F.where(...where)))).docs.map(d => d.data()); },
 
     /** ops: [{ path, data }], data null = delete */
     async batch(ops) {

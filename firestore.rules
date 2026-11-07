@@ -185,6 +185,18 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    // v0.98.0 (owner, G2): the sign-in history of Central Hub and Field Report: each person writes their own sessions
+    // (start, then only last seen, end and how); the server adds the place; the Admin and Tier 1 read them; the Admin deletes.
+    match /signlog/{id} {
+      allow read: if seesAll() || myTier() == 1;
+      allow create: if signedIn() && request.resource.data.email == me() && request.resource.data.end == 0
+        && request.resource.data.keys().hasOnly(['id', 'app', 'email', 'name', 'position', 'projects', 'device', 'mode', 'start', 'last', 'end', 'how'])
+        && request.resource.data.app in ['CH', 'FR'] && request.resource.data.id == id;
+      allow update: if signedIn() && resource.data.email == me()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['last', 'end', 'how']);
+      allow delete: if isOwner();
+    }
+
     // Faults reported by devices (js/core/diagnostics.js): any signed-in person adds their own, small ones; the Admin reads and clears them.
     // v0.26.0: the recycle bin: what the Admin deleted, with who, when and from which page
     match /bin/{id} {

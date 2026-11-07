@@ -88,11 +88,7 @@ function wall(sum, c, cur) {
     <div class="kpi"><span class="kpi-label">${label}</span><strong class="${cls}">${value}</strong><span class="muted">${sub}</span></div>`;
 
   return html`
-    <section class="kpis">
-      ${kpi('Employees', sum.active, 'Currently working')}
-      ${kpi('Monthly pay', money(sum.payroll, cur), 'Daily and hourly pay counted as 26 days a month')}
-      ${kpi('Needs attention', sum.alerts, sum.urgent ? `${sum.urgent} already run out` : 'Papers and agreements running out', sum.urgent ? 'bad' : '')}
-    </section>
+    <!-- v1.11.4 (owner, 8 Nov): no Employees / Monthly pay / Needs attention boxes on Employee data -->
 
     ${directoryNotes(c)}
     <div class="toolbar">

@@ -15,10 +15,10 @@ import { compareReports, clean } from '../engine/compare.js';
 import { personByEmail, addedStamp, addedName } from '../engine/manpower.js';
 import { fromTeam } from '../engine/people.js';
 
-export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)']];
+export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'Executive (read only)'], ['technician', 'Technician (shares work photos)']];   // technician: v1.8.0
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
 const ACTIONS = [['', 'No change'], ['approve', 'Approve new device'], ['deny', 'Deny new device'], ['activate', 'Activate'], ['suspend', 'Suspend'], ['block', 'Block'], ['remove', 'Remove']];
-const ONE_PER_PROJECT = ['engineer', 'coordinator'];   // these need projects; admin and exec see every project
+const ONE_PER_PROJECT = ['engineer', 'coordinator', 'technician'];   // these need projects; admin and exec see every project
 
 let feed = null;        // { people, catalog, devices, inbox, at }
 let busy = false;

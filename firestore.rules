@@ -465,7 +465,7 @@ service cloud.firestore {
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
-          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties', 'storeMoves', 'poOpen'] && fieldOn(pid))
+          || (section in ['reports', 'team', 'requests', 'fieldDay', 'attendance', 'penalties', 'storeMoves', 'poOpen', 'workShots'] && fieldOn(pid))
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
@@ -480,7 +480,10 @@ service cloud.firestore {
             && request.resource.data.get('site', false) == true
             && (get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec'] || storeKeeper(pid) == me()))
           || (section == 'storeMoves' && record == 'keeper' && fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'admin', 'exec'])
-          || (!(section in ['penalties', 'storeMoves']) && officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
+          // v1.8.0 (owner, FR 2.66.0): a technician (or any field account) shares work photos, waiting, in their own name
+          || (section == 'workShots' && fieldOn(pid) && request.resource.data.status == 'waiting' && request.resource.data.by == me()
+            && request.resource.data.get('site', false) == true)
+          || (!(section in ['penalties', 'storeMoves', 'workShots']) && officeWritesIn(pid, section) && (section != 'docs' || !isIssued(request.resource.data) || canApprove())
             // v0.55.0: an office version of a Field Report report is written by approvers only
             && (!(section in ['fieldReports', 'fieldVersions']) || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])
@@ -516,7 +519,13 @@ service cloud.firestore {
               || (request.resource.data.status == 'cancelled' && resource.data.by == me() && fieldOn(pid))))
           || (section == 'storeMoves' && record == 'keeper' && fieldOn(pid) && get(fieldDoc()).data.role in ['coordinator', 'admin', 'exec'])
           || (section == 'storeMoves' && (seesAll() || officeOn(pid)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_o']))
-          || (!(section in ['penalties', 'storeMoves']) && officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
+          // v1.8.0: waiting work photos are approved or rejected (with a reason) by the SE, PE/PM, GM or Admin, never by the sender
+          || (section == 'workShots' && resource.data.status == 'waiting'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reason', 'decidedBy', 'decidedByName', 'decidedAt', '_o'])
+            && request.resource.data.status in ['approved', 'rejected'] && resource.data.by != me()
+            && ((fieldOn(pid) && get(fieldDoc()).data.role in ['engineer', 'coordinator', 'exec', 'admin']) || (officeOn(pid) && canApprove())))
+          || (section == 'workShots' && (seesAll() || officeOn(pid)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['_o']))
+          || (!(section in ['penalties', 'storeMoves', 'workShots']) && officeWritesIn(pid, section) && (section != 'docs' || (!isIssued(request.resource.data) && !isIssued(resource.data)) || canApprove())
             // v0.55.0: a kept version is never changed; the newest is changed by approvers only
             && section != 'fieldVersions' && (section != 'fieldReports' || canApprove()))
           || (isSiteOn(pid) && section in ['reports', 'items'])

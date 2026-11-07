@@ -263,7 +263,7 @@ function compareBox() {
     ${cmp ? html`<div class="table-wrap"><table class="table compact"><thead><tr><th>Project</th><th>Since</th><th>Script</th><th>Database</th><th>Differences</th></tr></thead><tbody>
       ${cmp.rows.map(({ p, c }) => html`<tr><td>${p.name}</td><td>${day(c.from)}</td><td>${c.script.n} · last ${day(c.script.last)}</td><td>${c.db.n} · last ${day(c.db.last)}</td>
         <td>${!c.from ? html`<span class="muted">No report in the database yet</span>` : clean(c) ? html`<span class="chip ok">None</span>` : html`<span class="bad small">${[
-          c.onlyScript.length ? `Only in the script: ${c.onlyScript.map(day).join(', ')}` : '',
+          c.onlyScript.length ? `Only in the script: ${c.onlyScript.map(day).join(', ')}${c.why?.length ? `. Refused: ${c.why.join(' ')}` : '. No refusal recorded: the phone has not sent its copy (not connected, or another phone)'}` : '',
           c.onlyDb.length ? `Only in the database: ${c.onlyDb.map(day).join(', ')}` : '',
           ...c.numbers.map(n => `${day(n.date)}: No. ${n.script} in the script, ${n.db} in the database`)].filter(Boolean).join(' · ')}</span>`}</td></tr>`)}
     </tbody></table></div>` : ''}`;
@@ -274,7 +274,13 @@ async function compareLoad() {
   try {
     const ps = store.projects.filter(p => p.fieldCode);
     const rows = [];
-    for (const p of ps) rows.push({ p, c: compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`), store.fieldRouteSince) });
+    for (const p of ps) {
+      const c = compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`), store.fieldRouteSince);
+      // v1.10.2 (owner): why the phone's copy was refused, kept by the server for each missing day
+      const miss = c.onlyScript.length ? await store.listCol(`projects/${p.id}/fieldMiss`).catch(() => []) : [];
+      c.why = [...new Set(miss.filter(m => c.onlyScript.includes(m.date)).map(m => m.why))];
+      rows.push({ p, c });
+    }
     cmp = { at: Date.now(), rows };
   } catch (e) { tell(`Compare did not load: ${e.message}`); }
   cmpBusy = false; store.notify();

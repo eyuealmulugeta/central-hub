@@ -64,9 +64,10 @@ function todayBox(m, c) {
   const tabs = html`<div class="xdays">${m.week.map(d => html`<button type="button" class="${d === m.day ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="mediaDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
       <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${m.counts[d] ? html`<i>${m.counts[d]}</i>` : ''}</button>`)}</div>`;
   const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
-    ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay" aria-hidden="true">▶</span>`
+    ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay ${i === 0 ? '' : 's'}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+      <span class="xvb">VIDEO</span><span class="xkeep">${x.kept ? 'Saved' : x.until ? `kept until ${fmtDate(x.until)}` : ''}</span>`
     : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}<figcaption>${x.label}</figcaption></figure></button>`;
-  return box('today', html`${tabs}${nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
+  return box('today', html`${tabs}${nPh || nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
     ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
       ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
     : html`<p class="empty">${!c.project.fieldCode ? 'This project is not linked to Field Report yet.' : m.busy ? 'Getting the photos from the site…' : m.day === c.today ? 'No photos from the site yet today. Each one shows here as soon as it is taken.' : 'No photos or videos on this day.'}</p>`}
@@ -352,8 +353,9 @@ export function render(c) {
   };
   const rows = rowsOf(has, rowsFor(orderOf(prefs.get(HOME_ORDER))));   // v0.92.0: in the person's order
   return html`
-    <section class="today-head xhead-row">
-      <div><h2>${fmtFull(c.today)}</h2><span class="muted">${needs.length ? `${needs.length} thing${needs.length > 1 ? 's' : ''} need${needs.length > 1 ? '' : 's'} you${urgent ? `, ${urgent} urgent` : ''}.` : 'Nothing needs you right now.'}</span></div>
+    <section class="today-head xhead-row xtop">
+      <div><h2>${greet()}${store.user?.name ? `, ${String(store.user.name).split(/\s+/)[0]}` : ''}</h2><span class="xsub">Executive overview · ${fmtFull(c.today)}</span><span class="muted">${needs.length ? `${needs.length} thing${needs.length > 1 ? 's' : ''} need${needs.length > 1 ? '' : 's'} you${urgent ? `, ${urgent} urgent` : ''}.` : 'Nothing needs you right now.'}</span></div>
+      ${c.project.fieldCode && may('reports') ? html`<span class="xlive"><i></i>Live from site</span>` : ''}
       <a class="btn small ghost" href="#quick" data-act="arrangeOpen" title="Change the order of the menu and of these boxes">Arrange</a>
       <button type="button" class="btn small" data-act="present" title="Full screen for a meeting (Esc to leave)">${presenting() ? 'Leave full screen' : 'Present'}</button>
     </section>
@@ -388,6 +390,8 @@ function mediaFor(c, mayRead) {
   return { day, week, counts, photos, videos: videos.filter(v => v.date === day).sort((a, b) => String(b.time || '').localeCompare(String(a.time || ''))), live: isLive, busy: !!live.get(`${code}|${day}`)?.busy };
 }
 
+// v1.24.0 (owner, "A Revised"): the greeting at the top of the Dashboard, by the hour here
+const greet = (h = new Date().getHours()) => (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
 const presenting = () => typeof document !== 'undefined' && document.body.classList.contains('presenting');
 if (typeof document !== 'undefined') document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) document.body.classList.remove('presenting'); });
 

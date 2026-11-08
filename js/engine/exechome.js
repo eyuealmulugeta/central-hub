@@ -47,9 +47,11 @@ export function latestMedia(reports = [], videos = [], today) {
 }
 const todayDays = reports => reports.filter(r => r.source === 'field' && r.field?.pdf && (r.field.photoFiles || []).some(p => p && p.id && !p.gallery)).map(r => r.date);
 
+/** v1.24.0 (owner, "A Revised"): the last day a video is kept (30 days after it was taken), '' once saved for good. */
+export const keptUntil = v => (v.kept || !/^\d{4}-\d{2}-\d{2}$/.test(v.date || '') ? '' : new Date(Date.parse(`${v.date}T00:00:00Z`) + 30 * 864e5).toISOString().slice(0, 10));
 /** The viewer's list: videos first, then photos, as { kind, key | fileId, label }. */
 export const viewerItems = (proj, photos, videos) => [
-  ...videos.map(v => ({ kind: 'video', id: v.id, proj, fileId: v.fileId, kept: !!v.kept, label: [v.time, v.gal ? 'Video from gallery' : 'Video', v.byName].filter(Boolean).join(' · ') })),
+  ...videos.map(v => ({ kind: 'video', id: v.id, proj, fileId: v.fileId, kept: !!v.kept, until: keptUntil(v), label: [v.time, v.gal ? 'Video from gallery' : 'Video', v.byName].filter(Boolean).join(' · ') })),
   ...photos.map(({ r, p }) => ({ kind: 'photo', key: `${proj}|${r.field.pdf}|${p.id}`, label: [p.time, p.zone || p.task, p.caption].filter(Boolean).join(' · ') })),
 ];
 

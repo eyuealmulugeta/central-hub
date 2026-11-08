@@ -145,7 +145,64 @@ export const APPS = [
     { page: 'payroll', name: 'Payroll', does: 'A run each month from the HR pay and the attendance on site: payroll sheet, payslips, CSV for the accountant. Admin only' },
     { page: 'letters', name: 'Letters', does: 'Employment and salary confirmations, experience certificates, warnings and introductions, printed or emailed as PDF. Admin only' },
   ] },
+  // v1.14.0 (owner, 8 Nov): every page of the menu has its own switch, and so has every Field Report feature
+  { group: 'Dashboard pages', about: 'The tabs of the Dashboard', apps: [
+    { page: 'notifications', name: 'Notifications', does: 'Who is told what, by email and on the phone. Admin' },
+    { page: 'signins', name: 'Sign-ins', does: 'Who signed in, when and on which device' },
+    { page: 'activity', name: 'Activity', does: 'What each person did in Central Hub' },
+    { page: 'outgoing', name: 'Outgoing', does: 'Emails and documents sent out' },
+    { page: 'datafeed', name: 'Data tracker', does: 'Which project data is late, and who answers for it' },
+    { page: 'engagement', name: 'Engagement', does: 'How much each person uses the apps' },
+  ] },
+  { group: 'Project and report pages', about: 'The pages of Project and Reports', apps: [
+    { page: 'setup', name: 'Project setup', does: 'Create and set up projects' },
+    { page: 'status', name: 'Status report', does: 'The client status report' },
+    { page: 'attendance', name: 'Attendance sheet', does: 'The crew attendance of the project' },
+    { page: 'spotlight', name: 'Spotlight', does: 'Photos, videos and notes from site for Central Hub only' },
+    { page: 'siteinstr', name: 'Site instructions', does: 'Instructions to the site, signed' },
+    { page: 'sitestore', name: 'Site store', does: 'The store kept on Field Report, read only, Excel' },
+    { page: 'usage', name: 'Materials used', does: 'Materials used against work done' },
+    { page: 'weather', name: 'Weather and holidays', does: 'Weather days and public holidays for claims' },
+    { page: 'workphotos', name: 'Work photos', does: 'Technicians\' photos from Field Report' },
+  ] },
+  { group: 'People pages', about: 'The pages of People', apps: [
+    { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
+    { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
+    { page: 'crewletters', name: 'Crew letters', does: 'Letters for the crew' },
+    { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person: always on', fixed: true },
+    { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },
+  ] },
+  { group: 'Money and document pages', about: 'The pages of Money and Documents', apps: [
+    { page: 'invoices', name: 'Invoices', does: 'Invoices to clients' },
+    { page: 'quotations', name: 'Quotations', does: 'Quotations to clients' },
+    { page: 'purchases', name: 'Purchases', does: 'Purchase orders and the three-way check' },
+    { page: 'income', name: 'Income', does: 'Money received' },
+    { page: 'expenses', name: 'Expenses', does: 'Money spent' },
+    { page: 'summary', name: 'Summary report', does: 'The construction summary' },
+    { page: 'excel', name: 'Excel link', does: 'Data to and from Excel' },
+    { page: 'tradesummary', name: 'Trading summary', does: 'The trading summary' },
+    { page: 'documentsign', name: 'Document sign', does: 'Documents sent for signature' },
+    { page: 'logsheet', name: 'Log sheet', does: 'Equipment and vehicle log sheets' },
+  ] },
+  { group: 'Field Report', about: 'Features on the phones: off hides them on every phone within seconds', fr: true, apps: [
+    { page: 'fr_report', name: 'Daily report', does: 'Write the daily report' },
+    { page: 'fr_approve', name: 'Approve', does: 'Approve or send back a report on the phone' },
+    { page: 'fr_crewphoto', name: 'Attendance and crew photo', does: 'The morning crew photo' },
+    { page: 'fr_crew', name: 'Crew list', does: 'Names and trades sent from site' },
+    { page: 'fr_spot', name: 'Spotlight', does: 'Photos, videos and notes for Central Hub' },
+    { page: 'fr_requests', name: 'Requests', does: 'Materials, manpower, equipment' },
+    { page: 'fr_hours', name: 'Crew and hours', does: 'Working hours and reminder' },
+    { page: 'fr_review', name: 'Review tab', does: 'Reports and requests of the project' },
+    { page: 'fr_penalty', name: 'Penalties', does: 'Penalties given on site' },
+    { page: 'fr_quick', name: 'Quick tab', does: 'The + tab' },
+    { page: 'fr_media', name: 'FR Dashboard', does: 'Photos and videos of all projects (GM)' },
+    { page: 'fr_store', name: 'Store', does: 'The site store' },
+    { page: 'fr_shots', name: 'Share work', does: 'Technicians\' work photos' },
+    { page: 'fr_chat', name: 'Discuss', does: 'The Discuss tab on the phone' },
+  ] },
 ];
+/** v1.14.0: the Field Report features switched off, for the phones (public/fieldFeatures). */
+export const frOff = global => (global?.appsOff || []).filter(k => k.startsWith('fr_'));
 /** Is the app switched on for the company? Settings pages and Home cannot be switched off. */
 export const appOn = (global, page) => !(global?.appsOff || []).includes(page);
 

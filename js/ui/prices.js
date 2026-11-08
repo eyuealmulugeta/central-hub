@@ -9,8 +9,9 @@ import * as fieldusers from './fieldusers.js';
 import * as directory from './directory.js';   // v0.45.0: the Manpower Directory, also a tab of People and access
 import { binPage, binActions, binChanges, purgeOld } from './bin.js';
 import { typesOf } from '../core/seed.js';
-import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
+import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, frOff, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
+import { MARKS } from './icons.js';   // v1.14.0
 import { record as recordFault } from '../core/diagnostics.js';
 import { checkPack, packSummary, applyToWorkspace, applyToCompany, applyToProject } from '../core/pack.js';
 import { OWNER_SECTIONS } from '../core/schema.js';
@@ -710,7 +711,7 @@ function appsPage(c) {
     <div class="side settings">
       <section class="apps-hero">
         <h2>Choose your apps</h2>
-        <p>Switch on what Amistad uses. An app that is off disappears from the menu for everyone; its records are kept and come back when you switch it on again.</p>
+        <p>Switch on what Amistad uses. A page or Field Report feature that is off disappears for everyone (phones within seconds); nothing is deleted, and it comes back when you switch it on again. Access rules still apply on top.</p>
         <div class="actions left">
           ${chipText(`${on} of ${all.length} apps on`)}
           ${on < all.length ? html`<button class="btn small" data-act="appsAll">Switch all on</button>` : ''}
@@ -723,7 +724,7 @@ function appsPage(c) {
             const live = appOn(g, a.page);
             return html`
               <button type="button" class="app-tile ${live ? 'on' : 'off'}" data-act="app" data-p="${a.page}" aria-pressed="${live ? 'true' : 'false'}" ${a.fixed ? html`disabled title="Always on: every project needs it"` : html`title="${live ? 'Click to switch off' : 'Click to switch on'}"`}>
-                <span class="app-icon">${icon(a.page)}</span>
+                <span class="app-icon">${icon(MARKS[a.page] ? a.page : 'apps')}</span>
                 <span class="app-text"><b>${a.name}</b><span class="muted">${a.does}</span></span>
                 <span class="app-state">${a.fixed ? 'Always on' : live ? 'On' : 'Off'}</span>
               </button>`;
@@ -878,8 +879,9 @@ export const actions = {
       if (appOn(g, page)) off.push(page);
       g.appsOff = off;
     });
+    if (page.startsWith('fr_')) store.setFieldFeatures(frOff(store.global));   // v1.14.0: the phones follow within seconds
   },
-  appsAll() { store.updateGlobal(g => { g.appsOff = []; }); },
+  appsAll() { store.updateGlobal(g => { g.appsOff = []; }); store.setFieldFeatures([]); },
   async copyRules() {
     try {
       const res = await fetch('firestore.rules', { cache: 'no-store' });

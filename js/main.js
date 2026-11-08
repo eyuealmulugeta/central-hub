@@ -230,7 +230,7 @@ const isSite = () => store.role === 'site';
 const allowed = raw => {
   const name = resolve(raw);
   const sw = switchOf(name);
-  return !!VIEWS[name] && divisionFor(name, division, myDivisions()) !== null && store.can(name) && appOn(store.global, permKey(name))
+  return !!VIEWS[name] && divisionFor(name, division, myDivisions()) !== null && store.can(name) && appOn(store.global, permKey(name)) && appOn(store.global, name)   // v1.14.0: every page its own switch
     && (!PROJECT_PAGES.includes(sw) || pageOn(store.project, sw));
 };
 quick.configure({ titles: TITLES, hubs: () => hubs(), allowed: t => t !== 'quick' && allowed(t) });   // v0.35.0

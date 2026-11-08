@@ -549,6 +549,12 @@ export const store = {
   async setDoc(path, data) { if (api) await api.set(path, data); },   // v0.55.0: an office version of a Field Report report
   /** v0.37.0: called with the fieldPing records whenever Field Report signals a change. Returns the way to stop. */
   onFieldPing(fn) { pingFns.add(fn); return () => pingFns.delete(fn); },
+  /** v1.14.0 (owner): the Field Report features switched off, read by every phone (public/fieldFeatures). */
+  setFieldFeatures(off) {
+    if (viewOnly()) return;
+    const rec = { off: [...new Set(off || [])].sort(), at: new Date().toISOString() };
+    if (api) send(api.set('public/fieldFeatures', rec)); else write('sf:fieldFeatures', rec);
+  },
   /** Admin only: one switch; moving it back is the rollback. */
   setFieldRoute(route) {
     if (viewOnly() || !ROUTES.includes(route)) return;

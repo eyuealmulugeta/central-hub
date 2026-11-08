@@ -69,8 +69,8 @@ function review(c, forms) {
     const l = linkOf(f), same = sameStaff(c.company.staff || [], f);
     const ed = editing === f.id;
     const facts = (ed ? EDIT_FIELDS(f) : EDIT_FIELDS(f).filter(([, k]) => f[k])).map(([t, k, type]) => [t, ed ? html`<input type="${type || 'text'}" data-chg="cfEdit" data-id="${f.id}" data-f="${k}" value="${f[k] || ''}">` : f[k]]);
-    return html`<li class="cf-form"><div class="cf-pics">${img(f.photo, 'Photo', 'face')}${img(f.idFront, 'Fayda ID, front')}${img(f.idBack, 'Fayda ID, back')}${img(f.passportImage, 'Passport')}</div>
-      <div>${ed ? html`<label>Name <input data-chg="cfEdit" data-id="${f.id}" data-f="name" value="${f.name}"></label>` : html`<b>${f.name}</b>`} <span class="muted">${f.doc === 'passport' ? 'Passport' : 'Fayda ID'} · sent ${when(f.at)} · ${l ? `${l.kind === 'site' ? 'site form' : l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
+    return html`<li class="cf-form"><div class="cf-pics">${img(f.photo, 'Photo', 'face')}${img(f.idFront, f.doc === 'id' ? 'ID, front' : 'Fayda ID, front')}${img(f.idBack, f.doc === 'id' ? 'ID, back' : 'Fayda ID, back')}${img(f.passportImage, 'Passport')}</div>
+      <div>${ed ? html`<label>Name <input data-chg="cfEdit" data-id="${f.id}" data-f="name" value="${f.name}"></label>` : html`<b>${f.name}</b>`} <span class="muted">${f.doc === 'passport' ? 'Passport' : f.doc === 'id' ? 'ID card' : 'Fayda ID'}${f.nationality ? ` · ${f.nationality}` : ''} · sent ${when(f.at)} · ${l ? `${l.kind === 'site' ? 'site form' : l.kind === 'crew' ? 'crew link' : 'link'} of ${l.byName || l.by}${l.projectName ? `, for ${l.projectName}` : ''}` : 'link not found'}</span>
         ${same ? html`<p class="callout warn small"><b>!</b> <span>${same.name} is already in Employee data: Accept fills in only what that record lacks.</span></p>` : ''}
         <table class="table compact"><tbody>${facts.map(([k, v]) => html`<tr><th>${k}</th><td>${v}</td></tr>`)}</tbody></table>
         <div class="actions left"><button class="btn small primary" type="button" data-act="cfAccept" data-id="${f.id}">Accept${l?.projectName ? ` and put on ${l.projectName}` : ''}</button>
@@ -83,7 +83,7 @@ function review(c, forms) {
 
 /** v0.34.0: the details the Admin may correct before accepting: [label, field, input type]. */
 const EDIT_FIELDS = f => [['Trade', 'trade'], ['Phone', 'phone', 'tel'], ['Gender', 'gender'], ['Date of birth', 'birthday', 'date'], ['Nationality', 'nationality'],
-  ...(f.doc === 'passport' ? [['Passport No.', 'passportNumber'], ['Expiry', 'passportExpiry', 'date']] : [['Fayda No. (FAN)', 'idNumber'], ['FIN', 'fin'], ['Expiry', 'idExpiry', 'date']]),
+  ...(f.doc === 'passport' ? [['Passport No.', 'passportNumber'], ['Expiry', 'passportExpiry', 'date']] : f.doc === 'id' ? [['ID No.', 'idNumber'], ['Expiry', 'idExpiry', 'date']] : [['Fayda No. (FAN)', 'idNumber'], ['FIN', 'fin'], ['Expiry', 'idExpiry', 'date']]),   // v1.15.0: another country's ID card
   ['Address', 'address'], ['Emergency contact', 'emergency'], ['Emergency phone', 'emergencyPhone', 'tel'], ['Certificate', 'certificate']];
 
 function pool(c) {
@@ -101,7 +101,7 @@ function pool(c) {
 }
 
 const findLink = (c, id) => (c.company.crewlinks || []).find(l => l.id === id) || made.find(l => l.id === id);
-const message = l => `Hello${l.name ? ` ${l.name}` : ''},\n\nPlease fill in your details for Amistad Prefab with this link. Take pictures of your Fayda ID (or passport) and of yourself; the details are read from the ID.\n\n${urlOf(l)}\n\nThe link works until ${new Date(l.untilMs).toLocaleDateString([], { day: 'numeric', month: 'long' })}.\n\n${store.signature || 'Amistad Prefab'}`;
+const message = l => `Hello${l.name ? ` ${l.name}` : ''},\n\nPlease fill in your details for Amistad Prefab with this link. Choose your country, then take pictures of your ID (the Fayda ID for Ethiopians, otherwise your country's ID card or passport) and of yourself; the numbers are read from the ID.\n\n${urlOf(l)}\n\nThe link works until ${new Date(l.untilMs).toLocaleDateString([], { day: 'numeric', month: 'long' })}.\n\n${store.signature || 'Amistad Prefab'}`;
 
 export const changes = {
   cfSet(el) { draft[el.dataset.f] = el.value; store.notify(); },

@@ -51,6 +51,16 @@
     button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
     button:disabled { opacity: .5; cursor: default; }
     footer { padding: 8px 16px 24px; text-align: center; }
+    /* v1.15.0: the document scan and Fix corners */
+    .shot.doc { width: 180px; } .shot.doc img, .shot.doc .empty { width: 180px; height: 114px; }
+    .shot.doc img { object-fit: contain; background: #fff; }
+    .shot .pick button.btn { flex: 1; padding: 6px 4px; font-size: 12px; white-space: nowrap; }
+    .shot.doc .pick label.btn { white-space: nowrap; font-size: 12px; }
+    .fixer { position: fixed; inset: 0; background: rgb(0 0 0 / .6); display: flex; align-items: center; justify-content: center; z-index: 10; padding: 12px; }
+    .fixbox { background: var(--surface); border-radius: 14px; padding: 14px; max-width: 760px; width: 100%; max-height: 100%; overflow: auto; }
+    .fixarea { position: relative; touch-action: none; user-select: none; }
+    .fixarea img { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; }
+    .dot { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgb(230 173 69 / .45); border: 3px solid #e6ad45; box-shadow: 0 0 0 2px #fff; touch-action: none; cursor: grab; }
     @media print { header, .no-print, footer { display: none; } body { background: #fff; } .card { box-shadow: none; padding: 0; } .pages { max-height: none; background: none; padding: 0; } }
   </style>
 </head>

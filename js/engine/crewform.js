@@ -3,6 +3,7 @@
 // Pure functions: the page (crewpage.js) and the hub (ui/crewforms.js) share them, and the tests read them.
 
 import { parseMrz, datesIn, NATIONALITY } from './docread.js';
+import { COUNTRY_CODES, countryList, countryName } from './countries.js';
 
 /** How long a link stays open: one person (until used), or a crew link that takes as many people as come. */
 export const LINK_DAYS = { one: 7, crew: 3 };
@@ -94,7 +95,44 @@ export function readFayda(text) {
 export function readPassport(text, today) {
   const m = parseMrz(text, today);
   if (!m || m.kind !== 'Passport') return null;
-  return { doc: 'passport', name: m.name, birth: m.birth, expiry: m.expiry, gender: m.sex === 'F' ? 'female' : m.sex === 'M' ? 'male' : '', passportNumber: m.number, nationality: m.nationality, proven: !!m.proven };
+  return { doc: 'passport', name: m.name, birth: m.birth, expiry: m.expiry, gender: m.sex === 'F' ? 'female' : m.sex === 'M' ? 'male' : '', passportNumber: m.number, nationality: natOf(m.nationalityCode) || m.nationality, proven: !!m.proven };
+}
+
+/** v1.15.0: how much real document text was read (labels and machine lines): low when the picture is upside down. */
+export function readScore(text) {
+  const t = String(text || '').toUpperCase();
+  const words = (t.match(/\b(NAMES?|SURNAME|GIVEN|BIRTH|DATE|SEX|MALE|FEMALE|NATIONAL(ITY)?|IDENTITY|CARD|NUMBER|REPUBLIC|FEDERAL|ETHIOPIA[N]?|FAYDA|PASSPORT|EXPIRY|ISSUE|ADDRESS|NOM|PR[EÉ]NOM)\b/g) || []).length;
+  return words + Math.min(4, (t.match(/<<+/g) || []).length);
+}
+
+/** v1.15.0: the nationality of a three-letter country code: as people write it when known (Kenyan), else the country's name. */
+export function natOf(code3) {
+  const c = String(code3 || '').toUpperCase();
+  if (NATIONALITY[c] && c !== 'UTO') return NATIONALITY[c];
+  const two = COUNTRY_CODES.find(([, t]) => t === c)?.[0];
+  return two ? countryName(two) : '';
+}
+
+/**
+ * v1.15.0 (owner, 8 Nov): what can be read from another country's ID card: its machine-readable lines when it has them
+ * (most do, on the back), else the number, dates, name and sex by their labels. Always for the person to check.
+ */
+export function readId(text, today) {
+  const m = parseMrz(text, today);
+  if (m) return { doc: m.kind === 'Passport' ? 'passport' : 'id', name: m.name, birth: m.birth, expiry: m.expiry, gender: m.sex === 'F' ? 'female' : m.sex === 'M' ? 'male' : '',
+    [m.kind === 'Passport' ? 'passportNumber' : 'idNumber']: m.number, nationality: natOf(m.nationalityCode) || m.nationality, proven: !!m.proven };
+  const raw = String(text || ''), t = raw.toUpperCase(), lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const dates = datesIn(raw);
+  const num = s => { const x = String(s || '').replace(/[\s-]/g, '').toUpperCase(); return /^[A-Z0-9]{5,20}$/.test(x) && (x.match(/\d/g) || []).length >= 4 ? x : ''; };
+  let idNumber = '';
+  const label = /(?:ID|CARD|IDENTITY|PERSONAL|NATIONAL|DOCUMENT|NIN|NIC|N[O°º]\.?|NUMBER|NUM[EÉ]RO)\s*(?:NO\.?|NUMBER|N[O°º]\.?|#|:)?\s*[:.]?\s*([A-Z0-9][A-Z0-9 -]{4,24})/gi;
+  for (let x; !idNumber && (x = label.exec(raw));) idNumber = num(x[1]) || num(x[1].split(/\s{2,}/)[0]);
+  if (!idNumber) idNumber = (raw.match(/\b[A-Z0-9]{6,20}\b/gi) || []).map(num).filter(Boolean).sort((a, b) => (b.match(/\d/g).length - a.match(/\d/g).length) || b.length - a.length)[0] || '';
+  return {
+    doc: 'id', name: nameAfter(lines, /FULL\s*NAME|SURNAME|GIVEN|\bNAMES?\b|\bNOM\b/), idNumber,
+    birth: dateNear(t, dates, /BIRTH|\bDOB\b|N[EÉ]\(?E?\)? LE|NAISSANCE/), expiry: dateNear(t, dates, /EXPIR|VALID|EXP\b|D'EXPIRATION/),
+    gender: /\bFEMALE\b|\bSEX\s*[:.]?\s*F\b|\bF[EÉ]MININ\b/.test(t) ? 'female' : /\bMALE\b|\bSEX\s*[:.]?\s*M\b|\bMASCULIN\b/.test(t) ? 'male' : '',
+  };
 }
 
 /** What was read, as form fields: only fields still empty are filled. Returns { patch, filled } (labels of what was filled). */
@@ -110,6 +148,7 @@ export function fillForm(form, facts) {
   put('address', 'address', facts.address);
   if (facts.doc === 'fayda') { put('idNumber', 'Fayda number (FAN)', facts.idNumber); put('fin', 'FIN', facts.fin); put('idExpiry', 'card expiry', facts.expiry); }
   if (facts.doc === 'passport') { put('passportNumber', 'passport number', facts.passportNumber); put('passportExpiry', 'passport expiry', facts.expiry); }
+  if (facts.doc === 'id') { put('idNumber', 'ID number', facts.idNumber); put('idExpiry', 'ID expiry', facts.expiry); }   // v1.15.0
   return { patch, filled };
 }
 
@@ -118,18 +157,33 @@ export function fillForm(form, facts) {
  * v1.3.1 (owner, 7 Nov): every step is needed to finish the registration, except the passport (optional): both sides
  * of the Fayda ID, the photo, and every detail (the certificate may be "None").
  */
+/** v1.15.0 (owner, 8 Nov): nationality first. Ethiopians give the Fayda ID; anyone else their country's ID card or passport. */
+export const isEthiopian = f => String(f?.nationality || '') === 'Ethiopian';
+/** Which document the form asks for: 'fayda', 'id' (another country's ID card) or 'passport'. */
+export const docOf = f => (isEthiopian(f) ? 'fayda' : f?.doc === 'passport' ? 'passport' : 'id');
+const DOC_NEEDS = {
+  fayda: [['idFront', 'Take a picture of the front of your Fayda ID.'], ['idBack', 'Take a picture of the back of your Fayda ID.']],
+  id: [['idFront', 'Take a picture of the front of your ID card.']],
+  passport: [['passportImage', 'Take a picture of your passport\'s photo page.']],
+};
+const DOC_NUMBERS = {
+  fayda: [['idNumber', 'Write your Fayda number (FAN).'], ['fin', 'Write your FIN.']],
+  id: [['idNumber', 'Write your ID number.']],
+  passport: [['passportNumber', 'Write your passport number.']],
+};
 export const REQUIRED = [
-  ['idFront', 'Take a picture of the front of your Fayda ID.'], ['idBack', 'Take a picture of the back of your Fayda ID.'],
+  ['nationality', 'Choose your nationality.'],
   ['photo', 'Take your photo.'], ['name', 'Write your full name.'], ['trade', 'Choose your trade.'], ['phone', 'Write your phone number.'],
-  ['gender', 'Choose your gender.'], ['birthday', 'Write your date of birth.'], ['nationality', 'Choose your nationality.'],
-  ['idNumber', 'Write your Fayda number (FAN).'], ['fin', 'Write your FIN.'], ['address', 'Write your address.'],
+  ['gender', 'Choose your gender.'], ['birthday', 'Write your date of birth.'], ['address', 'Write your address.'],
   ['certificate', 'Write your highest certificate (or None).'], ['emergency', 'Write the emergency contact name.'], ['emergencyPhone', 'Write the emergency contact phone.'],
 ];
 const nDigits = v => String(v || '').replace(/\D/g, '').length;
 export function formMissing(f) {
-  for (const [k, msg] of REQUIRED) if (!String(f[k] || '').trim()) return msg;
-  if (nDigits(f.idNumber) !== 16) return 'The Fayda number (FAN) has 16 digits.';
-  if (nDigits(f.fin) !== 12) return 'The FIN has 12 digits.';
+  if (!String(f.nationality || '').trim()) return 'Choose your nationality.';
+  const d = docOf(f);
+  for (const [k, msg] of [...DOC_NEEDS[d], ...REQUIRED, ...DOC_NUMBERS[d]]) if (!String(f[k] || '').trim()) return msg;
+  if (d === 'fayda' && nDigits(f.idNumber) !== 16) return 'The Fayda number (FAN) has 16 digits.';
+  if (d === 'fayda' && nDigits(f.fin) !== 12) return 'The FIN has 12 digits.';
   if (nDigits(f.phone) < 9) return 'Check the phone number.';
   if (nDigits(f.emergencyPhone) < 9) return 'Check the emergency contact phone.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(f.birthday)) || f.birthday > new Date(Date.now() - 16 * 365.25 * 864e5).toISOString().slice(0, 10)) return 'Check the date of birth.';
@@ -138,7 +192,7 @@ export function formMissing(f) {
 
 /** The form as it is sent: only the known fields, trimmed. */
 export function formRecord(f, { id, link, at = new Date().toISOString() }) {
-  const out = { id, link, at, status: 'new' };
+  const out = { id, link, at, status: 'new', doc: docOf(f) };   // v1.15.0: the document asked for
   for (const k of FORM_FIELDS) if (!(k in out) && f[k] != null && f[k] !== '') out[k] = typeof f[k] === 'string' ? f[k].trim().slice(0, IMAGES.includes(k) ? MAX_IMAGE_CHARS : 300) : f[k];
   return out;
 }
@@ -155,7 +209,7 @@ export function staffFromForm(form, { link = null, today, newId, stampOf = () =>
     if (!number || docs.some(d => d.kind === kind && d.number === number)) return;
     docs.push({ id: newId('dc'), kind, number, expiry: expiry || '', link: '' });
   };
-  if (form.idNumber) paper('National ID', form.idNumber, form.idExpiry);
+  if (form.idNumber) paper(form.doc === 'id' ? `National ID (${form.nationality || 'other country'})` : 'National ID', form.idNumber, form.idExpiry);
   if (form.passportNumber) paper('Passport', form.passportNumber, form.passportExpiry);
   const fresh = {
     name: form.name, title: form.trade || '', gender: form.gender || '', birthday: form.birthday || '', nationality: form.nationality || '',
@@ -200,5 +254,8 @@ export function crewPool(staff, projects = []) {
     .sort((a, b) => b.people.length - a.people.length || a.nationality.localeCompare(b.nationality));
 }
 
-/** Nationalities for the form's list: Ethiopian first, then the others the hub knows. */
-export const NATIONALITIES = ['Ethiopian', ...[...new Set(Object.values(NATIONALITY))].filter(x => x !== 'Ethiopian' && x !== 'Utopian').sort()];
+/**
+ * v1.15.0 (owner, 8 Nov): the form's countries, [nationality kept, country shown]: Ethiopia first, then every country of
+ * the world by name. The nationality is kept as people write it when known (Kenyan), else as the country's name.
+ */
+export const NATIONALITIES = [['Ethiopian', 'Ethiopia'], ...countryList().filter(([two]) => two !== 'ET').map(([two, name]) => [natOf(COUNTRY_CODES.find(([c]) => c === two)[1]) || name, name])];

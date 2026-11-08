@@ -89,7 +89,8 @@ import { offerInstall } from './core/install.js';   // v0.70.0
 import { watchUrgent } from './ui/urgent.js';   // v0.72.0
 
 const APP = 'Central Hub';
-const VIEWS = { sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView };
+// v1.14.2: home (the Dashboard) was left out of this list in v0.98.0; the Dashboard stayed on "Loading project…"
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
 // screens about the whole company, not the open project
@@ -108,7 +109,7 @@ const scoped = () => scopedCompany(store.company, division);
 const hubs = () => arranged(hubsOf(division), orderOf(prefs.get(MENU_ORDER)));   // v0.92.0: in the person's order
 const hubOf = name => hubs().find(h => h.tabs.includes(name));
 /** The page a section opens on: the one last opened in it, else its first page this person may open (v0.22.0: no grid of tiles). */
-const entryOf = h => { const tabs = h.tabs.filter(allowed); return lastTab[h.id] && tabs.includes(lastTab[h.id]) ? lastTab[h.id] : tabs[0]; };
+const entryOf = h => { const tabs = h.tabs.filter(allowed); return lastTab[h.id] && tabs.includes(lastTab[h.id]) ? lastTab[h.id] : tabs[0] || h.tabs.find(t => offPage(t)); };   // v1.14.2: or a turned-off page
 function setDivision(d) {
   division = d;
   setCurrentDivision(d);
@@ -233,6 +234,16 @@ const allowed = raw => {
   return !!VIEWS[name] && divisionFor(name, division, myDivisions()) !== null && store.can(name) && appOn(store.global, permKey(name)) && appOn(store.global, name)   // v1.14.0: every page its own switch
     && (!PROJECT_PAGES.includes(sw) || pageOn(store.project, sw));
 };
+/** v1.14.2 (owner, 8 Nov): a page the Admin turned off (Settings, Apps) that this person could otherwise open: it stays
+ *  in the menu marked "Turned off" and opens on a notice instead of disappearing. Nothing is deleted. */
+const offPage = raw => {
+  const name = resolve(raw);
+  return !!VIEWS[name] && divisionFor(name, division, myDivisions()) !== null && store.can(name) && !(appOn(store.global, permKey(name)) && appOn(store.global, name));
+};
+const shown = t => allowed(t) || offPage(t);
+const offCard = name => html`<section class="card off-card"><span class="off-chip">Turned off</span><h2>${TITLES[name] || name} is turned off</h2>
+  <p class="muted">The Admin turned this page off for everyone under Settings, Apps. Nothing was deleted: it comes back as it was when it is turned on again.</p>
+  ${store.isAdmin ? html`<div class="actions left"><a class="btn primary" href="#apps">Open Settings, Apps</a></div>` : ''}</section>`;
 quick.configure({ titles: TITLES, hubs: () => hubs(), allowed: t => t !== 'quick' && allowed(t) });   // v0.35.0
 const route = () => {
   const raw = location.hash.slice(1);
@@ -241,7 +252,7 @@ const route = () => {
     return (h && entryOf(h)) || 'home';
   }
   const name = resolve(raw);
-  if (!allowed(name)) return 'home';
+  if (!allowed(name)) return offPage(name) ? name : 'home';   // v1.14.2: a turned-off page opens on its notice
   const d = divisionFor(name, division, myDivisions());
   if (d !== division) setDivision(d);   // a link into the other division opens it
   return name;
@@ -323,7 +334,7 @@ function renderSidebar(name, summaries) {
 
   // the menu: one link per section that has at least one page this person may open; the Team pages at the foot
   const link = h => {
-    const tabs = h.tabs.filter(allowed);
+    const tabs = h.tabs.filter(shown);
     if (!tabs.length) return '';
     return html`
       <a href="#${entryOf(h)}" class="side-link ${h === here ? 'on' : ''}" title="${h.label}" ${h === here ? html`aria-current="page"` : ''}>
@@ -347,9 +358,9 @@ function renderSidebar(name, summaries) {
     return html`<a href="#${to}" class="ptab ${h === here ? 'on' : ''}">${icon(h.icon)}<span>${label}</span>${badge(h.tabs.filter(allowed).reduce((n, t) => n + (count[t] || 0), 0))}</a>`;
   })}<button type="button" class="ptab ${document.body.classList.contains('more-open') ? 'on' : ''}" id="phone-more" aria-expanded="${document.body.classList.contains('more-open')}">${icon('apps')}<span>More</span></button>`);
   // the tabs of the open section, across the top of the page
-  const tabs = here && p ? here.tabs.filter(allowed) : [];
+  const tabs = here && p ? here.tabs.filter(shown) : [];
   $('#tabs').innerHTML = String(html`${tabs.map(t => html`
-    <a href="#${t}" class="tab ${t === name ? 'on' : ''}" ${t === name ? html`aria-current="page"` : ''}>${TITLES[t]}${badge(count[t])}</a>`)}
+    <a href="#${t}" class="tab ${t === name ? 'on' : ''} ${offPage(t) ? 'off' : ''}" ${t === name ? html`aria-current="page"` : ''}>${TITLES[t]}${offPage(t) ? html`<span class="off-chip">Turned off</span>` : badge(count[t])}</a>`)}
     ${here && PROJECT_PAGES.includes(switchOf(name)) && here.id !== 'projects' ? html`<span class="muted tab-note">For ${p.name}</span>` : ''}
     ${tabs.some(t => count[t]) ? html`<button type="button" class="tab mark-read" data-markread="hub" title="Hide the red numbers of this section until something new needs attention">✓ Mark as read</button>` : ''}`);
   // a section with a single page needs no row of tabs
@@ -450,9 +461,10 @@ function render() {
   const kept = keepForms && key === lastKey ? captureFields() : null;
   root.className = `view view-${baseOf(name) === 'stock' ? 'trade' : SETTINGS_PAGES.includes(name) ? 'prices' : baseOf(name)}`;
   // opened from the menu as Invoices, Income, Status report...: the screen starts the way that entry means
-  if (key !== lastKey) view.preset?.(ALIASES[name]?.preset || {});
+  const off = offPage(name);
+  if (key !== lastKey && !off) view?.preset?.(ALIASES[name]?.preset || {});
   try {
-    root.innerHTML = String(view.render(ctx));
+    root.innerHTML = String(off ? offCard(name) : view.render(ctx));   // v1.14.2
     groupShare(root);
     printFoot(root);
     fillPhotos(root);   // v0.23.1: site photos from Drive

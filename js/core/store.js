@@ -532,7 +532,9 @@ export const store = {
     if (!api) {
       write(K.company, company);
     } else {
-      stamp(company, COMPANY_SECTIONS.filter(s => !PUBLIC_SECTIONS.includes(s)));
+      // v1.14.2: never messages or chats: their records may only change text (rules), so stamping one written on a phone
+      // made the whole save fail (Directory edits were refused once Field Report sent its first message)
+      stamp(company, COMPANY_SECTIONS.filter(s => !PUBLIC_SECTIONS.includes(s) && s !== 'messages' && s !== 'direct'));
       const ops = diffWorkspace(before, company, COMPANY_SECTIONS).map(o => ({ path: `${COMPANY_PATH}/${o.section}/${o.id}`, data: o.data }));
       if (ops.length) send(api.batch(ops));
     }

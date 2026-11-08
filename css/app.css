@@ -1821,6 +1821,10 @@ body.side-narrow .side-health { display: none; }
 .xm.big { grid-column: span 2; grid-row: span 2; }
 .xm figure { margin: 0; height: 100%; }
 .xm img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.xm video.xvid { width: 100%; height: 100%; object-fit: cover; display: block; background: #111; pointer-events: none; }   /* v1.26.0: plays muted on the tile */
+.xv-fig video.xv-video { width: 100%; max-height: calc(88vh - 40px); border-radius: 6px; background: #000; }
+.xviewer:fullscreen { background: #000; }
+.xviewer:fullscreen .xv-fig { height: 94vh; }
 .xm figcaption { position: absolute; left: 6px; bottom: 6px; right: 6px; font-size: 11px; color: #fff; background: rgba(15,23,42,.55); padding: 2px 8px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .xm .ph-missing, .xm figure.ph-missing { opacity: .5; }
 .xmore { display: grid; place-content: center; text-align: center; background: #334155; color: #fff; }

@@ -3,7 +3,7 @@
 // filled in after the page is drawn. In the local demo a drawn sample stands in for each photo.
 
 import { html } from './dom.js';
-import { fieldPhoto, fieldReady } from '../sync/fieldreport.js';
+import { fieldPhoto, fieldVideo, fieldReady } from '../sync/fieldreport.js';
 import { store } from '../core/store.js';
 
 const cache = new Map();   // "size|proj|report|id" -> Promise<object URL, or '' when it could not be read>
@@ -14,7 +14,7 @@ const shelfKey = k => `/__photo/${k.split('|').map(encodeURIComponent).join('/')
 async function fromShelf(k) {
   try { const r = await (await caches.open(SHELF)).match(shelfKey(k)); return r ? URL.createObjectURL(await r.blob()) : ''; } catch { return ''; }
 }
-async function toShelf(k, blob) { try { await (await caches.open(SHELF)).put(shelfKey(k), new Response(blob, { headers: { 'content-type': 'image/jpeg' } })); } catch { /* private window: shown, not kept */ } }
+async function toShelf(k, blob) { try { await (await caches.open(SHELF)).put(shelfKey(k), new Response(blob, { headers: { 'content-type': blob.type || 'image/jpeg' } })); } catch { /* private window: shown, not kept */ } }
 const b64Blob = d => fetch(`data:image/jpeg;base64,${d}`).then(r => r.blob());
 /** One picture: size 'tile' (small, for the tiles) or '' (the screen copy). */
 export function photoAt(key, size = '') {
@@ -30,6 +30,30 @@ export function photoAt(key, size = '') {
     })().catch(() => { cache.delete(k); return ''; }));
   }
   return cache.get(k);
+}
+
+/**
+ * v1.26.0 (owner, 8 Nov): a site video played in the page (muted on the tiles, with sound on the full screen). Kept in
+ * this browser like the photos. '' when it cannot be played here (too big, or not readable): Drive's player then.
+ */
+const vcache = new Map();
+let vqueue = Promise.resolve();   // one video download at a time, so the photos are not held up
+export function videoAt(proj, id) {
+  const k = `video|${proj}|${id}`;
+  if (!vcache.has(k)) {
+    vcache.set(k, (async () => {
+      const kept = typeof caches !== 'undefined' ? await fromShelf(k) : '';
+      if (kept) return kept;
+      const job = vqueue.then(() => fieldVideo(proj, id));
+      vqueue = job.catch(() => {});
+      const out = await job;
+      if (!out.data) return '';
+      const b = await fetch(`data:${out.type || 'video/mp4'};base64,${out.data}`).then(r => r.blob());
+      if (typeof caches !== 'undefined') toShelf(k, b);
+      return URL.createObjectURL(b);
+    })().catch(() => { vcache.delete(k); return ''; }));
+  }
+  return vcache.get(k);
 }
 
 /** The photos Field Report kept in Drive for this report (older reports have none). */
@@ -57,5 +81,16 @@ export function fillPhotos(root) {
     const k = img.dataset.fphoto, size = img.dataset.fsize || '';   // v1.25.0: data-fsize="tile" = the small picture
     if (!store.cloud && !fieldReady()) { img.src = sample(i + 1); return; }
     photoAt(k, size).then(u => { if (u) img.src = u; else img.closest('figure')?.classList.add('ph-missing'); });
+  });
+  // v1.26.0: site videos play in the page; a tile stays on its cover picture when the video cannot be read here
+  root.querySelectorAll('video[data-fvideo]').forEach(v => {
+    if (v.dataset.filled || !store.cloud) return;
+    v.dataset.filled = '1';
+    const [proj, id] = v.dataset.fvideo.split('|');
+    videoAt(proj, id).then(u => {
+      if (!u) { v.dispatchEvent(new CustomEvent('novideo', { bubbles: true })); return; }
+      v.src = u;
+      v.play?.().catch(() => {});
+    });
   });
 }

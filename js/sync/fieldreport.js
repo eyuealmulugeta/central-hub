@@ -512,6 +512,13 @@ export async function fieldDayPhotos(code, date) {
   if (!out.ok) throw new Error(out.error || 'Field Report would not say.');
   return out.photos || [];
 }
+/** v1.26.0: a site video's file (script 7.58.0 videoGet): { type, data } in base64, or { tooBig } (Drive's player then). */
+export async function fieldVideo(code, id) {
+  const out = await post({ action: 'videoGet', proj: String(code || '').toUpperCase(), id });
+  if (!out.ok) throw new Error(out.error || 'Field Report would not give the video.');
+  return out;
+}
+
 /** v0.95.0: Save a site video for good (script 7.48.0 videoKeep); it is then never deleted after 30 days. */
 export async function fieldVideoKeep(code, id) {
   const out = await post({ action: 'videoKeep', proj: String(code || '').toUpperCase(), id });

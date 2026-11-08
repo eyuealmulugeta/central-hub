@@ -64,7 +64,7 @@ function todayBox(m, c) {
   const tabs = html`<div class="xdays">${m.week.map(d => html`<button type="button" class="${d === m.day ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="mediaDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
       <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${m.counts[d] ? html`<i>${m.counts[d]}</i>` : ''}</button>`)}</div>`;
   const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
-    ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay ${i === 0 ? '' : 's'}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
+    ? html`<video class="xvid" muted autoplay loop playsinline preload="none" poster="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" data-fvideo="${x.proj}|${x.id}" aria-label="Site video"></video><span class="xplay ${i === 0 ? '' : 's'}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
       <span class="xvb">VIDEO</span><span class="xkeep">${x.kept ? 'Saved' : x.until ? `kept until ${fmtDate(x.until)}` : ''}</span>`
     : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}" data-fsize="tile">`}<figcaption>${x.label}</figcaption></figure></button>`;   // v1.25.0: tiles load the small picture
   return box('today', html`${tabs}${nPh || nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
@@ -105,7 +105,7 @@ function showAt(i) {
   el.innerHTML = String(html`<button type="button" class="xv-x" data-v="x" title="Close (Esc)">✕</button>
     ${viewList.length > 1 ? html`<button type="button" class="xv-nav prev" data-v="-1" title="Previous (←)">‹</button><button type="button" class="xv-nav next" data-v="1" title="Next (→)">›</button>` : ''}
     <figure class="xv-fig">${x.kind === 'video'
-      ? html`<iframe src="https://drive.google.com/file/d/${x.fileId}/preview" title="Site video" allow="autoplay; fullscreen" allowfullscreen></iframe>`
+      ? html`<video class="xv-video" controls autoplay playsinline poster="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w1600" data-fvideo="${x.proj}|${x.id}" data-drive="${x.fileId}"></video>`
       : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}
       <figcaption>${x.label}<span>${i + 1} of ${viewList.length}</span>${x.kind === 'video'
         ? html`<button type="button" class="xv-act" data-v="save">${x.kept ? 'Kept ✓ · Download' : 'Save'}</button>`
@@ -113,6 +113,10 @@ function showAt(i) {
   el.hidden = false;
   document.body.classList.add('viewing');
   fillPhotos(el);
+  // v1.26.0 (owner, 8 Nov): opened on the whole screen; a video plays with sound (Drive's player when it cannot be read here)
+  if (!document.fullscreenElement) el.requestFullscreen?.().catch(() => {});
+  const vid = el.querySelector('video.xv-video');
+  if (vid) { vid.muted = false; vid.addEventListener('novideo', () => { vid.outerHTML = `<iframe src="https://drive.google.com/file/d/${encodeURIComponent(vid.dataset.drive)}/preview" title="Site video" allow="autoplay; fullscreen" allowfullscreen></iframe>`; }, { once: true }); }
   // v1.25.0: the photos either side are fetched now, so the next swipe shows at once
   [i + 1, i - 1].map(j => viewList[(j + viewList.length) % viewList.length]).forEach(y => { if (y && y.kind === 'photo' && store.cloud) photoAt(y.key); });
 }
@@ -148,9 +152,12 @@ async function saveVideo(x, b) {
 function closeView() {
   const el = document.getElementById('xviewer');
   if (el) { el.hidden = true; el.innerHTML = ''; }
+  if (el && document.fullscreenElement === el) document.exitFullscreen?.().catch(() => {});   // v1.26.0 (Present keeps its own)
   viewAt = -1;
   document.body.classList.remove('viewing');
 }
+// v1.26.0: Esc on the full screen leaves it; the viewer closes with it
+if (typeof document !== 'undefined') document.addEventListener('fullscreenchange', () => { const el = document.getElementById('xviewer'); if (el && !el.hidden && viewAt >= 0 && !document.fullscreenElement && el.dataset.fs) { delete el.dataset.fs; closeView(); } else if (el && document.fullscreenElement === el) el.dataset.fs = '1'; });
 if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
   if (viewAt < 0) return;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeView(); }

@@ -6,7 +6,7 @@ import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { STAGES, MODES, INCOTERMS, COST_KINDS, stageLabel, nextStage, costLabel, nextRef, landed, tradeSummary, stockAndSales, priceForMargin, isStock } from '../engine/trade.js';
 import { convert } from '../engine/pricing.js';
-import { uid, money, num, fmtFull, fmtDate, clamp } from '../core/util.js';
+import { uid, money, num, fmtFull, fmtDate, clamp, todayISO } from '../core/util.js';
 import { html, options, field, chip } from './dom.js';
 import { currentDivision, TRADING } from '../core/division.js';
 
@@ -108,7 +108,8 @@ function stockView(c, kpi, currencies) {
         <div class="toolbar"><h2>Sales</h2><span class="grow"></span><span class="muted">${notice}</span></div>
         ${available.length ? html`<form data-form="sale" class="entry">
           <select name="item" required aria-label="Item sold" class="wide">${available.map(i => html`<option value="${i.key}">${i.description}, ${i.ref}: ${num(i.left)} ${i.unit} left</option>`)}</select>
-          <input name="customer" placeholder="Customer" required aria-label="Customer" class="wide">
+          <input name="customer" placeholder="Customer" required aria-label="Customer" class="wide" list="trade-customers">
+          <datalist id="trade-customers">${(c.company.partners || []).filter(p => !p.off && p.kind !== 'supplier').map(p => html`<option value="${p.name}"></option>`)}</datalist>
           <input name="country" placeholder="Country" aria-label="Country">
           <input type="date" name="date" value="${c.today}" max="${c.today}" required aria-label="Date of sale">
           <input type="number" name="qty" min="0" step="any" placeholder="Qty" required aria-label="Quantity" class="amount">
@@ -177,7 +178,7 @@ function detail({ s, state }, c, currencies) {
         <label>Expected on site <input type="date" data-chg="set" data-f="eta" data-fk="sh-eta" value="${s.eta || ''}"></label>
         <label>Delivered on <input type="date" data-chg="set" data-f="arrived" data-fk="sh-arr" value="${s.arrived || ''}" ${s.status === 'delivered' ? '' : 'disabled'}></label>
       </div>
-      <datalist id="trade-suppliers">${[...new Set(c.company.shipments.map(x => x.supplier).filter(Boolean))].map(n => html`<option value="${n}"></option>`)}</datalist>
+      <datalist id="trade-suppliers">${[...new Set([...(c.company.partners || []).filter(p => !p.off && p.kind !== 'customer').map(p => p.name), ...c.company.shipments.map(x => x.supplier)].filter(Boolean))].map(n => html`<option value="${n}"></option>`)}</datalist>
       ${state.transit != null ? html`<p class="muted">${state.done ? `Door to door in ${state.transit} days.` : `${state.transit} days on the way so far.`}</p>` : ''}
 
       <h3>Goods <span class="muted">${goodsCur}</span></h3>
@@ -322,7 +323,7 @@ const TEXT_FIELDS = new Set(['supplier', 'origin', 'destination', 'tracking', 'c
 
 export const changes = {
   margin(el) { targetMargin = clamp(field(el), 0, 95); },
-  paid(el) { store.updateCompany(co => { const x = co.sales.find(s => s.id === el.dataset.id); if (x) x.paid = el.checked; }); },
+  paid(el) { store.updateCompany(co => { const x = co.sales.find(s => s.id === el.dataset.id); if (x) { x.paid = el.checked; x.paidOn = el.checked ? todayISO() : ''; } }); },   // paidOn: v1.20.0 (statements, Zoho)
   set(el) {
     const f = el.dataset.f;
     const value = TEXT_FIELDS.has(f) ? el.value.trim() : el.value;

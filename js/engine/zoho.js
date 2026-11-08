@@ -5,6 +5,7 @@
 // Pure: the server (functions/zoho.js) gives it the records; the tests read it.
 
 import { convert } from './pricing.js';
+import { norm, dueOf } from './partners.js';   // v1.20.0 (G10 T2)
 
 /** AED per USD: the UAE dirham is pegged to the dollar (owner: it does not move). */
 export const PEG = 3.6725;
@@ -57,6 +58,10 @@ export function zohoTables({ projects = [], company = {}, fx = null, month, map:
   const checks = [], keys = [];
   const customers = new Map(), vendors = new Map();
   const T = { inv: [], cpay: [], bill: [], vpay: [], exp: [], jrn: [] };
+  // v1.20.0 (G10 T2): the partner list's details on the contact sheets; a sale is due after the customer's terms
+  const partnerBy = n => (company.partners || []).find(p => norm(p.name) === norm(n)) || null;
+  const CONTACT_HEAD = ['Display Name', 'Company Name', 'Currency Code', 'Contact Name', 'EmailID', 'Phone', 'Billing City', 'Billing Country', 'Tax Registration Number', 'Payment Terms', 'Payment Terms Label'];
+  const contactRow = n => { const p = partnerBy(n) || {}; return [n, n, 'USD', p.person || '', p.email || '', p.phone || '', p.city || '', p.country || '', p.trn || '', +p.terms || 0, +p.terms ? `Net ${+p.terms}` : 'Due on Receipt']; };
   /** USD of an amount: as it is, at the record's own rate, or at the hub's rates; 0 (and a check) when there is none. */
   const usd = (amount, cur, rate, where) => {
     const c = String(cur || 'USD').toUpperCase(), a = +amount || 0;
@@ -134,7 +139,7 @@ export function zohoTables({ projects = [], company = {}, fx = null, month, map:
   for (const x of company.sales || []) {
     const where = `Sale ${day(x.date)} ${x.customer || ''}`.trim();
     const a = () => usd((+x.qty || 0) * (+x.unitPrice || 0), x.currency, x.usdRate, where), num = x.number || `SALE-${String(x.id).slice(-8)}`;
-    if (inMonth(x.date) && take(`co:sale:${x.id}`, where)) { const v = a(); T.inv.push([day(x.date), num, x.paid ? 'Paid' : 'Sent', who(customers, x.customer, where), day(x.due) || day(x.date), 'USD', PEG, 'Trading goods', x.note || 'Stock sale', +x.qty || 1, r2(v / (+x.qty || 1)), map.tradeSales, 'Trading', aed(v)]); }
+    if (inMonth(x.date) && take(`co:sale:${x.id}`, where)) { const v = a(); T.inv.push([day(x.date), num, x.paid ? 'Paid' : 'Sent', who(customers, x.customer, where), day(dueOf(x, partnerBy(x.customer))) || day(x.date), 'USD', PEG, 'Trading goods', x.note || 'Stock sale', +x.qty || 1, r2(v / (+x.qty || 1)), map.tradeSales, 'Trading', aed(v)]); }
     const paidOn = day(x.paidOn || (x.paid === true ? x.date : x.paid?.date));
     if (x.paid && inMonth(paidOn) && take(`co:salepay:${x.id}`, where)) { const v = a(); T.cpay.push([paidOn, who(customers, x.customer, where), num, v, MODE[x.method] || 'Bank Transfer', x.ref || '', through(x.method), 'USD', PEG, aed(v)]); }
   }
@@ -150,8 +155,8 @@ export function zohoTables({ projects = [], company = {}, fx = null, month, map:
       ['4', 'For each: save that sheet alone as CSV (File, Save as, CSV), Import, choose the file, check the matched fields, Import.'],
       ['5', 'Amounts are in USD with exchange rate 3.6725: Zoho books them in AED. The AED amount column is for checking only (do not map it).'],
       ['6', `Month: ${month}. Records already marked as sent are not in this file.`]] },
-    { name: 'Customers', rows: [['Display Name', 'Company Name', 'Currency Code'], ...[...customers.keys()].sort().map(n => [n, n, 'USD'])] },
-    { name: 'Vendors', rows: [['Display Name', 'Company Name', 'Currency Code'], ...[...vendors.keys()].sort().map(n => [n, n, 'USD'])] },
+    { name: 'Customers', rows: [CONTACT_HEAD, ...[...customers.keys()].sort().map(contactRow)] },
+    { name: 'Vendors', rows: [CONTACT_HEAD, ...[...vendors.keys()].sort().map(contactRow)] },
     { name: 'Invoices', rows: [['Invoice Date', 'Invoice Number', 'Invoice Status', 'Customer Name', 'Due Date', 'Currency Code', 'Exchange Rate', 'Item Name', 'Item Desc', 'Quantity', 'Item Price', 'Account', 'Notes', 'AED Amount'], ...T.inv] },
     { name: 'Customer Payments', rows: [['Date', 'Customer Name', 'Invoice Number', 'Amount', 'Payment Mode', 'Reference Number', 'Deposit To', 'Currency Code', 'Exchange Rate', 'AED Amount'], ...T.cpay] },
     { name: 'Bills', rows: [['Bill Date', 'Bill Number', 'Vendor Name', 'Due Date', 'Currency Code', 'Exchange Rate', 'Account', 'Description', 'Quantity', 'Rate', 'Notes', 'AED Amount'], ...T.bill] },

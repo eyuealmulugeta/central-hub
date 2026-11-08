@@ -6,7 +6,7 @@
 /** Pages of one construction project. */
 export const PROJECT_PAGES = ['dashboard', 'reports', 'schedule', 'ledger', 'docs', 'evaluation', 'requests', 'cashflow', 'payments'];
 /** Pages of the trading side: buying, shipping, stock and sales. */
-export const TRADING_PAGES = ['trade', 'stock', 'products'];   // products: v1.19.0 (G10 T1)
+export const TRADING_PAGES = ['trade', 'stock', 'products', 'partners'];   // partners: v1.20.0 (G10 T2)   // products: v1.19.0 (G10 T1)
 /** Pages about the whole company. */
 export const COMPANY_PAGES = ['finance', 'contracts'];
 /** Admin only, always. */
@@ -59,7 +59,7 @@ export function tickPage(user, page, on) {
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).
-const PERM = { workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'finance' };
+const PERM = { workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'finance' };
 export const permKey = page => PERM[page] || page;
 const key = permKey;
 
@@ -100,12 +100,12 @@ const MEET_SECTIONS = ['slots', 'bookings', 'meetings'];
 
 /** Which company-wide sections a person loads. */
 export function companySections(role, pages) {
-  if (role === 'owner') return ['shipments', 'sales', 'products', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'logsheet', 'seals', 'sealLog', 'messages', 'evaluations', 'spotlight', 'officeAttendance', 'officeStaff', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
+  if (role === 'owner') return ['shipments', 'sales', 'products', 'partners', 'contracts', 'contacts', 'staff', 'letters', 'payroll', 'owners', 'logsheet', 'seals', 'sealLog', 'messages', 'evaluations', 'spotlight', 'officeAttendance', 'officeStaff', 'crewlinks', 'crewforms', ...SIGN_SECTIONS, ...MEET_SECTIONS];
   if (role !== 'office' && role !== 'site') return ['messages'];
   return [
     'messages', ...(role === 'office' ? ['seals'] : []),   // v0.53.0: Office adds the company stamp to what it prints
     ...(pages.includes('contacts') ? ['contacts'] : []), ...(pages.includes('meetings') ? MEET_SECTIONS : []),
-    ...(pages.includes('trade') || pages.includes('finance') ? ['shipments', 'sales', 'products'] : []),
+    ...(pages.includes('trade') || pages.includes('finance') ? ['shipments', 'sales', 'products', 'partners'] : []),
     ...(pages.includes('contracts') ? ['contracts', ...SIGN_SECTIONS] : []),
   ];
 }
@@ -131,6 +131,7 @@ export const APPS = [
   { group: 'Trading', about: 'Buying, shipping and selling goods', apps: [
     { page: 'trade', name: 'Shipments', does: 'Orders on the way, freight and duties, landed cost per unit' },
     { page: 'stock', name: 'Stock and sales', does: 'What is in stock, what was sold, and the profit on each sale' },
+    { page: 'partners', name: 'Partners', does: 'Customers and suppliers: what each bought or sold, what is owed both ways, statements' },   // v1.20.0 (G10 T2)
     { page: 'products', name: 'Products', does: 'The trading catalogue: what each product cost landed and sold for (no warehouse)' },   // v1.19.0 (G10 T1)
   ] },
   { group: 'Finance', about: 'Money in and out', apps: [

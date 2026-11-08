@@ -6,6 +6,35 @@ import { html } from './dom.js';
 import { linkOf, mayLink } from '../engine/excelfeed.js';
 import { templateSheets, KIND_WORD } from '../engine/excelin.js';   // v1.10.0 (G7b)
 import { xlsxBytes } from '../core/xlsxwrite.js';
+import { linkOf as payLinkOf, LINK_DAYS } from '../engine/payfeed.js';   // v1.17.0 (G8)
+
+// v1.17.0 (owner, G8): the pay link: attendance, crew pay, monthly staff and progress, names and pay included; 30 days
+const pay = {};   // pid -> { busy, link, err }
+async function callPay(pid, act) {
+  const s = pay[pid] ||= {};
+  s.busy = true; s.err = ''; store.notify();
+  try { s.link = await store.callServer('payLink', { pid, act }); }
+  catch (e) { s.err = String(e?.message || e).replace(/^.*?: /, ''); }
+  s.busy = false; store.notify();
+}
+function payCard(p) {
+  const s = pay[p.id] || {};
+  if (p.id && !s.link && !s.busy && !s.err) callPay(p.id, 'get');
+  const l = s.link || {}, url = payLinkOf(l.key);
+  const left = l.until ? Math.max(0, Math.ceil((l.until - Date.now()) / 864e5)) : 0;
+  return html`<div class="box pad"><b>Pay link (attendance, salary, progress)</b>
+    <p class="muted small">Names, wages and pay of this project for Excel: attendance by day, the crew pay sheets (as in Payments), the monthly staff (Payroll), day rates and progress, this month and the two before. Only the Admin and the GM make it; it stops by itself after ${LINK_DAYS} days.</p>
+    ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
+    ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<p><input readonly value="${url}" aria-label="Excel pay link" style="width:100%" onclick="this.select()"></p>
+        <p class="muted small">Made ${when(l.at)} by ${l.byName}. Works ${left} more day${left === 1 ? '' : 's'} (until ${when(l.until)}). Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
+        <div class="actions left"><button type="button" class="btn primary" data-act="plCopy">Copy the pay link</button>
+          <button type="button" class="btn" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make a new pay link</button>
+          <button type="button" class="btn danger" data-act="plOff" ${s.busy ? 'disabled' : ''}>Turn off</button></div>
+        <p class="callout warn small">Anyone with this link sees everyone's pay on this project. Give it only to the person who keeps the pay file.</p>`
+      : html`<p>${l.ran ? 'The last pay link ran out.' : 'No pay link for this project.'}</p><button type="button" class="btn primary" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make the pay link</button>`}
+    <p class="muted small">In Excel: the same steps as below (Data, From Web, paste, Anonymous). Tables: Summary, Pay periods, Salary, Attendance, Monthly staff, Rates, Progress.</p>
+  </div>`;
+}
 
 const got = {};   // pid -> { busy, link, err }
 const when = t => (t ? new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -58,6 +87,7 @@ export function render(c) {
   const l = s.link || {}, url = linkOf(l.key);
   return html`<section class="card wide">
     ${fromExcel(p)}
+    ${payCard(p)}
     <div class="toolbar"><h2>Excel link</h2><span class="muted">${p.name || ''}: money and planning tables for Excel, read only. No pay or salaries.</span></div>
     ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
     ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<div class="box pad"><b>The link</b>
@@ -79,6 +109,9 @@ export function render(c) {
 export const submits = { xiSet(fd, c) { const link = String(fd.get('link') || '').trim(); if (link) callIn((c.project || store.project || {}).id, { act: 'set', link }); } };
 
 export const actions = {
+  plCopy(el, c) { const l = (pay[(c.project || store.project || {}).id] || {}).link; if (l?.key) navigator.clipboard?.writeText(payLinkOf(l.key)).then(() => store.toast?.('Pay link copied.')).catch(() => {}); },
+  plMake(el, c) { const p = c.project || store.project || {}, l = (pay[p.id] || {}).link; if (!confirm(l?.key ? 'Make a new pay link? The old one stops at once, also in Excel files that use it.' : `Make a pay link for ${p.name || 'this project'}? Anyone with it sees the names and pay of this project for ${LINK_DAYS} days.`)) return; callPay(p.id, 'make'); },
+  plOff(el, c) { const p = c.project || store.project || {}; if (confirm(`Turn off the pay link of ${p.name || 'this project'}? Excel files that use it stop refreshing.`)) callPay(p.id, 'off'); },
   xiSync(el, c) { callIn((c.project || store.project || {}).id, { act: 'sync' }); },
   xiOff(el, c) { const p = c.project || store.project || {}; if (confirm(`Disconnect the Excel file of ${p.name || 'this project'}? What was approved stays in Central Hub.`)) callIn(p.id, { act: 'off' }); },
   xiDo(el, c) {

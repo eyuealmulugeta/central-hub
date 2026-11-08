@@ -282,7 +282,7 @@ export function crewPhotoFlags(ws, today) {
   const out = [];
   for (let i = 0; i < 3; i++) {
     const d = fromDay(toDay(today) - i), s = photoDay(ws, d);
-    if (s.state === 'missing') out.push({ sev: 'high', kind: 'Attendance', title: `No morning crew photo on ${d}`, detail: 'The report came without the crew photo.', link: 'attendance' });
+    if (s.state === 'missing') out.push({ sev: 'warn', kind: 'Attendance', title: `No morning crew photo on ${d}`, detail: 'The report came without the crew photo.', link: 'attendance' });
     else if (s.state === 'late') out.push({ sev: 'warn', kind: 'Attendance', title: `Crew photo late on ${d}`, detail: `Taken at ${s.time}${s.tags.length ? ` (${s.tags.join(', ')})` : ''}.`, link: 'attendance' });
   }
   return out;

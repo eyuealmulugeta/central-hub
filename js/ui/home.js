@@ -249,6 +249,11 @@ function actBox(c) {
   return html`<section class="card xact"><h3>Activity <a class="xlink2" href="#activity">All</a></h3>${list.length ? html`<ul class="xlist">${list.map(x => html`<li><span class="tag">${actionWord(x.action)}</span><span class="xt"><b>${x.doc}</b><br><small>${[x.name || x.email, x.position, x.app, x.channel, new Date(+x.at + 3 * 3600e3).toISOString().slice(5, 16).replace('T', ' ')].filter(Boolean).join(' · ')}</small></span></li>`)}</ul>` : html`<p class="empty">Nothing printed, shared or sent yet.</p>`}</section>`;
 }
 
+/** v1.28.0: notices taken away by this person (kept with their settings), by project, kind and title. */
+const NEEDS_GONE = 'sf:needsGone';
+const needKey = (n, c) => `${n.projectId || c.project.id}|${n.kind}|${n.title}`;
+let shownNeeds = [];
+const forget = keys => prefs.set(NEEDS_GONE, [...new Set([...(prefs.get(NEEDS_GONE) || []), ...keys])].slice(-400));
 function needRow(n, c) {
   const other = n.projectId !== c.project.id;
   return html`<li class="trow">
@@ -257,6 +262,7 @@ function needRow(n, c) {
     <span class="tag ${SEV_TONE[n.sev]}">${SEV_LABEL[n.sev]}</span>
     ${other ? html`<button type="button" class="btn small" data-act="openProject" data-id="${n.projectId}" data-to="${n.link}">Open</button>`
       : html`<a class="btn small ${n.kind === 'Field reports' ? 'primary' : ''}" href="#${n.link}">${n.kind === 'Field reports' ? 'Review' : 'Open'}</a>`}
+    <button type="button" class="xgone" data-act="needGone" data-k="${needKey(n, c)}" title="Take this notice away" aria-label="Take this notice away">×</button>
   </li>`;
 }
 
@@ -318,6 +324,10 @@ export function render(c) {
   const others = summaries.filter(s => s.project.id !== c.project.id);
   const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
     .filter(n => n.projectId === c.project.id);
+  // v1.28.0 (owner, 8 Nov): a notice taken away with × (or all with Clear) stays away for this person
+  const gone = new Set(prefs.get(NEEDS_GONE) || []);
+  for (let i = needs.length - 1; i >= 0; i--) if (gone.has(needKey(needs[i], c))) needs.splice(i, 1);
+  shownNeeds = needs.map(n => needKey(n, c));
   const urgent = needs.filter(n => n.sev === 'high').length;
 
   // v0.94.0 (owner, 5 Nov): a fixed layout; every box the person may see is drawn, empty or not
@@ -356,9 +366,9 @@ export function render(c) {
   const BOX = {
     today: () => todayBox(media, c),
     money: () => moneyBox(split, c, bars),
-    action: () => box('action', needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
+    action: () => box('action', (needs.length ? [html`<p class="xclear"><button type="button" class="btn small ghost" data-act="needsClear" title="Take away every notice here">Clear</button></p>`] : []).concat(needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
-          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`]), { n: String(needs.length) }),
+          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`])), { n: String(needs.length) }),
     spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
       : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: `${spot.filter(x => x.date >= wk[0]).length} this week`, link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
@@ -447,6 +457,8 @@ export const actions = {
     if (on) document.documentElement.requestFullscreen?.()?.catch?.(() => {});
     else if (document.fullscreenElement) document.exitFullscreen?.();
   },
+  needGone(el) { forget([el.dataset.k]); },   // v1.28.0
+  needsClear() { forget(shownNeeds); },
   needFold(el, _c, e) { e?.preventDefault?.(); const k = el.dataset.k; if (folded.has(k)) folded.delete(k); else folded.add(k); },
   /** Open a project (and a page of it) from a card or a line about another project. */
   openProject(el) {

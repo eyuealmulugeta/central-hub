@@ -11,7 +11,8 @@ const seniority = role => { const w = normRole(role).toLowerCase(), i = ROLES.fi
 
 /** Box keys in their rows: the wide row, the three small boxes, the bottom row, the planning row. */
 // v0.94.0 (owner, 5 Nov): the fixed Dashboard of design A revised; This week and Waiting on others are not on it
-export const ROWS = [['today', 'money'], ['action', 'spot', 'requests'], ['book', 'people']];
+// v1.28.0 (owner, 8 Nov): Today at a glance on a row of its own, the full width; the other boxes three to a row
+export const ROWS = [['today'], ['money', 'action', 'spot'], ['requests', 'book', 'people']];
 
 /** v0.92.0: every box in its usual order, and the names the Arrange list shows. */
 export const BOXES = ROWS.flat();
@@ -21,9 +22,13 @@ export const HOME_ORDER = 'sf:homeOrder';
 export const boxOrder = (order = []) => [...order.filter(k => BOXES.includes(k)), ...BOXES.filter(k => !order.includes(k))];
 /** Rows for that order: a wide row of two, a row of three small boxes, then rows of two. The usual order gives ROWS. */
 export function rowsFor(order = []) {
-  const keys = boxOrder(order), out = [];
-  for (const n of [2, 3, 2]) out.push(keys.splice(0, n));
-  return out.filter(r => r.length);
+  const out = [];
+  for (const k of boxOrder(order)) {
+    if (k === 'today') { out.push(['today']); continue; }   // v1.28.0: always alone, wherever it is placed
+    const last = out[out.length - 1];
+    if (last && last[0] !== 'today' && last.length < 3) last.push(k); else out.push([k]);
+  }
+  return out;
 }
 
 /** The rows with only the boxes that have something to show; an empty row is dropped. */

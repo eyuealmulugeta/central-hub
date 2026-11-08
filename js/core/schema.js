@@ -145,6 +145,7 @@ export const emptyWorkspace = () => ({
 export const emptyCompany = () => ({
   shipments: [],
   sales: [],      // goods sold out of stock shipments
+  deals: [],      // v1.21.0 (G10 T3): trading deals, enquiry to paid (engine/deals.js)
   partners: [],   // v1.20.0 (G10 T2): customers and suppliers (engine/partners.js), linked to records by name
   products: [],   // v1.19.0 (G10 T1): the trading catalogue (engine/products.js); no warehouse, no stock count
   staff: [],      // HR records: Owner only

@@ -6,6 +6,7 @@
 
 import { convert } from './pricing.js';
 import { norm, dueOf } from './partners.js';   // v1.20.0 (G10 T2)
+import { dealTotals } from './deals.js';   // v1.21.0 (G10 T3)
 
 /** AED per USD: the UAE dirham is pegged to the dollar (owner: it does not move). */
 export const PEG = 3.6725;
@@ -135,6 +136,15 @@ export function zohoTables({ projects = [], company = {}, fx = null, month, map:
       const a = usd(c.amount, c.currency || cur, c.usdRate, where);
       T.bill.push([date, num, vendor, day(s.eta) || date, 'USD', PEG, map[c.kind] || map.other, `${num}: ${c.note || c.kind || 'cost'}`, 1, a, 'Trading', aed(a)]);
     }
+  }
+  // v1.21.0 (G10 T3): invoiced deals, one invoice line per product, and their payment
+  for (const d of (company.deals || []).filter(x => x.invoice && (x.status === 'invoiced' || x.status === 'paid'))) {
+    const where = `Deal ${d.ref} ${d.customer || ''}`.trim(), t = dealTotals(d);
+    if (inMonth(d.invoiceDate) && take(`co:deal:${d.id}`, where)) {
+      const cust = who(customers, d.customer, where);
+      for (const l of t.lines) T.inv.push([day(d.invoiceDate), d.invoice, d.status === 'paid' ? 'Paid' : 'Sent', cust, day(d.due) || day(d.invoiceDate), 'USD', PEG, l.description || 'Trading goods', `Deal ${d.ref}${d.po ? `, PO ${d.po}` : ''}`, +l.qty || 1, r2(+l.price || 0), map.tradeSales, 'Trading', aed(l.priceTotal)]);
+    }
+    if (d.status === 'paid' && inMonth(d.paidOn) && take(`co:dealpay:${d.id}`, where)) T.cpay.push([day(d.paidOn), who(customers, d.customer, where), d.invoice, r2(t.price), MODE[d.method] || 'Bank Transfer', d.payRef || '', through(d.method), 'USD', PEG, aed(t.price)]);
   }
   for (const x of company.sales || []) {
     const where = `Sale ${day(x.date)} ${x.customer || ''}`.trim();

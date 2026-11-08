@@ -3,6 +3,7 @@
 // Pure functions: a product is { id, code, name, unit, hs, supplier, notes, off }.
 
 import { landed, isStock, stockAndSales } from './trade.js';
+import { dealTotals } from './deals.js';   // v1.21.0 (G10 T3)
 import { sum } from '../core/util.js';
 
 /** PRD-001, PRD-002, … */
@@ -33,7 +34,8 @@ export function productStats(company, fx, currency) {
     lines.sort((a, b) => b.when.localeCompare(a.when));
     const last = lines[0];
     const resale = lines.filter(x => isStock(x.s)).map(x => items.get(`${x.s.id}|${x.l.id}`)).filter(Boolean);
-    const sold = sum(resale, i => i.sold), revenue = sum(resale, i => i.revenue), cost = sum(resale, i => i.cost);
+    const dl = (company.deals || []).filter(d => d.status === 'invoiced' || d.status === 'paid').flatMap(d => dealTotals(d).lines.filter(l => l.productId === p.id));
+    const sold = sum(resale, i => i.sold) + sum(dl, l => +l.qty || 0), revenue = sum(resale, i => i.revenue) + sum(dl, l => l.priceTotal), cost = sum(resale, i => i.cost) + sum(dl, l => l.costTotal);
     return {
       ...p,
       bought: sum(lines, x => +x.l.qty || 0), shipments: new Set(lines.map(x => x.s.id)).size,

@@ -63,7 +63,7 @@ export const MENUS = {
   trading: [
     today,
     quickHub,
-    { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['trade', 'stock', 'products', 'partners'] },   // products: v1.19.0 (G10 T1)
+    { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['deals', 'trade', 'stock', 'products', 'partners'] },   // deals: v1.21.0 (G10 T3)   // products: v1.19.0 (G10 T1)
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },

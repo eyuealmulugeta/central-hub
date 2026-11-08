@@ -4,6 +4,7 @@
 // A partner: { id, name, kind: customer|supplier|both, country, city, phone, email, trn, currency, terms (days), person, notes, off }
 
 import { landed, stockAndSales } from './trade.js';
+import { dealSales } from './deals.js';   // v1.21.0 (G10 T3)
 import { sum } from '../core/util.js';
 
 export const KINDS = [['customer', 'Customer'], ['supplier', 'Supplier'], ['both', 'Customer and supplier']];
@@ -54,7 +55,7 @@ const goodsOf = (s, fx, currency) => landed(s, fx, currency).goods;
  */
 export function partnerRecords(p, company, fx, currency, today) {
   const st = stockAndSales({ shipments: company.shipments || [], sales: company.sales || [] }, fx, currency);
-  const sales = st.sales.filter(x => norm(x.customer) === norm(p.name)).map(x => {
+  const sales = [...st.sales, ...dealSales(company.deals)].filter(x => norm(x.customer) === norm(p.name)).map(x => {
     const due = dueOf(x, p);
     return { ...x, due, overdue: !x.paid && !!due && due < today, daysLate: !x.paid && due && due < today ? Math.round((Date.parse(today) - Date.parse(due)) / 864e5) : 0 };
   });

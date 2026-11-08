@@ -93,7 +93,7 @@ export function tradeSummary(shipments, fx, today, currency) {
 // a quantity out of one shipment line, at that line's landed cost per unit.
 
 /** A shipment is stock for resale when it is not tied to a project. */
-export const isStock = s => !s.projectId;
+export const isStock = s => !s.projectId && !s.dealId;   // v1.21.0: a deal's shipment is already sold
 
 /**
  * What is in stock, what has been sold and what it earned, in `currency`.

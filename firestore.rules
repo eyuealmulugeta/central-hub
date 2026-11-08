@@ -448,14 +448,14 @@ service cloud.firestore {
       allow read: if (seesAll() && section != 'direct')
         || (section == 'messages' && hasUser())
         || (section == 'messages' && fieldOn(resource.data.channel))   // v1.13.0 (owner, R4): the project's channel on Field Report
-        || (section in ['shipments', 'sales'] && staffWith(['trade', 'finance']) && mine(resource.data))
+        || (section in ['shipments', 'sales', 'products'] && staffWith(['trade', 'finance']) && mine(resource.data))
         || (section == 'contracts' && staffWith(['contracts']) && mine(resource.data))
         || (section == 'contacts' && staffWith(['contacts']) && mine(resource.data))
         || (section == 'meetings' && staffWith(['meetings']) && mine(resource.data));
       allow create: if section == 'messages' && (isOwner() || hasUser() || fieldOn(request.resource.data.channel)) && request.resource.data.by == me()
         && request.resource.data.get('text', '') is string && request.resource.data.get('text', '').size() <= 2000;
       allow create, update: if (isOwner() && !(section in ['messages', 'direct']))
-        || (section in ['shipments', 'sales'] && staffWith(['trade']) && keptMine())
+        || (section in ['shipments', 'sales', 'products'] && staffWith(['trade']) && keptMine())
         || (section == 'contracts' && staffWith(['contracts']) && keptMine())
         || (section == 'contacts' && staffWith(['contacts']) && keptMine())
         // meetings with colleagues: anyone of the division with Meetings ticked schedules one; only its organiser changes it

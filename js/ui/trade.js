@@ -136,6 +136,10 @@ function stockView(c, kpi, currencies) {
     </div>`;
 }
 
+/** v1.19.0 (G10 T1): the products in use, and the one already chosen even if no longer in use. */
+const productOptions = (c, chosen) => (c.company.products || []).filter(p => !p.off || p.id === chosen)
+  .map(p => html`<option value="${p.id}" ${p.id === chosen ? 'selected' : ''}>${p.code} ${p.name}</option>`);
+
 function detail({ s, state }, c, currencies) {
   const { global } = c;
   const base = global.fx.base;
@@ -178,10 +182,11 @@ function detail({ s, state }, c, currencies) {
 
       <h3>Goods <span class="muted">${goodsCur}</span></h3>
       ${s.lines?.length ? html`<table class="table compact">
-        <thead><tr><th>Item</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th><th class="r">Value</th><th class="r">Landed per unit</th><th></th></tr></thead>
+        <thead><tr><th>Item</th><th>Product</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th><th class="r">Value</th><th class="r">Landed per unit</th><th></th></tr></thead>
         <tbody>${cost.lines.map(l => html`
           <tr>
             <td><input data-chg="line" data-id="${l.id}" data-f="description" data-fk="ln-d-${l.id}" value="${l.description}" aria-label="Item"></td>
+            <td><select data-chg="line" data-id="${l.id}" data-f="productId" data-fk="ln-p-${l.id}" aria-label="Product"><option value="">None</option>${productOptions(c, l.productId)}</select></td>
             <td class="r"><input class="narrow" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="qty" data-fk="ln-q-${l.id}" value="${l.qty}" aria-label="Quantity"></td>
             <td><input class="narrow" data-chg="line" data-id="${l.id}" data-f="unit" data-fk="ln-u-${l.id}" value="${l.unit || ''}" aria-label="Unit"></td>
             <td class="r"><input class="price" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="unitCost" data-fk="ln-c-${l.id}" value="${l.unitCost}" aria-label="Unit price"></td>
@@ -191,7 +196,8 @@ function detail({ s, state }, c, currencies) {
           </tr>`)}</tbody>
       </table>` : html`<p class="muted">Add what was bought: steel, panels, containers, fittings.</p>`}
       <form data-form="line" class="entry">
-        <input name="description" placeholder="Item, e.g. Sandwich panel 50 mm" required aria-label="Item" class="wide">
+        ${(c.company.products || []).some(p => !p.off) ? html`<select name="productId" aria-label="Product"><option value="">Product (optional)</option>${productOptions(c, '')}</select>` : ''}
+        <input name="description" placeholder="Item, e.g. Sandwich panel 50 mm" aria-label="Item" class="wide">
         <input type="number" name="qty" min="0" step="any" placeholder="Qty" required aria-label="Quantity" class="amount">
         <input name="unit" placeholder="Unit" aria-label="Unit" class="amount">
         <input type="number" name="unitCost" min="0" step="any" placeholder="Unit price" required aria-label="Unit price" class="amount">
@@ -349,10 +355,12 @@ export const submits = {
     notice = `Sale to ${fd.get('customer').trim()} recorded.`;
   },
   line(fd, c) {
-    const description = fd.get('description').trim();
-    if (!description || !find(c.company)) return false;
+    const product = (c.company.products || []).find(p => p.id === fd.get('productId'));   // v1.19.0 (G10 T1)
+    const description = fd.get('description').trim() || product?.name || '';
+    if (!description || !find(c.company)) { notice = 'Enter the item or choose a product.'; return false; }
     store.updateCompany(co => find(co).lines.push({
-      id: uid('ln'), description, qty: Math.max(0, +fd.get('qty') || 0), unit: fd.get('unit').trim(), unitCost: Math.max(0, +fd.get('unitCost') || 0),
+      id: uid('ln'), description, qty: Math.max(0, +fd.get('qty') || 0), unit: fd.get('unit').trim() || product?.unit || '', unitCost: Math.max(0, +fd.get('unitCost') || 0),
+      ...(product ? { productId: product.id } : {}),
     }));
   },
   cost(fd, c) {

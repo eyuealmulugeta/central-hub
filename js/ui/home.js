@@ -167,6 +167,7 @@ if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
 // v0.95.0: the photos of a day not posted yet, straight from the site (script dayPhotos); today's are read again after 2 minutes
 const live = new Map();   // "CODE|date" -> { list, at, busy }
 let mediaDay = '';        // the day tab chosen; '' = today
+let spotDay = '';         // v1.27.0: the Spotlight day tab; '' = today
 let lastLive = null;      // v0.95.1: the project and day the Dashboard last showed, for the 2-minute refresh
 // v0.95.1: while the Dashboard is open, today's photos are asked for again every 2 minutes (the page redraws when new ones come)
 if (typeof setInterval !== 'undefined' && typeof location !== 'undefined') setInterval(() => {
@@ -326,12 +327,16 @@ export function render(c) {
   const media = mediaFor(c, may('reports'));
   const reqs = may('requests') ? requestBoard(c.ws.requests || []) : { open: 0 };
   const book = may('siteinstr') ? bookLog(c.ws.siteInstr || []) : [];
-  const since = fromDay(toDay(c.today) - 14);
+  const wk = weekDays(c.today), since = [fromDay(toDay(c.today) - 14), wk[0]].sort()[0];   // v1.27.0: the whole week too
   // v0.93.0 (R3): with the visitors logged on site (Field Report Spotlight > Visitors)
   if (may('spotlight') && (store.isAdmin || (store.ranks || []).includes('hr_assistant'))) loadSiteNotes(c);
   const visits = may('spotlight') ? siteVisits().filter(x => String(x.at).slice(0, 10) >= since).map(x => ({ visit: x.visit, at: x.at, date: String(x.at).slice(0, 10), byName: x.byName || x.by, note: x.note })) : [];
   const spot = may('spotlight') ? [...(c.company.spotlight || []).filter(n => n.kind === 'project' && n.projectId === c.project.id && n.date >= since), ...visits]
-    .sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))).slice(0, 4) : [];
+    .sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))) : [];
+  // v1.27.0 (owner, 8 Nov): Spotlight by the days of this week, like the photos; a day opens its notes and visitors
+  const sDay = wk.includes(spotDay) && spotDay <= c.today ? spotDay : c.today, spotOn = spot.filter(n => n.date === sDay);
+  const spotTabs = html`<div class="xdays">${wk.map(d => { const n = spot.filter(x => x.date === d).length; return html`<button type="button" class="${d === sDay ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="spotDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
+      <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${n ? html`<i>${n}</i>` : ''}</button>`; })}</div>`;
   const people = onSite({ reports: c.ws.reports || [], team: c.ws.team || [], staff: c.company.staff || [], evaluations: may('evaluation') ? c.company.evaluations || [] : null, today: c.today });
   const split = c.money && c.led ? moneySplit({ budget: c.led.budget, spent: c.led.spent, requested: requestedAmount(c.ws.requests || [], c.project.currency, c.global.fx) }) : null;
   const bars = c.money ? summaries.filter(s => s.money && +s.budget > 0) : [];
@@ -354,8 +359,8 @@ export function render(c) {
     action: () => box('action', needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
           <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`]), { n: String(needs.length) }),
-    spot: () => box('spot', html`${spot.length ? '' : html`<p class="empty">No Spotlight note or visitor in the last 14 days.</p>`}<ul class="xlist">${spot.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
-      : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: String(spot.length), link: ['spotlight', 'All'] }),
+    spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
+      : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: `${spot.filter(x => x.date >= wk[0]).length} this week`, link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),
     people: () => peopleBox(people, may('evaluation')),
@@ -431,6 +436,7 @@ function addVideo(c, day) {
 export const actions = {
   videoAdd(el, c) { if (!vids.adding) addVideo(c, el.dataset.d); },
   mediaDay(el) { mediaDay = el.dataset.d || ''; },
+  spotDay(el) { spotDay = el.dataset.d || ''; },   // v1.27.0
   mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
   mediaKind(el) { mediaKind = el.dataset.k || ''; },
   arrangeOpen() { openArrange(); },

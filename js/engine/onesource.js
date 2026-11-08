@@ -102,7 +102,7 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
   const { toCode } = codeMaps(projects);
   const fr = new Map(frPeople.map(x => [low(x.email), x]));
   const adminSet = new Set(admins.map(low));
-  const out = { set: [], remove: [], users: [], strays: [], kept: [], managed: [] };
+  const out = { set: [], remove: [], users: [], strays: [], kept: [], managed: [], confirm: [] };
   const want = new Map();
   for (const p of staff) {
     const email = accountOf(p);
@@ -125,6 +125,10 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
     if (!codes.length) { if (cur && managed.includes(email)) out.remove.push(email); continue; }
     out.managed.push(email);
     if (!cur || cur.role !== role || [...(cur.projects || [])].map(up).sort().join(',') !== codes.join(',')) out.set.push({ email, role, projects: codes, name: p.name });
+    // v1.14.1 (owner, 8 Nov): the name and position on every report are the Directory's, confirmed (the phone locks them);
+    // before, a name typed on a shared phone ("Jojo") went on the reports of an account nobody had confirmed
+    const full = String(p.name || '').trim(), pos = String(p.title || '').trim();
+    if (full && (!cur || String(cur.full || '').trim() !== full || String(cur.pos || '').trim() !== pos || !cur.ok)) out.confirm.push({ email, full, pos });
   }
   for (const [email, cur] of fr) {
     if (want.has(email)) continue;

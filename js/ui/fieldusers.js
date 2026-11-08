@@ -306,7 +306,7 @@ async function compareLoad() {
     const ps = store.projects.filter(p => p.fieldCode);
     const rows = [];
     for (const p of ps) {
-      const c = compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`), store.fieldRouteSince);
+      const c = compareReports(await store.listCol(`projects/${p.id}/reports`), await store.listCol(`projects/${p.id}/fieldReports`), store.fieldRouteSince, store.fieldRouteAt);
       // v1.10.2 (owner): why the phone's copy was refused, kept by the server for each missing day
       const miss = c.onlyScript.length ? await store.listCol(`projects/${p.id}/fieldMiss`).catch(() => []) : [];
       c.why = [...new Set(miss.filter(m => c.onlyScript.includes(m.date)).map(m => m.why))];

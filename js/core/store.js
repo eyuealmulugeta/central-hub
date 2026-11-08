@@ -543,6 +543,7 @@ export const store = {
   get fieldRoute() { return fieldRoute?.route || 'script'; },
   /** v0.89.0: the day the route was last switched (yyyy-mm-dd), '' if never; Compare counts from it. */
   get fieldRouteSince() { return String(fieldRoute?.at || '').slice(0, 10); },
+  get fieldRouteAt() { return String(fieldRoute?.at || ''); },   // v1.14.1: the time, for Compare
   /** v0.44.0: one collection, read once (Compare). */
   async listCol(path) { return api ? api.list(path) : []; },
   async getDoc(path) { return api ? api.get(path) : null; },   // v0.54.0: one record read once (a Field Report report's whole text)

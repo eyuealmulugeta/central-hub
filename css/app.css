@@ -1963,3 +1963,11 @@ body.viewing { overflow: hidden; }
 .off-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #fdecea; color: #b42318; font-size: 11px; font-weight: 700; letter-spacing: .02em; }
 .tab.off { color: var(--muted); }
 .off-card { max-width: 560px; margin: 24px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+/* v1.22.2 (owner, 8 Nov: "change the theme of trading so that it won't be confusing"): Trading is teal with an amber band */
+:root[data-division="trading"] { --primary: #00796b; --primary-ink: #ffffff; --primary-soft: #c8ece6; --bg: #f1f6f5; }
+:root[data-division="trading"][data-theme="dark"] { --primary: #6fd3c2; --primary-ink: #00332c; --primary-soft: #12403a; --bg: #101716; }
+:root[data-division="trading"] .top { border-top: 4px solid #f2a900; }
+:root[data-division="trading"] .sidebar { box-shadow: inset 4px 0 0 #00796b; }
+:root[data-division="trading"] .division button.on { background: #00796b; color: #fff; }
+:root[data-division="trading"] .brand-name small::after { content: " · Trading"; color: #00796b; font-weight: 700; }

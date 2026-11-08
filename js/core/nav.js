@@ -48,6 +48,10 @@ const team = [
   { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'], team: true },
 ];
 
+// v1.22.2 (owner, 8 Nov: "in trading, installation settings, apps and features not related to trading should not be seen")
+export const INSTALL_SETTINGS = ['prices', 'links'];   // This project; Field Report and import
+const tradingTeam = team.map(h => (h.id === 'settings' ? { ...h, tabs: h.tabs.filter(t => !INSTALL_SETTINGS.includes(t)) } : h));
+
 export const MENUS = {
   // Today > the open project: Project, Reports, People, Money, Documents > Team
   installation: [
@@ -67,7 +71,7 @@ export const MENUS = {
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
-    ...team,
+    ...tradingTeam,
   ],
 };
 

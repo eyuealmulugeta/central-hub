@@ -21,7 +21,8 @@ import { positionGroups } from '../engine/positions.js';
 import { positionsOf, personByEmail } from '../engine/manpower.js';
 import { chooseGroups, groupOptions, chosenValue } from './choose.js';
 import { TITLES, GROUPS, ONE_PROJECT, titleOf, titleLabel, titlePatch, mayJoin, mayTake } from '../engine/titles.js';
-import { DIVISIONS, divisionsOf } from '../core/nav.js';
+import { DIVISIONS, divisionsOf, INSTALL_SETTINGS, pagesIn } from '../core/nav.js';
+import { currentDivision } from '../core/division.js';
 import { pictureFor, sizeNote, tell, LOGO } from '../core/image.js';
 import { stampPng } from './seal.js';
 
@@ -125,12 +126,13 @@ const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], 
 const link = ([k, label, ic]) => html`
       <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
 // v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)
+const inTrading = () => currentDivision() === 'trading';   // v1.22.2: Trading sees only what belongs to it
 const nav = () => html`
   <nav class="card set-nav" aria-label="Settings pages">
     <div class="set-group">My settings</div>
     ${link(['mine', 'My settings', 'access'])}
     ${store.isAdmin ? html`<div class="set-group">Admin settings</div>
-    ${NAV.map(link)}
+    ${NAV.filter(([k]) => !inTrading() || !INSTALL_SETTINGS.includes(k)).map(link)}
     <hr>
     <button type="button" class="side-link" id="btn-backup">${icon('backup')}<span>Backup</span></button>
     <button type="button" class="side-link" id="btn-clear-cache" title="Fixes a page that looks old or broken. Your records are kept.">${icon('backup')}<span>Clear cache</span></button>` : ''}
@@ -705,7 +707,9 @@ function projectPage(c) {
 /** Choose your apps: every app as a tile, grouped like the menu, switched on or off for the whole company. */
 function appsPage(c) {
   const g = c.global;
-  const all = APPS.flatMap(x => x.apps);
+  // v1.22.2: in Trading only the apps of the Trading menu (no projects, site or Field Report features)
+  const groups = inTrading() ? APPS.map(grp => ({ ...grp, apps: grp.apps.filter(a => pagesIn('trading').includes(a.page)) })).filter(grp => grp.apps.length) : APPS;
+  const all = groups.flatMap(x => x.apps);
   const on = all.filter(a => appOn(g, a.page)).length;
   return html`
     <div class="side settings">
@@ -717,7 +721,7 @@ function appsPage(c) {
           ${on < all.length ? html`<button class="btn small" data-act="appsAll">Switch all on</button>` : ''}
         </div>
       </section>
-      ${APPS.map(grp => html`
+      ${groups.map(grp => html`
         <section class="apps-group">
           <div class="apps-head"><h3>${grp.group}</h3><span class="muted">${grp.about}</span></div>
           <div class="apps-grid">${grp.apps.map(a => {
@@ -730,7 +734,7 @@ function appsPage(c) {
               </button>`;
           })}</div>
         </section>`)}
-      <p class="muted">Who may open each app is set under People and access. Pages a single project does not need are switched off under This project.</p>
+      <p class="muted">Who may open each app is set under People and access.${inTrading() ? ' Installation apps are set from Installation.' : ' Pages a single project does not need are switched off under This project.'}</p>
     </div>`;
 }
 /** v0.25.0: save the company calendar and write it on every project (each keeps its own week and days off). */
@@ -773,7 +777,7 @@ const chipText = text => html`<span class="chip ok">${text}</span>`;
 
 export function render(c) {
   if (section === 'mine' || !store.isAdmin) return html`${nav()}${minePage()}`;
-  if (section === 'apps') return html`${nav()}${appsPage(c)}`;
+  if (section === 'apps' || (inTrading() && INSTALL_SETTINGS.includes(section))) return html`${nav()}${appsPage(c)}`;
   if (section === 'prices') return html`${nav()}${projectPage(c)}`;
   if (section === 'access') return html`${nav()}${accessPage(c)}`;
   if (section === 'links') return html`${nav()}${linksPage(c)}`;
@@ -802,7 +806,7 @@ export function render(c) {
         })()}
         ${fxNotice ? html`<p class="ok">${fxNotice}</p>` : ''}`)}
 
-    ${panel('calendar', 'Company calendar', 'The working week and holidays of every project', () => calendarPanel(c))}
+    ${inTrading() ? '' : panel('calendar', 'Company calendar', 'The working week and holidays of every project', () => calendarPanel(c))}
 
     ${panel('company', 'Company letterhead', co.name || 'Name, address, bank details and logo for printed documents', () => html`
         <p class="muted">Printed at the top of every invoice, quotation, purchase order and report. Shared by all projects.</p>

@@ -310,7 +310,7 @@ function renderSidebar(name, summaries) {
   $('#side-project').hidden = $('#project-pick').hidden;
   // v0.24.0: everyone has My settings; the Admin settings stay the Admin's
   $('#btn-settings').hidden = !p;
-  $('#btn-settings').href = `#${store.isAdmin ? lastTab.settings || 'prices' : 'mine'}`;
+  $('#btn-settings').href = `#${store.isAdmin ? lastTab.settings || (division === 'trading' ? 'apps' : 'prices') : 'mine'}`;
   // deleting and settings are the Admin's: their buttons are hidden for everyone else
   document.body.classList.toggle('not-admin', !store.isAdmin);
 
@@ -381,6 +381,7 @@ function renderSidebar(name, summaries) {
 
 function render() {
   queued = false;
+  document.documentElement.dataset.division = division;   // v1.22.2: Trading has its own colours
   setExtraPositions(store.company?.extraPositions);   // v0.47.0: positions added by the Admin or GM
   const name = route();
   const view = VIEWS[name];

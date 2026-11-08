@@ -428,7 +428,8 @@ service cloud.firestore {
     function directPair(d) { return d.members is list && d.members.size() == 2 && me() in d.members && d.members[0] != d.members[1]; }
     match /company/main/direct/{record} {
       allow read: if signedIn() && me() in resource.data.members;
-      allow create: if (hasUser() || isOwner()) && request.resource.data.by == me() && directPair(request.resource.data)
+      // v1.13.0 (owner, R4): and an active Field Report account (Discuss on the phone)
+      allow create: if (hasUser() || isOwner() || (exists(fieldDoc()) && get(fieldDoc()).data.st == 'active')) && request.resource.data.by == me() && directPair(request.resource.data)
         && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
       allow update: if signedIn() && resource.data.by == me() && messageKept() && (messageTakenBack() || messageCorrected());
     }
@@ -440,11 +441,13 @@ service cloud.firestore {
     match /company/main/{section}/{record} {
       allow read: if (seesAll() && section != 'direct')
         || (section == 'messages' && hasUser())
+        || (section == 'messages' && fieldOn(resource.data.channel))   // v1.13.0 (owner, R4): the project's channel on Field Report
         || (section in ['shipments', 'sales'] && staffWith(['trade', 'finance']) && mine(resource.data))
         || (section == 'contracts' && staffWith(['contracts']) && mine(resource.data))
         || (section == 'contacts' && staffWith(['contacts']) && mine(resource.data))
         || (section == 'meetings' && staffWith(['meetings']) && mine(resource.data));
-      allow create: if section == 'messages' && (isOwner() || hasUser()) && request.resource.data.by == me();
+      allow create: if section == 'messages' && (isOwner() || hasUser() || fieldOn(request.resource.data.channel)) && request.resource.data.by == me()
+        && request.resource.data.get('text', '') is string && request.resource.data.get('text', '').size() <= 2000;
       allow create, update: if (isOwner() && !(section in ['messages', 'direct']))
         || (section in ['shipments', 'sales'] && staffWith(['trade']) && keptMine())
         || (section == 'contracts' && staffWith(['contracts']) && keptMine())

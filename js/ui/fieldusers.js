@@ -328,6 +328,9 @@ async function osLoad() {
   catch { osState = { flag: {}, st: null }; }
   osBusy = false; store.notify();
 }
+/** v1.22.1: removals held 24 hours, shown to the Admin before they happen. */
+const waitingNote = st => ((st?.waiting || []).length ? html`<p class="callout warn small"><b>Will lose Field Report access in 24 hours</b> unless the Directory is corrected: ${st.waiting.map(w => `${w.email} (${w.why}, since ${String(w.since).slice(0, 16).replace('T', ' ')})`).join('; ')}.</p>` : '');
+
 function oneSourceCard(people) {
   if (store.role !== 'owner' || !feed) return '';
   if (!osState && !osBusy) osLoad();
@@ -342,6 +345,7 @@ function oneSourceCard(people) {
   const strays = st?.strays || [], errs = st?.errors || [];
   return html`<section class="card set-box"><h3>One source <span class="chip ok">On</span></h3>
     <p class="muted small">Field Report and Central Hub follow the Manpower Directory${st ? `. Last check ${when(st.at)}: ${st.set} set, ${st.removed} removed, ${st.users} Central Hub ${st.users === 1 ? 'record' : 'records'} given projects` : ': the first check runs within 2 minutes'}.</p>
+    ${waitingNote(st)}
     ${errs.length ? html`<div class="callout warn small"><b>Not applied</b><ul>${errs.map(e => html`<li>${e.name || e.email}: ${e.text}</li>`)}</ul></div>` : ''}
     ${strays.length || plan.length ? html`<div class="callout warn small"><b>Not from the Directory</b>: ${[...new Set([...strays.map(x => x.email), ...plan.map(x => x.email)])].join(', ')}. Bring them in, or remove the sign-in email in Field Report's own list.</div>${list}
       ${plan.length ? html`<div class="actions left"><button class="btn" type="button" data-act="fuOneSource" ${busy ? 'disabled' : ''}>Add ${plan.length} to the Directory</button></div>` : ''}` : html`<p class="ok small">✓ Everyone on Field Report comes from the Directory.</p>`}

@@ -98,11 +98,21 @@ export function applyImport(staff = [], plan = [], { newId, today = '', by = '' 
  * frPeople: the script's access list; admins: the Admin's own emails. managed: emails the sync set before (removable).
  * -> { set: [{ email, role, projects, name }], remove: [email], users: [{ email, projects }], strays: [fr], kept: [fr], managed }
  */
-export function syncPlan({ staff = [], frPeople = [], projects = [], users = [], admins = [], managed = [] }) {
+// v1.22.1 (owner, 8 Nov: "existing users are signed out and asked to sign in as a new user; a different approach"):
+// a project switched off in the Directory no longer takes Field Report access away (the person keeps what they have);
+// access goes only when the person has left or their sign-in email is taken off, and only after HOLD_HOURS, shown first.
+export const HOLD_HOURS = 24;
+export function syncPlan({ staff = [], frPeople = [], projects = [], users = [], admins = [], managed = [], pending = {}, now = new Date().toISOString(), hold = HOLD_HOURS }) {
   const { toCode } = codeMaps(projects);
   const fr = new Map(frPeople.map(x => [low(x.email), x]));
   const adminSet = new Set(admins.map(low));
-  const out = { set: [], remove: [], users: [], strays: [], kept: [], managed: [], confirm: [] };
+  const out = { set: [], remove: [], users: [], strays: [], kept: [], managed: [], confirm: [], waiting: [], pending: {} };
+  // held removals: removed once they have waited `hold` hours; until then listed for the Admin
+  const drop = (email, why) => {
+    const since = pending[email]?.since || now;
+    if (Date.parse(now) - Date.parse(since) >= hold * 36e5) out.remove.push(email);
+    else { out.pending[email] = { since, why }; out.waiting.push({ email, since, why }); }
+  };
   const want = new Map();
   for (const p of staff) {
     const email = accountOf(p);
@@ -122,7 +132,7 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
     const role = frRoleOf(p.title);
     if (KEEP_ROLES.includes(role)) { if (cur) out.kept.push(cur); continue; }   // a GM is set up by the Admin once, then kept
     const codes = pids.map(id => toCode.get(id)).filter(Boolean).sort();
-    if (!codes.length) { if (cur && managed.includes(email)) out.remove.push(email); continue; }
+    if (!codes.length) { if (cur) { out.kept.push(cur); if (managed.includes(email)) out.managed.push(email); } continue; }   // v1.22.1: no project now: keeps its access
     out.managed.push(email);
     if (!cur || cur.role !== role || [...(cur.projects || [])].map(up).sort().join(',') !== codes.join(',')) out.set.push({ email, role, projects: codes, name: p.name });
     // v1.14.1 (owner, 8 Nov): the name and position on every report are the Directory's, confirmed (the phone locks them);
@@ -132,8 +142,9 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
   }
   for (const [email, cur] of fr) {
     if (want.has(email)) continue;
+    if (!staff.length) { out.kept.push(cur); continue; }   // v1.22.1: an empty Directory read removes nobody
     if (adminSet.has(email) || KEEP_ROLES.includes(cur.role)) { out.kept.push(cur); continue; }
-    if (managed.includes(email)) out.remove.push(email);   // left, or the sign-in email taken off in the Directory
+    if (managed.includes(email)) drop(email, want.size ? 'left, or the sign-in email was taken off in the Directory' : 'not in the Directory');   // held HOLD_HOURS (v1.22.1)
     else out.strays.push(cur);
   }
   return out;

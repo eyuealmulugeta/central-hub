@@ -1,6 +1,6 @@
 // v0.61.0 (owner, 2 Nov, Phase B1): expenses with approval. An expense is a request of the kind "expense" (same list,
 // same database rules, same Field Report sending as material, manpower and equipment requests), with an amount in ETB or
-// USD, a Ledger category, what it is for and a receipt photo. The Project Manager (an approver) approves or sends it back
+// USD, a Ledger category, what it is for and a receipt photo. The Project Engineer (an approver) approves or sends it back
 // with a note; above the company's limit the General Manager approves too. Once approved it is a cost in the Ledger,
 // linked to the request; whoever pays marks it paid with the method and the bank reference. Pure functions.
 

@@ -25,7 +25,7 @@ export const FEATURES = [
   ['fr_penalty', 'fr', 11, 'Penalties', 'Sees the penalties tab; Does gives a penalty (deciding stays with the approvers)'],
   ['fr_quick', 'fr', 11, 'Quick tab', 'The + tab: quick notes, photos and requests'],
   ['fr_media', 'fr', 11, 'FR Dashboard', 'Photos and videos of all projects (GM)'],
-  ['fr_store', 'fr', 11, 'Store', 'Sees the site store; Does records receive, issue, return, transfer and the count (the PM approves)'],   // v1.3.0 (FR R5)
+  ['fr_store', 'fr', 11, 'Store', 'Sees the site store; Does records receive, issue, return, transfer and the count (the PE approves)'],   // v1.3.0 (FR R5)
   ['ch_projects', 'ch', 12, 'Projects', 'Create and set up projects; others see the ones they are on', ['dashboard']],
   ['ch_delete', 'ch', 13, 'Delete', 'Anything deleted goes to the recycle bin', null, true],
   ['ch_reports', 'ch', 14, 'Daily reports in CH', 'Read, approve, send back, comment', ['reports']],

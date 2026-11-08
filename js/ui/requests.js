@@ -1,5 +1,5 @@
 // Requests: material, manpower and equipment asked for by the site. A Site Engineer raises a
-// request, the Project Manager or Admin approves or refuses it, the office arranges it, and the
+// request, the Project Engineer or Admin approves or refuses it, the office arranges it, and the
 // site confirms it arrived. An approved request becomes a follow-up for the office. Each request
 // prints on the letterhead and can be emailed as a PDF, for example to a supplier.
 
@@ -211,7 +211,7 @@ function expenseDetail(r, c) {
 const reqRef = (c, r) => docRef({ company: c.global.company, project: c.project, key: r.number });
 
 export const actions = {
-  /** v1.4.0 (R6): a draft PO from this approved material request (PM or office); the GM approves it before it goes out. */
+  /** v1.4.0 (R6): a draft PO from this approved material request (PE or office); the GM approves it before it goes out. */
   reqPo(el, c) {
     const r = find(c.ws);
     if (!r || r.kind !== 'material' || !approver()) return;

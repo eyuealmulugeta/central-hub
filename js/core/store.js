@@ -78,7 +78,7 @@ let requests = [];       // people who signed in and are waiting for the Admin's
 let loading = false;     // the open workspace is still arriving
 let connectedAt = 0;     // when this sign-in started: counts are not trusted to lower a "read" mark for a few seconds
 let pages = ROLE_PAGES.office;   // pages this person may open (the Admin opens everything)
-let ranks = OWNER_RANKS;   // Site Engineer, Project Manager, General Manager: decides whom this person may evaluate
+let ranks = OWNER_RANKS;   // Site Engineer, Project Engineer, General Manager: decides whom this person may evaluate
 let session = null;      // the record this device holds in sessions/<email>: one signed-in device per person (not the Admin)
 let heartbeat = null;    // timer that keeps the session record fresh
 let sessions = [];       // every person's session record (the Owner sees these, to reset one)
@@ -494,7 +494,7 @@ export const store = {
   clearFaults() { if (viewOnly()) return; send(api.batch(faults.map(f => ({ path: `diagnostics/${f.id}`, data: null })))); },
   /** The divisions this person works in, as ticked by the Admin. Empty means both. */
   get divisions() { return divisions; },
-  /** The ranks this person holds. The Admin holds General Manager and Project Manager. */
+  /** The ranks this person holds. The Admin holds General Manager and Project Engineer. */
   get ranks() { return ranks; },
   /** Admin only: addresses that signed in without having been given access, waiting for a yes or no. */
   get requests() { return requests.filter(r => r.email && !users.some(u => u.email === r.email)); },

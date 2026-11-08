@@ -11,7 +11,7 @@ import { isOpen } from './requests.js';
 /** Who answers for an item, by position. */
 export const WHO = {
   se: { label: 'Site Engineer', re: /site engineer|site supervisor|foreman/i },
-  pm: { label: 'Project Manager / Coordinator', re: /project manager|coordinator|project engineer/i },
+  pm: { label: 'Project Engineer / Coordinator', re: /project manager|coordinator|project engineer/i },
   acc: { label: 'Accountant', re: /accountant|finance/i },
   gm: { label: 'General Manager (every item)', re: /general manager|\bgm\b/i },   // v1.3.0 (owner, 7 Nov): GM for all
 };

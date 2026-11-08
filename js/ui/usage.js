@@ -1,6 +1,6 @@
 // v1.5.0 (owner, 7 Nov, FR R7): Reports > Materials used. Per schedule task and material: issued from the site store
 // (Field Report, approved), what the work done should have used, the difference in % and money (latest PO price), Excel.
-// The PM or office sets how much each task's work should use. See engine/usage.js.
+// The PE or office sets how much each task's work should use. See engine/usage.js.
 
 import { store } from '../core/store.js';
 import { html, chip, options } from './dom.js';

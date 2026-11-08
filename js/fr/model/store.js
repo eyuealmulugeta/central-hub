@@ -1,5 +1,5 @@
-// 2.61.0 (owner, 7 Nov, R5): the site store. The Storekeeper (or the person the PM delegates) records what comes in
-// and what goes out; the PM approves every movement (owner: "every time material is given or taken"); a weekly count
+// 2.61.0 (owner, 7 Nov, R5): the site store. The Storekeeper (or the person the PE delegates) records what comes in
+// and what goes out; the PE approves every movement (owner: "every time material is given or taken"); a weekly count
 // compares what is there with the books, its differences approved by the PE or GM. Issuing needs the receiver's
 // signature on the phone. Kept in Central Hub's database: projects/<id>/storeMoves/<id> (the keeper: .../keeper).
 
@@ -12,7 +12,7 @@ export const KINDS = [
 ];
 export const kindWord = k => (KINDS.find(([v]) => v === k) || [])[1] || k || '';
 export const SIGN = { receive: 1, return: 1, issue: -1, transfer: -1 };
-export const MOVE_WORD = { waiting: 'Waiting for PM', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
+export const MOVE_WORD = { waiting: 'Waiting for PE', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' };
 export const MOVE_TONE = { waiting: 'warn', approved: 'ok', rejected: 'bad', cancelled: '' };
 export const UNITS = ['pcs', 'bag', 'kg', 'ton', 'm', 'm²', 'm³', 'L', 'roll', 'sheet', 'box', 'set', 'lot'];
 export const COUNT_DAYS = 7;
@@ -20,7 +20,7 @@ export const COUNT_DAYS = 7;
 /** The item's key: its name and unit, so "Cement bag" and "cement  Bag" are one item. */
 export const itemKey = (name, unit) => `${String(name || '').trim().toLowerCase().replace(/\s+/g, ' ')}|${String(unit || '').trim().toLowerCase()}`;
 
-/** Field Report roles: engineer (SE), coordinator (PE / PM), exec (GM), admin, viewer. The keeper may be any account. */
+/** Field Report roles: engineer (SE), coordinator (PE), exec (GM), admin, viewer. The keeper may be any account. */
 export const mayApprove = role => ['coordinator', 'exec', 'admin'].includes(role);
 export const mayRecord = (role, email, keeper) => ['engineer', 'coordinator', 'exec', 'admin'].includes(role) || (!!email && String(email).toLowerCase() === String(keeper && keeper.keeper || '').toLowerCase());
 export const maySetKeeper = role => ['coordinator', 'exec', 'admin'].includes(role);
@@ -115,7 +115,7 @@ export function itemsOf(list, requests = []) {
   return [...m.values()].sort((a, b) => a.item.localeCompare(b.item));
 }
 
-/** Items at or under their minimum: [{ key, item, unit, qty, min }]. mins = { key: number } (set by the PM). */
+/** Items at or under their minimum: [{ key, item, unit, qty, min }]. mins = { key: number } (set by the PE). */
 export const lowOf = (book, mins = {}) => Object.values(book).filter(e => Number(mins[e.key]) > 0 && e.qty <= Number(mins[e.key])).map(e => ({ ...e, min: Number(mins[e.key]) }));
 
 /** The last count's day, and whether one is due (none approved or waiting in the last 7 days). */
@@ -147,7 +147,7 @@ export const moveLine = m => (m.kind === 'count' ? `Stock count, ${(m.lines || [
 /**
  * 2.62.0 (owner, 7 Nov, R6): purchase orders. Central Hub publishes each PO that went out (projects/<id>/poOpen/<id>:
  * { id, number, supplier, date, due, status, lines: [{ item, unit, qty }] }); a Receive may name it. What is still to come
- * per line = ordered - received (approved); received but waiting for the PM shows apart.
+ * per line = ordered - received (approved); received but waiting for the PE shows apart.
  */
 export function poLeft(po, list) {
   const got = {};

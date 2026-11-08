@@ -766,7 +766,7 @@ export const submits = {
       return false;
     }
     store.update(ws => {
-      // v0.54.0 (owner, 20b): a report typed here, when the site did not send one from Field Report, waits for the PM or GM like the others
+      // v0.54.0 (owner, 20b): a report typed here, when the site did not send one from Field Report, waits for the PE or GM like the others
       ws.reports.push({ id: uid('r'), date, by, weather: fd.get('weather'), manpower, entries, issue, field, source: 'hub', review: 'pending' });
       if (issue) {
         ws.items.push({

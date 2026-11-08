@@ -1,6 +1,6 @@
 // The title of a person with access: one, chosen from the same list for everybody. It is kept as the person's one
 // "rank" (users/<email>.ranks = [key]) and as the readable title. The three ranks of the evaluation chain (Site
-// Engineer, Project Manager, General Manager) keep their meaning there; the others rate nobody.
+// Engineer, Project Engineer, General Manager) keep their meaning there; the others rate nobody.
 // Titles come in three groups. A Project Engineer (who manages the project) and a Site Engineer (who manages the site)
 // are on one project at a time. The key project_manager is kept for the Project Engineer: it is the rank of the chain.
 

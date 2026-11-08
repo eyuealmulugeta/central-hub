@@ -1,5 +1,5 @@
 // v1.8.0 (owner, 7 Nov; with Field Report 2.66.0): Reports > Work photos. Technicians share photos of the work they executed on
-// Field Report; the Site Engineer or PM approves or rejects them with a reason. Here: per technician what was sent, approved and
+// Field Report; the Site Engineer or PE approves or rejects them with a reason. Here: per technician what was sent, approved and
 // rejected and why; phones with 3 rejected in 7 days (the Admin blocks them in Field Report users); the photos; Excel.
 
 import { store } from '../core/store.js';
@@ -20,7 +20,7 @@ export function render(c) {
   const ws = c.ws || store.ws, all = ws.workShots || [], stats = techStats(all), bad = badDevices(all, c.now || Date.now());
   const list = sortShots(all).filter(x => show === 'all' || x.status === 'waiting').slice(0, 60);
   return html`<section class="card wide">
-    <div class="toolbar"><h2>Work photos</h2><span class="muted">Shared by technicians on Field Report; the Site Engineer or PM approves or rejects them.</span><span class="grow"></span>
+    <div class="toolbar"><h2>Work photos</h2><span class="muted">Shared by technicians on Field Report; the Site Engineer or PE approves or rejects them.</span><span class="grow"></span>
       <button type="button" class="btn" data-act="wpCsv">Excel</button></div>
     ${bad.length ? html`<div class="callout warn"><b>Phones with ${BAD_COUNT} or more rejected photos in ${BAD_DAYS} days</b>
       <ul>${bad.map(d => html`<li>${d.byName} · phone ${d.dev} · ${d.count} rejected</li>`)}</ul>

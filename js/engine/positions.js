@@ -39,6 +39,7 @@ export const tierOfPosition = r => {
 const OLD_ROLES = {
   'container house technician': 'Technician', 'general foreman': 'Foreman', 'steel structure foreman': 'Foreman',
   'site manager': 'Project Engineer',   // v0.57.0 (owner): the same position, not a new one
+  'project manager': 'Project Engineer', 'pm': 'Project Engineer', 'pe': 'Project Engineer',   // v1.13.1 (owner, 8 Nov): PE and PM are the same title
   'daily labor': 'Daily labourer', 'site architect': 'Architect',   // v0.29.0: an office position
   'semi-skilled labourer': 'Semi-skilled labor',
   'site guard': 'Security', 'procurement manager': 'Procurement', 'logistics coordinator': 'Logistics', 'quantity surveyor (qs)': 'QS', 'hr/admin assistant': 'HR', 'coordinator': 'Project Coordinator', 'site technician': 'Technician', 'welder / fitter': 'Welder',   // v0.47.0: the Excel words

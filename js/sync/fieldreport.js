@@ -276,7 +276,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
     (meta.requestItems || []).forEach((r, i) => {
       const itemId = `${id}_${i}`;
       if (!r.text || r.live || ws.items.some(x => x.id === itemId)) return;   // v0.38.0: a live one is already under Requests
-      // v0.61.0: an expense sent with the report (no connection on site) waits under Requests for the PM, as one sent live
+      // v0.61.0: an expense sent with the report (no connection on site) waits under Requests for the PE, as one sent live
       if (r.category === 'Expense') {
         if (+r.amount > 0 && !ws.requests.some(x => x.id === itemId)) ws.requests.push(siteExpense(r, itemId, meta, by));
         return;

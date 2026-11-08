@@ -64,7 +64,7 @@ export function usageRows({ tasks = [], reports = [], moves = [], docs = [] } = 
 export const FLAG_WORD = { over: 'Overuse', under: 'Less than expected', early: 'Issued, no work reported yet', nonorm: 'No usage set for this task', '': 'OK' };
 export const FLAG_TONE = { over: 'bad', under: 'warn', early: 'warn', nonorm: '', '': 'ok' };
 
-/** What goes to the PM each week and to the GM's Sunday summary: overuse and less-than-expected only. */
+/** What goes to the PE each week and to the GM's Sunday summary: overuse and less-than-expected only. */
 export const weekFlags = rows => rows.filter(r => r.flag === 'over' || r.flag === 'under');
 export const flagLine = (project, flags) => `${project}: ${flags.length} material${flags.length === 1 ? '' : 's'} off the expected use (${flags.slice(0, 3).map(f => `${f.item} on ${f.task} ${f.pct > 0 ? '+' : ''}${f.pct}%`).join(', ')}${flags.length > 3 ? ', …' : ''}).`;
 

@@ -412,16 +412,22 @@ service cloud.firestore {
     }
 
     // Discuss messages: everyone with access reads them and writes their own. The sender may correct the text within
-    // a minute of sending (the app allows 30 seconds; the rest is for a slow connection), and take a message back at
-    // any time, which empties it and marks it deleted. The Admin may take back anyone's. Nothing else changes.
+    // a minute and a half of sending (the app allows 1 minute; the rest is for a slow connection), and take a message back
+    // in the first 5 minutes, which empties it and marks it deleted (v1.13.1). The Admin may take back anyone's. Nothing else changes.
     function messageKept() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'deleted', 'deletedAt'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'deleted', 'deletedAt', 'hiddenFor'])
         && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
     }
     function messageTakenBack() { return request.resource.data.get('deleted', false) == true && request.resource.data.text == ''; }
     function messageCorrected() {
       return request.resource.data.get('deleted', false) == false && resource.data.get('deleted', false) == false
-        && request.time.toMillis() < resource.data.get('sentMs', 0) + 60000;
+        && request.time.toMillis() < resource.data.get('sentMs', 0) + 90000;   // v1.13.1: the app allows 1 minute
+    }
+    // v1.13.1 (owner, 8 Nov): the sender deletes for everyone in the first 5 minutes (a little more for a slow
+    // connection); after that only from their own view (hiddenFor = [the sender]); the other side still reads it.
+    function messageTakeBackOk() { return messageTakenBack() && request.time.toMillis() < resource.data.get('sentMs', 0) + 330000; }
+    function messageHidden() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenFor']) && request.resource.data.hiddenFor == [me()];
     }
     // v0.65.0: one-to-one messages. Only the two people in it read them (the Admin too only when one of the two); the
     // sender writes their own, may correct it within a minute and take it back at any time, like the channels.
@@ -431,10 +437,10 @@ service cloud.firestore {
       // v1.13.0 (owner, R4): and an active Field Report account (Discuss on the phone)
       allow create: if (hasUser() || isOwner() || (exists(fieldDoc()) && get(fieldDoc()).data.st == 'active')) && request.resource.data.by == me() && directPair(request.resource.data)
         && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
-      allow update: if signedIn() && resource.data.by == me() && messageKept() && (messageTakenBack() || messageCorrected());
+      allow update: if signedIn() && resource.data.by == me() && messageKept() && (messageTakeBackOk() || messageCorrected() || messageHidden());
     }
     match /company/main/messages/{record} {
-      allow update: if messageKept() && ((resource.data.by == me() && (messageTakenBack() || messageCorrected()))
+      allow update: if messageKept() && ((resource.data.by == me() && (messageTakeBackOk() || messageCorrected() || messageHidden()))
         || (isOwner() && messageTakenBack()));
     }
 

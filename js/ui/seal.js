@@ -22,7 +22,7 @@ const myName = () => store.profile?.name || store.user?.name || '';
  * v0.82.0 (owner): everyone signs under their own title: a Project engineer under Project engineer, a Site engineer
  * under Site engineer. A document with no box of the signer's title offers all its boxes.
  */
-const TITLE_OF = [['general_manager', /general manager/i], ['project_manager', /project engineer/i], ['site_engineer', /site engineer/i]];
+const TITLE_OF = [['general_manager', /general manager/i], ['project_manager', /project engineer|project manager/i], ['site_engineer', /site engineer/i]];
 const myRank = () => (store.isAdmin ? 'general_manager' : TITLE_OF.map(([k]) => k).find(k => (store.ranks || []).includes(k)) || '');
 export const signLabels = (labels, rank = myRank()) => {
   if (rank === true) rank = 'general_manager';   // v0.81.0 callers

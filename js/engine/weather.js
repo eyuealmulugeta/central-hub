@@ -1,7 +1,7 @@
 // v1.6.0 (owner, 7 Nov, FR R8): weather and holidays by project location. The site's map position (project.site
 // { lat, lng }) gives Field Report the day's weather and both apps a 3-day forecast (Open-Meteo, free, no key). A weather
 // day is a day the site reported "no work" because of the weather (owner: that is enough, no rain threshold); weather days
-// are listed for the PM to claim, they never extend the time on their own (owner). Public holidays come from a yearly list
+// are listed for the PE to claim, they never extend the time on their own (owner). Public holidays come from a yearly list
 // per country; the Admin adds them to the project's days off (the schedule moves, so it is the Admin's decision). Pure.
 
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
@@ -79,7 +79,7 @@ export function monthRows(project, reports = [], year) {
   return rows;
 }
 
-/** The weather days of a period, for the PM's claim. */
+/** The weather days of a period, for the PE's claim. */
 export const weatherDays = (reports = [], from = '', to = '9999') => reports.filter(r => isWeatherDay(r) && r.date >= from && r.date <= to)
   .map(r => ({ date: r.date, reason: r.field.reason || '', note: r.field.note || '' })).sort((a, b) => a.date.localeCompare(b.date));
 

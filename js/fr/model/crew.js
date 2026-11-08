@@ -67,7 +67,7 @@ export const attendanceRows = crew => (crew && crew.rows || []).filter(r => r.st
 export const initials = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
 /** 2.5.0: the morning crew photo. Until the start hour it is on time, until 15 minutes after it late attendance, after that
- *  the camera is closed (2.7.0: the start hour is the project's, set by the PM or GM; 08:00 when none).
+ *  the camera is closed (2.7.0: the start hour is the project's, set by the PE or GM; 08:00 when none).
  *  The server's clock decides when there is a connection; without one the phone's clock is used and the photo says so.
  *  A phone clock more than 5 minutes away from the server's makes the time doubtful. No limit on how many. */
 export const CREW_ON_TIME = '08:00', LATE_MIN = 15, DOUBT_MIN = 5;

@@ -1,17 +1,17 @@
 // 2.66.0 (owner, 7 Nov): technicians share pictures of the work they executed. A technician account opens only Share work:
 // camera photos (up to 3), the task, a note; the phone refuses a picture that is blurred or too dark or bright. The Site
-// Engineer or PM approves it or rejects it with a reason; a phone with 3 rejected in 7 days is reported to the Admin, who may
+// Engineer or PE approves it or rejects it with a reason; a phone with 3 rejected in 7 days is reported to the Admin, who may
 // block it. Kept in Central Hub's database: projects/<id>/workShots/<id>. The same file is in Central Hub (js/fr/model).
 
 export const MAX_PHOTOS = 3;
 export const PHOTO_CHARS = 230000;   // each photo's data URL; 3 stay well under Firestore's 1 MB a record
 export const REJECT_REASONS = [['blur', 'Not clear'], ['dark', 'Too dark'], ['place', 'Wrong place'], ['task', 'Not this task'], ['other', 'Other']];
 export const reasonWord = k => (REJECT_REASONS.find(([v]) => v === k) || [])[1] || k || '';
-export const SHOT_WORD = { waiting: 'Waiting for the SE / PM', approved: 'Approved', rejected: 'Rejected' };
+export const SHOT_WORD = { waiting: 'Waiting for the SE / PE', approved: 'Approved', rejected: 'Rejected' };
 export const SHOT_TONE = { waiting: 'warn', approved: 'ok', rejected: 'bad' };
 export const BAD_DAYS = 7, BAD_COUNT = 3;
 
-/** Field Report roles: technician shares; engineer (SE), coordinator (PE / PM), exec (GM), admin review. */
+/** Field Report roles: technician shares; engineer (SE), coordinator (PE), exec (GM), admin review. */
 export const isTechnician = role => role === 'technician';
 export const mayReview = role => ['engineer', 'coordinator', 'exec', 'admin'].includes(role);
 

@@ -1,6 +1,6 @@
 // v0.80.0 (owner, 3 Nov): the daily report as the site diary, signed by the project's consultant by link, the way a
 // site instruction is (company/main/silinks with kind 'diary', answered once in company/main/sisigned). Only on projects
-// whose consultant switch is on (Documents > Consultant). Sent by the Admin, a PM or the GM, one day at a time.
+// whose consultant switch is on (Documents > Consultant). Sent by the Admin, a PE or the GM, one day at a time.
 
 export const DIARY_MAX = 900_000;   // the consultant's copy is one database record (at most 1 MB)
 export const DIARY_DAYS = 2;        // sent and not signed for this many days: a reminder

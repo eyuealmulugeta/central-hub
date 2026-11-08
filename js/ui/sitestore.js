@@ -1,6 +1,6 @@
 // v1.3.0 (owner, 7 Nov, FR R5): Reports > Site store. The project's store as Field Report keeps it: what is there,
 // each movement (receive, issue, return, transfer out, weekly count) with who recorded and who approved it, and an
-// Excel file. Read only here: the store keeper records on the phone and the PM approves there.
+// Excel file. Read only here: the store keeper records on the phone and the PE approves there.
 
 import { store } from '../core/store.js';
 import { html, chip } from './dom.js';
@@ -16,7 +16,7 @@ export function render(c) {
   const book = Object.values(bookOf(all)).filter(e => e.qty || e.waiting).sort((a, b) => a.item.localeCompare(b.item));
   const low = lowOf(bookOf(all), keeper?.mins || {}), due = countDue(all, c.today || todayISO()), list = sortMoves(all);
   return html`<section class="card wide">
-    <div class="toolbar"><h2>Site store</h2><span class="muted">Kept in Field Report by ${keeper ? (keeper.keeperName || keeper.keeper) : 'the store keeper (not set yet)'}. The PM approves every movement; the PE or GM the weekly count.</span><span class="grow"></span>
+    <div class="toolbar"><h2>Site store</h2><span class="muted">Kept in Field Report by ${keeper ? (keeper.keeperName || keeper.keeper) : 'the store keeper (not set yet)'}. The PE approves every movement; the PE or GM the weekly count.</span><span class="grow"></span>
       <button type="button" class="btn" data-act="ssCsv" ${all.length ? '' : 'disabled'}>Excel</button></div>
     <div class="actions left">
       <button type="button" class="btn ${tab === 'stock' ? 'primary' : ''}" data-act="ssTab" data-v="stock">In the store · ${book.length}</button>

@@ -48,7 +48,7 @@ export function render() {
       <tbody>${rows.map(p => html`<tr><td><b>${p.name}</b>${p.code ? html` <small class="muted">${p.code}</small>` : ''}${p.paused ? html`<br><small class="muted">Paused</small>` : ''}</td>
         <td>${chip(pct(p.score), tone(p.score))}</td>${p.items.map(cell)}
         <td class="nowrap">${p.trend.map(w => html`<span class="df-w ${tone(w.score)}" title="Week of ${w.week}">${pct(w.score)}</span>`)}</td></tr>`)}</tbody></table></div>
-      <p class="muted">A number is the working days late. Hold or tap a cell to see the last date and who answers for it: daily items the Site Engineer, weekly items and planning the Project Manager or Coordinator, money the Accountant.</p>
+      <p class="muted">A number is the working days late. Hold or tap a cell to see the last date and who answers for it: daily items the Site Engineer, weekly items and planning the Project Engineer or Coordinator, money the Accountant.</p>
       ${people.length ? html`<h3>On time, by person</h3><div class="table-wrap"><table class="table compact"><thead><tr><th>Person</th><th>On time</th><th>Items</th><th>Red</th></tr></thead>
         <tbody>${people.map(e => html`<tr><td>${e.name || e.email}</td><td>${chip(pct(e.score), tone(e.score))}</td><td>${e.items}</td><td>${e.red}</td></tr>`)}</tbody></table></div>` : ''}`
     : html`<p class="empty">${sum ? 'No projects to show.' : 'The first check has not run yet.'}</p>`}

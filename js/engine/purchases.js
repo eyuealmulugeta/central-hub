@@ -1,5 +1,5 @@
 // v1.4.0 (owner, 7 Nov, FR R6): purchases and the finance check. One chain per purchase: material request -> purchase
-// order (made by the PM or the office from the approved request, out only after the GM+ approval of G4) -> deliveries
+// order (made by the PE or the office from the approved request, out only after the GM+ approval of G4) -> deliveries
 // (Field Report Store, Receive against the PO) -> supplier bill (against the PO) -> payment. The three-way check compares
 // ordered, received and billed; a flagged bill, a USD bill or one above the PE limit needs the GM before it is paid
 // (owner: same limits as expenses, SE 5,000 / PE 20,000 ETB). No automatic withholding (owner). Pure functions.

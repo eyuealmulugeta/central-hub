@@ -27,7 +27,7 @@ export function render(c) {
   const country = /^ET/i.test(p.fieldCc || 'ETH') ? 'ET' : String(p.fieldCc || '').toUpperCase();   // only Ethiopia has a list so far
   const years = Object.keys(HOLIDAYS[country] || {}), list = holidaysFor(country, year), missing = list.filter(h => !(p.nonWorking || []).includes(h.date));
   return html`<section class="card wide">
-    <div class="toolbar"><h2>Weather and holidays</h2><span class="muted">Weather days are listed for the PM to claim; they do not extend the time on their own.</span><span class="grow"></span>
+    <div class="toolbar"><h2>Weather and holidays</h2><span class="muted">Weather days are listed for the PE to claim; they do not extend the time on their own.</span><span class="grow"></span>
       <select data-chg="wxYear" aria-label="Year">${options([...new Set([year - 1, year, year + 1, ...years.map(Number)])].sort().map(y => [y, String(y)]), year)}</select>
       <button type="button" class="btn" data-act="wxCsv">Excel</button></div>
     <div class="grid2">

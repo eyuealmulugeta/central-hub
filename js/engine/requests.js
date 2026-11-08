@@ -1,5 +1,5 @@
 // Material, manpower and equipment requests from site to the office. A Site Engineer asks, the
-// Project Manager or Admin approves or refuses, the office arranges it, the site confirms it
+// Project Engineer or Admin approves or refuses, the office arranges it, the site confirms it
 // arrived. Pure functions; the screen is ui/requests.js and firestore.rules enforces the same
 // lines (a Site user may only create a request, or cancel one nobody has answered yet).
 

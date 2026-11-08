@@ -1,8 +1,8 @@
 // Discuss: short messages between the people of Amistad. One channel for the
 // whole company and one per project. Messages are company-wide records, one
 // document each, so they appear on everyone's screen as they are sent.
-// The sender may correct a message within 30 seconds, and take it back at any time: it then reads
-// "This message was deleted" with the time. A new message from someone else rings and shows a note.
+// The sender may correct a message within 1 minute (v1.13.1, was 30 seconds), and take it back in the first 5 minutes:
+// it then reads "This message was deleted" with the time. After 5 minutes Delete only hides it from the sender (hiddenFor). A new message from someone else rings and shows a note.
 // v0.65.0 (owner, Phase C2): private one-to-one chats ('dm:<email>'), in company.direct; only the two people read them.
 
 import { store } from '../core/store.js';
@@ -19,7 +19,10 @@ const SEEN_KEY = 'sf:chat:seen';
 const MAX_SHOWN = 300;      // the newest messages of a channel; older ones stay in the database
 const MAX_LENGTH = 2000;
 const COLOURS = ['#0a3440', '#b47d14', '#3b6e4f', '#6a4c93', '#a23e48', '#2f6690'];
-export const EDIT_SECONDS = 30;
+export const EDIT_SECONDS = 60;
+export const TAKE_BACK_MS = 5 * 60e3;   // v1.13.1 (owner): for everyone in the first 5 minutes, then only from the sender's view
+export const takeBackLeft = (m, now = Date.now()) => !m.deleted && now - (m.sentMs || Date.parse(m.at) || 0) < TAKE_BACK_MS;
+const hiddenFromMe = m => (m.hiddenFor || []).includes(me());
 const LINK = /(https?:\/\/[^\s<>"]+|www\.[^\s<>"]+)/g;
 
 let open = null;
@@ -89,7 +92,7 @@ const channels = (company = store.company || {}) => [{ id: general(), name: 'Gen
 const visible = (m, id) => m.channel === id && String(m.at || '') >= store.seesFrom(id, general());
 const inChannel = (company, id) => (isDirect(id)
   ? (company.direct || []).filter(m => (m.members || []).includes(me()) && (m.members || []).includes(otherOf(id)))
-  : (company.messages || []).filter(m => visible(m, id)));
+  : (company.messages || []).filter(m => visible(m, id))).filter(m => !hiddenFromMe(m));
 const unreadIn = (company, id, seen = readSeen()) => inChannel(company, id).filter(m => m.by !== me() && m.at > (seen[id] || '')).length;
 
 /** Messages from other people in this person's channels that they have not opened yet. */
@@ -207,7 +210,7 @@ export function render(c) {
           <div class="chat-body">
             <span class="chat-meta"><b>${who.name}</b><span class="muted">${timeLabel(m.at)}${m.edited && !m.deleted ? ', edited' : ''}</span>
               ${!m.deleted && left && editing !== m.id ? html`<button type="button" class="btn ghost small" data-act="edit" data-id="${m.id}" title="You can correct it for ${left} more seconds">Edit</button>` : ''}
-              ${!m.deleted && (own || (c.admin && !current.direct)) ? html`<button type="button" class="btn ghost small" data-act="unsend" data-id="${m.id}" title="Delete this message for everyone">Delete</button>` : ''}</span>
+              ${!m.deleted && (own || (c.admin && !current.direct)) ? html`<button type="button" class="btn ghost small" data-act="unsend" data-id="${m.id}" title="${own && !takeBackLeft(m) ? 'Delete from your view (the others still see it)' : 'Delete this message for everyone'}">Delete</button>` : ''}</span>
             ${m.deleted ? html`<p class="chat-gone">This message was deleted, ${timeLabel(m.deletedAt || m.at)}${sameDay(m.deletedAt || m.at, m.at) ? '' : ` on ${dayLabel(m.deletedAt)}`}</p>`
               : editing === m.id ? html`<form data-form="edit" class="chat-edit"><input name="text" maxlength="${MAX_LENGTH}" value="${m.text}" aria-label="Corrected message" data-fk="chat-edit" required><button class="btn small primary">Save</button><button type="button" class="btn ghost small" data-act="edit" data-id="">Cancel</button></form>`
               : html`<p>${linked(m.text)}</p>`}
@@ -239,7 +242,13 @@ export const actions = {
   unsend(el, c) {
     const sec = isDirect(open) ? 'direct' : 'messages';
     const m = (c.company[sec] || []).find(x => x.id === el.dataset.id);
-    if (!m || !(m.by === me() || (c.admin && sec === 'messages')) || !confirm('Delete this message for everyone?')) return;
+    if (!m || !(m.by === me() || (c.admin && sec === 'messages'))) return;
+    if (m.by === me() && !takeBackLeft(m) && !(c.admin && sec === 'messages')) {   // v1.13.1 (owner): after 5 minutes, only from my view
+      if (!confirm('Delete this message from your view? After 5 minutes the others still see it.')) return;
+      store.updateCompany(co => { Object.assign(co[sec].find(y => y.id === m.id), { hiddenFor: [me()] }); });
+      return;
+    }
+    if (!confirm('Delete this message for everyone?')) return;
     store.updateCompany(co => { const x = co[sec].find(y => y.id === m.id); Object.assign(x, { text: '', deleted: true, deletedAt: new Date().toISOString() }); });
   },
 };
@@ -265,14 +274,14 @@ export const submits = {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to) || to === me()) { tell('Choose a colleague from the list, or type their email.'); return false; }
     open = DM + to; editing = null; profile = null; filter = '';
   },
-  /** A correction, only within the 30 seconds (the database allows a little more, for a slow connection). */
+  /** A correction, only within the minute (the database allows a little more, for a slow connection). */
   edit(fd, c) {
     const sec = isDirect(open) ? 'direct' : 'messages';
     const m = (c.company[sec] || []).find(x => x.id === editing);
     const text = String(fd.get('text') || '').trim().slice(0, MAX_LENGTH);
     editing = null;
     if (!m || !text || text === m.text) return;
-    if (!editLeft(m)) { tell('Too late: a message can be corrected for 30 seconds only. Delete it and write it again.'); return; }
+    if (!editLeft(m)) { tell('Too late: a message can be corrected for 1 minute only. Delete it and write it again.'); return; }
     store.updateCompany(co => { Object.assign(co[sec].find(x => x.id === m.id), { text, edited: true }); });
   },
 };

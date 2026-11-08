@@ -10,7 +10,7 @@ import { manpowerMeta, attendanceRows, totals } from './crew.js';
 import { dayMeta, photoNeedsCaption } from './day.js';
 
 export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Expense', 'Other'];
-// 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PM
+// 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PE
 // approves it in Central Hub (the GM too above the limit); approved, it is a cost in the Ledger.
 export const EXPENSE_COSTS = [['Material', 'material'], ['Labour', 'labor'], ['Equipment', 'equipment'], ['Subcontract', 'subcontract'], ['Transport', 'transport'], ['Overhead', 'overhead']];
 export const CURRENCIES = ['ETB', 'USD'];

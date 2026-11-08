@@ -277,7 +277,7 @@ export function photoDay(ws, date) {
   return ph ? { state: ph.st, ...ph } : { state: 'missing' };
 }
 
-/** Needs attention for the Project Manager and the GM: a late or missing crew photo in the last 3 days. */
+/** Needs attention for the Project Engineer and the GM: a late or missing crew photo in the last 3 days. */
 export function crewPhotoFlags(ws, today) {
   const out = [];
   for (let i = 0; i < 3; i++) {

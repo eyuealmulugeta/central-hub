@@ -67,6 +67,7 @@ const key = permKey;
 export function mayOpen(role, pages, page, ranks = []) {
   // v0.50.1: HR opens Spotlight and the office staff's attendance (names and positions only, never Employee data)
   if (page === 'spotlight' || page === 'officeatt') return role === 'owner' || ranks.includes('hr_assistant');
+  if (page === 'excel' || page === 'zoho') return role === 'owner' || ranks.includes('general_manager');   // v1.18.0: and the Zoho export (G9)
   if (page === 'excel') return role === 'owner' || ranks.includes('general_manager');   // v1.9.0 (G7): the Admin and the GM (owner)
   if (page === 'engagement') return role === 'owner' || ranks.includes('general_manager');   // v1.7.0 (G3): the Admin and the GM only (owner)
   if (page === 'signins' || page === 'activity') return role === 'owner' || ['general_manager', 'owner', 'ceo', 'board_member'].some(r => ranks.includes(r));   // v0.98.0 (G2): the Admin and Tier 1
@@ -180,6 +181,7 @@ export const APPS = [
     { page: 'expenses', name: 'Expenses', does: 'Money spent' },
     { page: 'summary', name: 'Summary report', does: 'The construction summary' },
     { page: 'excel', name: 'Excel link', does: 'Data to and from Excel' },
+    { page: 'zoho', name: 'Zoho export', does: 'The UAE company\'s month for Zoho Books' },   // v1.18.0 (G9)
     { page: 'tradesummary', name: 'Trading summary', does: 'The trading summary' },
     { page: 'documentsign', name: 'Document sign', does: 'Documents sent for signature' },
     { page: 'logsheet', name: 'Log sheet', does: 'Equipment and vehicle log sheets' },

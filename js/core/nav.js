@@ -56,7 +56,7 @@ export const MENUS = {
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'weather', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
-    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'income', 'expenses', 'summary', 'excel'] },   // excel: v1.9.0 (G7)
+    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'income', 'expenses', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'requests', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
   ],

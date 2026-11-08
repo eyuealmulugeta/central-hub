@@ -79,6 +79,23 @@ async function takeApproved() {
   for (const [code, list] of by) await crewDecide(code, true, list, true);
 }
 export const current = () => feed;
+
+/* v1.12.1 (owner, 8 Nov, R3): approvals sync by themselves. A Field Report change (crew sent or approved on a phone,
+   a report sent or answered) leaves fieldPing/<project>; the Admin's Central Hub reloads the Field Report list at once,
+   so crew approved on a phone joins the team within seconds. Sign-up requests and new phones (kept by the script)
+   are asked again every 2 minutes while Central Hub is open. */
+const ISO_T = /^\d{4}-\d{2}-\d{2}T/;
+export const newestPing = docs => (docs || []).flatMap(d => Object.values(d || {}).filter(v => typeof v === 'string' && ISO_T.test(v))).sort().pop() || '';
+let pingSeen = null, pingT = 0;
+store.onFieldPing?.(docs => {
+  const last = newestPing(docs);
+  if (pingSeen === null) { pingSeen = last; return; }   // the first read is how things are now
+  if (!last || last <= pingSeen) return;
+  pingSeen = last;
+  clearTimeout(pingT);
+  pingT = setTimeout(() => { if (store.isAdmin && fieldReady()) load(true); }, 2500);
+});
+if (typeof document !== 'undefined') setInterval(() => { if (store.isAdmin && fieldReady() && !document.hidden) load(); }, 120e3);   // in the browser only
 export const isBusy = () => busy;
 export const waiting = () => (feed?.devices || []).filter(d => d.st === 'wait');
 

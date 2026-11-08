@@ -16,7 +16,7 @@ import { billStatus } from '../engine/bills.js';
 import { healthOf, projectLine, needsYou, needGroups } from '../engine/today.js';
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 import { fieldVideos, fieldDayPhotos, fieldPhoto, fieldVideoKeep, fieldVideoAdd } from '../sync/fieldreport.js';
-import { fillPhotos } from './photos.js';
+import { fillPhotos, photoAt } from './photos.js';
 import { rowsOf, rowsFor, HOME_ORDER, todayMedia, weekDays, livePhotos, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
 import { expenseTitle, isExpense } from '../engine/expenses.js';
@@ -66,7 +66,7 @@ function todayBox(m, c) {
   const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
     ? html`<img src="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" alt="Site video" loading="lazy"><span class="xplay ${i === 0 ? '' : 's'}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
       <span class="xvb">VIDEO</span><span class="xkeep">${x.kept ? 'Saved' : x.until ? `kept until ${fmtDate(x.until)}` : ''}</span>`
-    : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}">`}<figcaption>${x.label}</figcaption></figure></button>`;
+    : html`<img src="data:," alt="Site photo" data-fphoto="${x.key}" data-fsize="tile">`}<figcaption>${x.label}</figcaption></figure></button>`;   // v1.25.0: tiles load the small picture
   return box('today', html`${tabs}${nPh || nV ? html`<div class="seg xseg">${[['', 'All'], ['photo', `Photos ${nPh}`], ['video', `Videos ${nV}`]].map(([k, l]) => html`<button type="button" class="${mediaKind === k ? 'on' : ''}" data-act="mediaKind" data-k="${k}">${l}</button>`)}</div>` : ''}
     ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
       ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
@@ -113,6 +113,8 @@ function showAt(i) {
   el.hidden = false;
   document.body.classList.add('viewing');
   fillPhotos(el);
+  // v1.25.0: the photos either side are fetched now, so the next swipe shows at once
+  [i + 1, i - 1].map(j => viewList[(j + viewList.length) % viewList.length]).forEach(y => { if (y && y.kind === 'photo' && store.cloud) photoAt(y.key); });
 }
 /** v0.95.0: the camera original of a photo, full size and quality, saved on this computer. */
 async function downloadOriginal(x, b) {
@@ -363,7 +365,6 @@ export function render(c) {
     ${signStrip(c)}
     ${outBox()}
     ${feedBox()}
-    ${actBox(c)}
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 

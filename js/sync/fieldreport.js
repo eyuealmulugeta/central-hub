@@ -488,8 +488,8 @@ export async function fieldPhotoPut(proj, report, id, data) {
   return out.fileId;
 }
 
-export async function fieldPhoto(proj, report, id, full = false) {
-  const out = await post({ action: 'photoGet', proj, report, id, ...(full ? { full: true } : {}) });   // v0.95.0: full = the camera original
+export async function fieldPhoto(proj, report, id, full = false, size = '') {
+  const out = await post({ action: 'photoGet', proj, report, id, ...(full ? { full: true } : {}), ...(size ? { size } : {}) });   // v0.95.0: full = the camera original; v1.25.0: size 'tile' = the small picture
   if (!out.ok) throw new Error(out.error || 'Field Report would not give the photo.');
   return out.data;
 }

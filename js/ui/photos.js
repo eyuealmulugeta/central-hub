@@ -6,7 +6,31 @@ import { html } from './dom.js';
 import { fieldPhoto, fieldReady } from '../sync/fieldreport.js';
 import { store } from '../core/store.js';
 
-const cache = new Map();   // "proj|report|id" -> Promise<data URL, or '' when it could not be read>
+const cache = new Map();   // "size|proj|report|id" -> Promise<object URL, or '' when it could not be read>
+// v1.25.0 (owner, 8 Nov: photos load quickly): each picture is kept in this browser (Cache Storage), so a day, a
+// project or a page seen before shows at once and is not downloaded again
+const SHELF = 'site-photos-v1';
+const shelfKey = k => `/__photo/${k.split('|').map(encodeURIComponent).join('/')}`;
+async function fromShelf(k) {
+  try { const r = await (await caches.open(SHELF)).match(shelfKey(k)); return r ? URL.createObjectURL(await r.blob()) : ''; } catch { return ''; }
+}
+async function toShelf(k, blob) { try { await (await caches.open(SHELF)).put(shelfKey(k), new Response(blob, { headers: { 'content-type': 'image/jpeg' } })); } catch { /* private window: shown, not kept */ } }
+const b64Blob = d => fetch(`data:image/jpeg;base64,${d}`).then(r => r.blob());
+/** One picture: size 'tile' (small, for the tiles) or '' (the screen copy). */
+export function photoAt(key, size = '') {
+  const k = `${size}|${key}`;
+  if (!cache.has(k)) {
+    const [proj, report, id] = key.split('|');
+    cache.set(k, (async () => {
+      const kept = typeof caches !== 'undefined' ? await fromShelf(k) : '';
+      if (kept) return kept;
+      const d = await fieldPhoto(proj, report, id, false, size), b = await b64Blob(d);
+      if (typeof caches !== 'undefined') toShelf(k, b);
+      return URL.createObjectURL(b);
+    })().catch(() => { cache.delete(k); return ''; }));
+  }
+  return cache.get(k);
+}
 
 /** The photos Field Report kept in Drive for this report (older reports have none). */
 export const photoList = r => (r?.field?.photoFiles || []).filter(p => p && p.id);
@@ -30,12 +54,8 @@ const sample = n => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg
 export function fillPhotos(root) {
   root.querySelectorAll('img[data-fphoto]').forEach((img, i) => {
     if (img.getAttribute('src') !== 'data:,') return;
-    const k = img.dataset.fphoto;
-    if (!cache.has(k)) {
-      const [proj, report, id] = k.split('|');
-      cache.set(k, !store.cloud && !fieldReady() ? Promise.resolve(sample(i + 1))
-        : fieldPhoto(proj, report, id).then(d => `data:image/jpeg;base64,${d}`).catch(() => ''));
-    }
-    cache.get(k).then(u => { if (u) img.src = u; else img.closest('figure')?.classList.add('ph-missing'); });
+    const k = img.dataset.fphoto, size = img.dataset.fsize || '';   // v1.25.0: data-fsize="tile" = the small picture
+    if (!store.cloud && !fieldReady()) { img.src = sample(i + 1); return; }
+    photoAt(k, size).then(u => { if (u) img.src = u; else img.closest('figure')?.classList.add('ph-missing'); });
   });
 }

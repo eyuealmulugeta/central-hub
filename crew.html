@@ -51,6 +51,12 @@
     button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
     button:disabled { opacity: .5; cursor: default; }
     footer { padding: 8px 16px 24px; text-align: center; }
+    /* v1.16.0: how sure a read field is */
+    .rd { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 4px; }
+    .rd.ok { background: #e6f4ec; color: var(--ok); } .rd.low { background: #fff1d6; color: #8a5a00; }
+    .okbtn { padding: 2px 10px; font-size: 11px; margin-left: 4px; }
+    label.lowf input, label.lowf select { border: 2px solid #e6ad45; background: #fffaf0; }
+    .note button { padding: 4px 12px; font-size: 12px; margin-left: 6px; }
     /* v1.15.0: the document scan and Fix corners */
     .shot.doc { width: 180px; } .shot.doc img, .shot.doc .empty { width: 180px; height: 114px; }
     .shot.doc img { object-fit: contain; background: #fff; }

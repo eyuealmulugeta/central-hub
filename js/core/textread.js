@@ -67,3 +67,38 @@ export async function readText(file, { mrz = true } = {}) {
   }
 }
 
+
+// ---- v1.16.0 (owner, 8 Nov): the crew form reads each document twice (grey and black-on-white copies) with one reader
+// kept open between pictures, and keeps how sure the reader was of every word, so each field shows how sure it is.
+
+let kept = null;
+async function keptReader() {
+  const T = await loadReader();
+  kept ||= T.createWorker('eng', 1).catch(err => { kept = null; throw err; });
+  return kept;
+}
+const wordsOf = d => (d.words?.length ? d.words : (d.blocks || []).flatMap(b => (b.paragraphs || []).flatMap(p => (p.lines || []).flatMap(l => l.words || []))))
+  .map(w => ({ text: String(w.text || ''), conf: Math.round(w.confidence ?? 0) }));
+
+/**
+ * The text and words (with the reader's confidence, 0-100) of each picture (canvases or files), read in turn, joined.
+ * `mrz`: the bottom of each picture is also read for the machine lines (letters, digits and <).
+ * `sparse`: cards: text in scattered blocks (page mode 11), else a page (3).
+ */
+export async function readDoc(images, { mrz = false, sparse = true } = {}) {
+  const w = await keptReader();
+  let text = '', words = [];
+  const add = d => { text += `\n${d.text}`; words = words.concat(wordsOf(d)); };
+  for (const img of images) {
+    await w.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: sparse ? '11' : '3', preserve_interword_spaces: '1' });
+    add((await w.recognize(img, {}, { text: true, blocks: true })).data);
+  }
+  if (mrz && images[0] instanceof HTMLCanvasElement) {
+    const c = images[0], from = Math.round(c.height * 0.55);
+    const part = Object.assign(document.createElement('canvas'), { width: c.width, height: c.height - from });
+    part.getContext('2d').drawImage(c, 0, from, c.width, c.height - from, 0, 0, c.width, c.height - from);
+    await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<', tessedit_pageseg_mode: '6' });
+    add((await w.recognize(part, {}, { text: true, blocks: true })).data);
+  }
+  return { text, words };
+}

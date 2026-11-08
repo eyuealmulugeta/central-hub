@@ -33,20 +33,26 @@ function blur(g, w, h) {
   return out;
 }
 
-/** Edge pixels (1) of a grey picture: the strongest tenth of its brightness changes, thickened by one pixel. */
-export function edges(gray, w, h) {
-  const g = blur(blur(gray, w, h), w, h);
+/**
+ * Edge pixels (1): the strongest `frac` of the brightness changes, thickened by one pixel. `chans` is one grey picture
+ * or several (v1.16.0: red, green, blue too, so a card that differs from the table only in colour is still found).
+ */
+export function edges(chans, w, h, frac = 0.1) {
+  const list = (Array.isArray(chans) ? chans : [chans]).map(c => blur(blur(c, w, h), w, h));
   const mag = new Float32Array(w * h);
   const hist = new Uint32Array(256);
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const i = y * w + x;
-    const gx = g[i - w + 1] + 2 * g[i + 1] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - 1] - g[i + w - 1];
-    const gy = g[i + w - 1] + 2 * g[i + w] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - w] - g[i - w + 1];
-    const m = Math.min(255, Math.hypot(gx, gy) / 4);
+    let m = 0;
+    for (const g of list) {
+      const gx = g[i - w + 1] + 2 * g[i + 1] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - 1] - g[i + w - 1];
+      const gy = g[i + w - 1] + 2 * g[i + w] + g[i + w + 1] - g[i - w - 1] - 2 * g[i - w] - g[i - w + 1];
+      m = Math.max(m, Math.min(255, Math.hypot(gx, gy) / 4));
+    }
     mag[i] = m; hist[m | 0]++;
   }
   let t = 255, seen = 0;
-  const top = (w - 2) * (h - 2) * 0.1;
+  const top = (w - 2) * (h - 2) * frac;
   while (t > 0 && seen + hist[t] < top) seen += hist[t--];
   t = Math.max(t, 12);
   const e = new Uint8Array(w * h);
@@ -118,8 +124,20 @@ function support(q, e, w, h) {
  * The document's corners in a grey picture (tl, tr, br, bl), or null when no clear document outline is found (the
  * picture is then used whole: it may already be cropped). Looks at the edge groups, largest first.
  */
-export function findQuad(gray, w, h) {
-  const e = edges(gray, w, h);
+export function findQuad(src, w, h, { within = null } = {}) {
+  for (const frac of [0.1, 0.16, 0.06]) {   // v1.16.0: tried with more and fewer edges before giving up
+    const q = quadAt(edges(src, w, h, frac), w, h, within);
+    if (q) return q;
+  }
+  return null;
+}
+/** The channels of RGBA pixels for findQuad: grey, red, green, blue. */
+export function channels(rgba, w, h) {
+  const r = new Uint8ClampedArray(w * h), g = new Uint8ClampedArray(w * h), b = new Uint8ClampedArray(w * h);
+  for (let i = 0, j = 0; j < r.length; i += 4, j++) { r[j] = rgba[i]; g[j] = rgba[i + 1]; b[j] = rgba[i + 2]; }
+  return [toGray(rgba, w, h), r, g, b];
+}
+function quadAt(e, w, h, within) {
   const label = new Int32Array(w * h).fill(-1);
   const groups = [];
   const stack = [];
@@ -148,6 +166,7 @@ export function findQuad(gray, w, h) {
     if (!q) continue;
     const o = orderCorners(q), a = areaOf(o), s = support(o, e, w, h);
     if (a < w * h * 0.12 || s < 0.45) continue;
+    if (within && !o.every(([x, y]) => x >= within[0] - 0.04 * w && y >= within[1] - 0.04 * h && x <= within[2] + 0.04 * w && y <= within[3] + 0.04 * h)) continue;
     if (a * s * s > bestScore) { bestScore = a * s * s; best = o; }
   }
   return best;
@@ -238,6 +257,37 @@ export function levels(px) {
   return px;
 }
 
+/** v1.16.0: how sharp a grey picture is (the spread of its fine detail). A blurred picture scores low. */
+export function sharpness(g, w, h) {
+  let s = 0, s2 = 0, n = 0;
+  for (let y = 1; y < h - 1; y += 2) for (let x = 1; x < w - 1; x += 2) {
+    const i = y * w + x, l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w];
+    s += l; s2 += l * l; n++;
+  }
+  return n ? s2 / n - (s / n) ** 2 : 0;
+}
+
+/**
+ * v1.16.0: black text on white for the reader: each pixel against the brightness around it (Sauvola), so shade, glare
+ * and a coloured background do not hide the letters.
+ */
+export function binarize(g, w, h, r = 15, k = 0.2) {
+  const W = w + 1, S = new Float64Array(W * (h + 1)), Q = new Float64Array(W * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let a = 0, b = 0;
+    for (let x = 0; x < w; x++) { const v = g[y * w + x]; a += v; b += v * v; S[(y + 1) * W + x + 1] = S[y * W + x + 1] + a; Q[(y + 1) * W + x + 1] = Q[y * W + x + 1] + b; }
+  }
+  const out = new Uint8ClampedArray(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const x0 = Math.max(0, x - r), y0 = Math.max(0, y - r), x1 = Math.min(w, x + r + 1), y1 = Math.min(h, y + r + 1), n = (x1 - x0) * (y1 - y0);
+    const sum = S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0];
+    const sq = Q[y1 * W + x1] - Q[y0 * W + x1] - Q[y1 * W + x0] + Q[y0 * W + x0];
+    const m = sum / n, sd = Math.sqrt(Math.max(0, sq / n - m * m));
+    out[y * w + x] = g[y * w + x] > m * (1 + k * (sd / 128 - 1)) ? 255 : 0;
+  }
+  return out;
+}
+
 // ---- in the browser
 
 async function decode(file) {
@@ -255,7 +305,7 @@ const canvasOf = (w, h) => Object.assign(document.createElement('canvas'), { wid
  * The source of a scan: the picture (its longest side at most 2400) and its pixels, with the corners found in it
  * (`auto` false and the whole picture when none were found).
  */
-export async function scanSource(file) {
+export async function scanSource(file, { quad: given = null } = {}) {
   const img = await decode(file);
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
   if (!iw || !ih) throw new Error('That file is not a picture this browser can read.');
@@ -265,8 +315,9 @@ export async function scanSource(file) {
   const s = Math.min(1, WORK / Math.max(w, h)), ww = Math.round(w * s), wh = Math.round(h * s);
   const small = canvasOf(ww, wh), sx = small.getContext('2d', { willReadFrequently: true });
   sx.drawImage(big, 0, 0, ww, wh);
-  const q = findQuad(toGray(sx.getImageData(0, 0, ww, wh).data, ww, wh), ww, wh);
   const whole = [[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]];
+  if (given) return { canvas: big, w, h, pixels: bx.getImageData(0, 0, w, h).data, quad: given.map(([x, y]) => [x * k, y * k]), auto: true };
+  const q = findQuad(channels(sx.getImageData(0, 0, ww, wh).data, ww, wh), ww, wh);
   return { canvas: big, w, h, pixels: bx.getImageData(0, 0, w, h).data, quad: q ? q.map(([x, y]) => [x / s, y / s]) : whole, auto: !!q };
 }
 
@@ -279,6 +330,24 @@ export function scanOf(source, { quad = source.quad, turns = 0, kind = 'id' } = 
   const out = canvasOf(W, H);
   out.getContext('2d').putImageData(new ImageData(px, W, H), 0, 0);
   return out;
+}
+
+/**
+ * v1.16.0: the copies of a scan the reader gets: grey, at least 2000 wide (small print reads better large), and the
+ * same as black on white. Each a canvas. Also how sharp the scan is.
+ */
+export function readCopies(scan) {
+  const k = Math.max(1, 2000 / scan.width), w = Math.round(scan.width * k), h = Math.round(scan.height * k);
+  const grey = canvasOf(w, h), gx = grey.getContext('2d', { willReadFrequently: true });
+  gx.filter = 'grayscale(1) contrast(1.15)';
+  gx.drawImage(scan, 0, 0, w, h);
+  const id = gx.getImageData(0, 0, w, h), g = toGray(id.data, w, h), bin = binarize(g, w, h, Math.round(w / 90));
+  const bw = canvasOf(w, h), px = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < bin.length; i++) { px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = bin[i]; px[i * 4 + 3] = 255; }
+  bw.getContext('2d').putImageData(new ImageData(px, w, h), 0, 0);
+  const sw = Math.min(800, w), sh = Math.round(h * sw / w), small = canvasOf(sw, sh), sx = small.getContext('2d', { willReadFrequently: true });
+  sx.drawImage(scan, 0, 0, sw, sh);
+  return { grey, bw, sharp: sharpness(toGray(sx.getImageData(0, 0, sw, sh).data, sw, sh), sw, sh) };
 }
 
 /** A canvas as a JPEG file (for the picture limits and the reader). */

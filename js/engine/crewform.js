@@ -98,6 +98,53 @@ export function readPassport(text, today) {
   return { doc: 'passport', name: m.name, birth: m.birth, expiry: m.expiry, gender: m.sex === 'F' ? 'female' : m.sex === 'M' ? 'male' : '', passportNumber: m.number, nationality: natOf(m.nationalityCode) || m.nationality, proven: !!m.proven };
 }
 
+// ---- v1.16.0 (owner, 8 Nov): how sure each read field is
+
+/** At or above this (0-100) a read field is shown as read; below it the person must check it before sending. */
+export const SURE = 85;
+/** The facts of a document's text. `which`: 'fayda' | 'id' | 'passport'. */
+export const parseDoc = (text, which, today) => (which === 'passport' ? readPassport(text, today) || readId(text, today) : which === 'fayda' ? readFayda(text) : readId(text, today)) || {};
+const FORMAT = { idNumber: (v, w) => (w === 'fayda' ? /^\d{16}$/.test(v) : String(v).length >= 5), fin: v => /^\d{12}$/.test(v), phone: v => String(v).replace(/\D/g, '').length >= 9 };
+const PROVEN = ['passportNumber', 'birth', 'expiry', 'idNumber', 'nationality', 'name', 'gender'];
+
+/**
+ * How sure the reader was of each fact (0-100): the reader's own confidence in the words that make it up; 100 for what
+ * the machine lines prove with their check digits; at most 40 when the value has the wrong shape (a FAN not 16 digits).
+ */
+export function scoreFacts(facts, words = [], which = 'id') {
+  const norm = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const out = {};
+  for (const [k, v] of Object.entries(facts || {})) {
+    if (!v || typeof v !== 'string' || k === 'doc') continue;
+    if (facts.proven && PROVEN.includes(k)) { out[k] = 100; continue; }
+    let target = norm(v);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) target = v.slice(0, 4);
+    if (k === 'gender') target = v === 'female' ? 'FEMALE' : 'MALE';
+    const hits = words.filter(w => { const t = norm(w.text); return t.length >= 2 && (target.includes(t) || (target.length >= 3 && t.includes(target))); });
+    let c = hits.length ? Math.round(hits.reduce((s, w) => s + w.conf, 0) / hits.length) : 50;
+    if (FORMAT[k] && !FORMAT[k](v, which)) c = Math.min(c, 40);
+    out[k] = c;
+  }
+  return out;
+}
+/** Two reads of one document, field by field: the surer one wins. */
+export function mergeReads(a, b) {
+  const facts = { ...a.facts }, conf = { ...a.conf };
+  for (const [k, v] of Object.entries(b.facts || {})) {
+    if (!v || k === 'doc' || k === 'proven') continue;
+    if (!facts[k] || (b.conf[k] ?? 0) > (conf[k] ?? 0)) { facts[k] = v; conf[k] = b.conf[k] ?? 0; }
+  }
+  facts.proven = !!(a.facts?.proven || b.facts?.proven);
+  return { ...a, facts, conf, score: Math.max(a.score || 0, b.score || 0) };
+}
+/** A read good enough not to read again: a number found, and every field found sure. */
+export function readDone(r, which) {
+  const nums = which === 'fayda' ? ['idNumber', 'fin'] : which === 'passport' ? ['passportNumber'] : ['idNumber'];
+  return nums.some(k => r.facts?.[k]) && Object.entries(r.conf || {}).every(([, c]) => c >= SURE);
+}
+/** The form field a fact goes to. */
+export const formKeyOf = (k, doc) => ({ birth: 'birthday', expiry: doc === 'passport' ? 'passportExpiry' : 'idExpiry' }[k] || k);
+
 /** v1.15.0: how much real document text was read (labels and machine lines): low when the picture is upside down. */
 export function readScore(text) {
   const t = String(text || '').toUpperCase();

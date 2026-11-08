@@ -4,10 +4,11 @@
 // See engine/crewform.js for the records and firestore.rules (crewlinks, crewforms) for what the link allows.
 
 import { firebaseConfig } from './config.js';
-import { readText } from './core/textread.js';
+import { readDoc } from './core/textread.js';
+import { liveScan } from './core/camscan.js';
 import { pictureFor } from './core/image.js';
-import { scanSource, scanOf, fileOf } from './core/docscan.js';
-import { linkState, readFayda, readPassport, readId, readScore, fillForm, formMissing, formRecord, formIdOf, docOf, isEthiopian, TRADES, NATIONALITIES, FORM_PHOTO, FORM_ID } from './engine/crewform.js';
+import { scanSource, scanOf, fileOf, readCopies } from './core/docscan.js';
+import { linkState, readScore, parseDoc, scoreFacts, mergeReads, readDone, formKeyOf, SURE, fillForm, formMissing, formRecord, formIdOf, docOf, isEthiopian, TRADES, NATIONALITIES, FORM_PHOTO, FORM_ID } from './engine/crewform.js';
 
 const FIREBASE = '10.12.2';
 const BASE = 'company/main';
@@ -47,13 +48,19 @@ async function openData() {
 let data, link, form, busy = false, said = '', sent = 0;
 /** v1.15.0: each document picture's source and how it was straightened, for Fix corners and Turn. */
 let scans = {}, fixing = null;
+/** v1.16.0: how sure each read field is (0-100), and the fields the person has confirmed. Kept in the draft. */
+let conf = {}, okd = {}, dupOk = '', checkOk = false, restored = '';
 const blank = () => ({ doc: 'fayda', nationality: '' });   // v1.15.0: the country is chosen first
 
-const field = (label, key, type = 'text', extra = '') => `<label>${esc(label)}<input type="${type}" data-k="${key}" value="${esc(form[key] || '')}" ${extra}></label>`;
-const choose = (label, key, list) => `<label>${esc(label)}<select data-k="${key}"><option value="">Choose…</option>${list.map(([v, t]) => `<option value="${esc(v)}" ${form[key] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+/** v1.16.0: a read field shows how sure it is: Read (green), or Check (amber) with a Correct button until confirmed. */
+const low = key => conf[key] != null && conf[key] < SURE && !okd[key] && !!String(form[key] || '').trim();
+const mark = key => (conf[key] == null || !String(form[key] || '').trim() ? '' : low(key)
+  ? ` <span class="rd low">Check</span> <button type="button" class="okbtn" data-ok="${key}">Correct</button>` : ' <span class="rd ok">✓ Read</span>');
+const field = (label, key, type = 'text', extra = '') => `<label class="${low(key) ? 'lowf' : ''}">${esc(label)}${mark(key)}<input type="${type}" data-k="${key}" value="${esc(form[key] || '')}" ${extra}></label>`;
+const choose = (label, key, list) => `<label class="${low(key) ? 'lowf' : ''}">${esc(label)}${mark(key)}<select data-k="${key}"><option value="">Choose…</option>${list.map(([v, t]) => `<option value="${esc(v)}" ${form[key] === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
 const shot = (label, key, capture, cls = '') => `<div class="shot ${cls} ${key === 'photo' ? '' : 'doc'}">${esc(label)}${form[key] ? `<img src="${form[key]}" alt="${esc(label)}">` : '<div class="empty">No picture yet</div>'}
   ${scans[key] ? `<div class="pick"><button type="button" class="btn" data-fix="${key}">Fix corners</button><button type="button" class="btn" data-turn="${key}">Turn</button></div>` : ''}
-  <div class="pick"><label class="btn">${form[key] ? 'Take again' : 'Camera'}<input type="file" accept="image/*" capture="${capture}" data-shot="${key}" hidden></label>` +
+  <div class="pick">${key === 'photo' ? '' : `<button type="button" class="btn" data-live="${key}">${form[key] ? 'Scan again' : 'Scan'}</button>`}<label class="btn" ${key === 'photo' ? '' : 'hidden'}>${form[key] ? 'Take again' : 'Camera'}<input type="file" accept="image/*" capture="${capture}" data-shot="${key}" id="cap-${key}" hidden></label>` +
   // v0.83.0 (owner): a picture already on the phone (no capture: the phone's gallery or files)
   `<label class="btn">Gallery<input type="file" accept="image/*" data-shot="${key}" hidden></label></div></div>`;
 
@@ -63,6 +70,7 @@ function draw() {
   app.innerHTML = `<div class="card">
     <h1>Crew form</h1>
     ${link.note ? `<p class="bad"><b>The office asks for changes:</b> ${esc(link.note)}</p>` : ''}
+    ${restored ? `<p class="note">Your form not yet sent (${esc(restored)}) was brought back. <button type="button" id="fresh">Start again</button></p>` : ''}
     <p class="muted">For ${esc(link.projectName || 'Amistad Prefab')}${link.byName ? `, from ${esc(link.byName)}` : ''}. ${link.kind !== 'one' ? 'Fill in one form per person; after sending, the form is empty for the next one.' : 'One form, for you.'}${sent ? ` <b class="ok">${sent} sent from this phone.</b>` : ''}</p>
   </div>
   <div class="card">
@@ -90,7 +98,7 @@ function draw() {
       ${field('Emergency contact phone *', 'emergencyPhone', 'tel')}
     </div>
     <label class="check"><input type="checkbox" id="agree" ${form.agree ? 'checked' : ''}><span>I agree that Amistad Prefab keeps these details and pictures for my employment records.</span></label>
-    ${said && /^(Write|Take|Choose|Check|The )/.test(said) ? `<p class="bad">${esc(said)}</p>` : ''}
+    ${said && /^(Write|Take|Choose|Check|The |Tick)/.test(said) ? `<p class="bad">${esc(said)}</p>` : ''}
     <div class="row"><button type="button" class="primary" id="send" ${busy ? 'disabled' : ''}>${busy ? 'Working…' : 'Send to the office'}</button></div>
   </div>${fixing ? fixer() : ''}`;
   if (fixing) placeHandles();
@@ -127,29 +135,65 @@ const kindOf = key => (key === 'passportImage' ? 'passport' : docOf(form) === 'f
 /** Make the scan of a picture, keep it on the form, and read it. */
 async function useScan(key, { upright = false } = {}) {
   const s = scans[key];
-  const pass = key === 'passportImage', d = docOf(form);
-  const readAt = async turns => {
-    const file = await fileOf(scanOf(s.source, { quad: s.quad, turns, kind: kindOf(key) }));
-    const text = await readText(file, { mrz: pass || d === 'id' });
-    return { file, text, turns, score: readScore(text) };
+  const pass = key === 'passportImage', which = pass ? 'passport' : docOf(form);
+  // v1.16.0: each scan is read from a grey copy, and again from a black-on-white copy when something is missing or unsure
+  const once = async img => {
+    const r = await readDoc([img], { mrz: pass || which === 'id', sparse: !pass });
+    const facts = parseDoc(r.text, which);
+    return { facts, conf: scoreFacts(facts, r.words, which), score: readScore(r.text) };
   };
-  const shown = await fileOf(scanOf(s.source, { quad: s.quad, turns: s.turns, kind: kindOf(key) }));
-  form[key] = (await pictureFor(shown, FORM_ID)).dataUrl;
+  const at = turns => { const scan = scanOf(s.source, { quad: s.quad, turns, kind: kindOf(key) }); return { scan, turns, copies: readCopies(scan) }; };
+  let pick = at(s.turns);
+  form[key] = (await pictureFor(await fileOf(pick.scan), FORM_ID)).dataUrl;
   said = 'Reading the document. The first time can take a minute.'; draw();
-  let best = await readAt(s.turns);
-  if (upright && best.score < 3) {   // v1.15.0: upside down? the other way round is read too and the better kept
-    const flip = await readAt((s.turns + 2) % 4);
-    if (flip.score > best.score) { best = flip; s.turns = flip.turns; form[key] = (await pictureFor(flip.file, FORM_ID)).dataUrl; }
+  let r = await once(pick.copies.grey);
+  if (upright && r.score < 3) {   // v1.15.0: upside down? the other way round is read too and the better kept
+    const flip = at((s.turns + 2) % 4), rf = await once(flip.copies.grey);
+    if (rf.score > r.score) { r = rf; pick = flip; s.turns = flip.turns; form[key] = (await pictureFor(await fileOf(flip.scan), FORM_ID)).dataUrl; }
   }
-  const text = best.text;
-  const facts = pass ? (readPassport(text) || readId(text)) : d === 'fayda' ? readFayda(text) : readId(text);
-  for (const [k, v] of Object.entries(s.filled || {})) if (form[k] === v) form[k] = '';   // what this picture filled before is read again
-  const { patch, filled } = fillForm(form, facts);
+  if (!readDone(r, which)) { said = 'Reading again, more closely…'; draw(); r = mergeReads(r, await once(pick.copies.bw)); }
+  for (const [k, v] of Object.entries(s.filled || {})) if (form[k] === v) { form[k] = ''; delete conf[k]; delete okd[k]; }   // what this picture filled before is read again
+  const { patch, filled } = fillForm(form, r.facts);
   s.filled = patch;
   Object.assign(form, patch);
-  said = filled.length ? `${s.source.auto ? 'Straightened and read' : 'Read'}: ${filled.join(', ')}. Please check them.`
-    : `Nothing could be read from this picture. ${s.source.auto ? 'Try Turn if it is on its side, or' : 'Use Fix corners to mark the document\'s corners, or'} take it again straight and in good light, or type the details below.`;
+  for (const [fk, c] of Object.entries(r.conf)) { const k = formKeyOf(fk, which); if (k in patch) conf[k] = c; }
+  const unsure = Object.keys(patch).filter(k => conf[k] < SURE).length;
+  const blur = pick.copies.sharp < 15 ? ' The picture looks blurred: if a number is wrong, scan it again holding still.' : '';
+  said = filled.length ? `${s.source.auto ? 'Straightened and read' : 'Read'}: ${filled.join(', ')}.${unsure ? ` ${unsure} marked Check: compare ${unsure > 1 ? 'them' : 'it'} with the card.` : ' Please check them.'}${blur}`
+    : `Nothing could be read from this picture. ${s.source.auto ? 'Try Turn if it is on its side, or' : 'Use Fix corners to mark the document\'s corners, or'} scan it again flat and in good light, or type the details below.${blur}`;
+  saveDraft();
 }
+
+/** v1.16.0: a document picture (live camera, camera or gallery): straightened, kept, read. */
+async function takeDoc(key, file, quad = null) {
+  busy = true; said = 'Straightening the picture…'; draw();
+  try {
+    const source = await scanSource(file, { quad });
+    scans[key] = { source, quad: source.quad, turns: 0 };
+    await useScan(key, { upright: true });
+  } catch (err) { said = err.message || 'The picture could not be used.'; }
+  busy = false; draw();
+}
+
+// ---- v1.16.0 (owner, 8 Nov): drafts on this phone: a form not yet sent is kept and comes back when the link is opened again
+
+const DB = () => new Promise((res, rej) => { const r = indexedDB.open('crewform', 1); r.onupgradeneeded = () => r.result.createObjectStore('drafts'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function draftOp(mode, fn) {
+  try {
+    const db = await DB();
+    return await new Promise((res, rej) => { const t = db.transaction('drafts', mode), q = fn(t.objectStore('drafts')); t.oncomplete = () => res(q?.result); t.onerror = () => rej(t.error); });
+  } catch { return null; }
+}
+const hasInput = f => !!f && Object.entries(f).some(([k, v]) => k !== 'doc' && k !== 'nationality' && v && String(v).trim());
+let draftTimer = 0;
+function saveDraft(now = false) {
+  clearTimeout(draftTimer);
+  const put = () => (hasInput(form) ? draftOp('readwrite', s => s.put({ form, conf, okd, at: Date.now() }, linkId)) : null);
+  if (now) put(); else draftTimer = setTimeout(put, 700);
+}
+const dropDraft = () => draftOp('readwrite', s => s.delete(linkId));
+addEventListener('pagehide', () => saveDraft(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveDraft(true); });
 function fixer() {
   return `<div class="fixer" role="dialog" aria-label="Fix corners"><div class="fixbox"><p><b>Drag the four dots onto the corners of the document.</b></p>
     <div class="fixarea"><img id="fiximg" src="${fixing.url}" alt="">${[0, 1, 2, 3].map(i => `<span class="dot" data-dot="${i}"></span>`).join('')}</div>
@@ -180,11 +224,13 @@ app.addEventListener('pointerdown', e => {
   dot.addEventListener('pointermove', move); dot.addEventListener('pointerup', up);
 });
 
-app.addEventListener('input', e => { const k = e.target.dataset.k; if (k) form[k] = e.target.value; if (e.target.id === 'agree') form.agree = e.target.checked; });
+app.addEventListener('input', e => { const k = e.target.dataset.k; if (k) { form[k] = e.target.value; if (conf[k] != null) okd[k] = true; } if (e.target.id === 'agree') form.agree = e.target.checked; saveDraft(); });   // v1.16.0: typed = checked
 app.addEventListener('change', async e => {
   const k = e.target.dataset.k;
   if (k) {
     form[k] = e.target.value;
+    if (conf[k] != null) { okd[k] = true; draw(); }
+    saveDraft();
     if (e.target.dataset.redraw) {   // v1.15.0: the country decides the document
       if (!isEthiopian(form) && form.doc === 'fayda') { form.doc = 'id'; form.fin = ''; }
       if (isEthiopian(form)) form.doc = 'fayda';
@@ -195,19 +241,24 @@ app.addEventListener('change', async e => {
   if (e.target.id === 'agree') { form.agree = e.target.checked; return; }
   const key = e.target.dataset.shot, file = e.target.files?.[0];
   if (!key || !file) return;
-  busy = true; said = key === 'photo' ? '' : 'Reading the document. The first time can take a minute.'; draw();
-  try {
-    if (key === 'photo') form[key] = (await pictureFor(file, FORM_PHOTO)).dataUrl;
-    else {   // v1.15.0 (owner): straightened, cropped at the edges and evened out before it is kept and read
-      said = 'Straightening the picture…'; draw();
-      const source = await scanSource(file);
-      scans[key] = { source, quad: source.quad, turns: 0 };
-      await useScan(key, { upright: true });
-    }
-  } catch (err) { said = err.message || 'The picture could not be used.'; }
+  e.target.value = '';
+  if (key !== 'photo') return takeDoc(key, file);   // v1.15.0 (owner): straightened, cropped at the edges and evened out before it is kept and read
+  busy = true; said = ''; draw();
+  try { form[key] = (await pictureFor(file, FORM_PHOTO)).dataUrl; saveDraft(); } catch (err) { said = err.message || 'The picture could not be used.'; }
   busy = false; draw();
 });
 app.addEventListener('click', async e => {
+  const live = e.target.closest('[data-live]')?.dataset.live;
+  if (live && !busy) {   // v1.16.0: the live camera with the guide frame; the phone's own camera where it cannot open
+    try {
+      const got = await liveScan({ kind: kindOf(live), title: live === 'passportImage' ? 'Passport photo page' : live === 'idBack' ? 'Back of the ID' : 'Front of the ID' });
+      if (got) await takeDoc(live, got.file, got.quad);
+    } catch { document.getElementById(`cap-${live}`)?.click(); }
+    return;
+  }
+  const ok = e.target.closest('[data-ok]')?.dataset.ok;
+  if (ok) { okd[ok] = true; saveDraft(); return draw(); }
+  if (e.target.id === 'fresh') { form = blank(); conf = {}; okd = {}; scans = {}; restored = ''; said = ''; dropDraft(); return draw(); }
   const fix = e.target.closest('[data-fix]')?.dataset.fix, turn = e.target.closest('[data-turn]')?.dataset.turn;
   if ((fix || turn) && busy) return;
   if (fix) {   // v1.15.0: the corners on the original picture
@@ -225,16 +276,28 @@ app.addEventListener('click', async e => {
   }
   const doc = e.target.closest('[data-doc]')?.dataset.doc;
   if (doc) { form.doc = doc; said = ''; return draw(); }
-  if (e.target.id === 'again') { form = { ...blank(), nationality: form.nationality, doc: form.doc }; scans = {}; said = ''; return draw(); }   // v1.15.0: the next person, same country
+  if (e.target.id === 'again') { dupOk = ''; said = ''; return draw(); }   // v1.16.0: already emptied when sent   // v1.15.0: the next person, same country
   if (e.target.id !== 'send' || busy) return;
   const missing = formMissing(form) || (form.agree ? '' : 'Tick that you agree, then send.');
   if (missing) { said = missing; draw(); document.getElementById('send')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+  // v1.16.0: every field that was hard to read is checked by the person before the form goes; never sent by itself
+  const unsure = Object.keys(conf).filter(low);
+  if (unsure.length) { said = 'Check the fields marked Check (they were hard to read): correct them, or press Correct if they are right.'; draw(); document.querySelector('.lowf')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+  // v1.16.0: the same ID already sent from this phone
+  const num = String(form.idNumber || form.passportNumber || '').trim(), mine = (() => { try { return JSON.parse(localStorage.getItem(`crew-sent-${linkId}`)) || []; } catch { return []; } })();
+  const twin = num && mine.find(x => x.n === num);
+  if (twin && dupOk !== num) { dupOk = num; said = `The ID number ${num} was already sent from this phone (${twin.name}). Press Send again to send it anyway.`; draw(); return; }
   busy = true; draw();
   try {
     await data.send(formRecord(form, { id: formIdOf(link), link: link.id }));
     sent++;
+    // v1.16.0: sent: the draft goes, and the form is emptied so closing the page keeps nothing (the country stays for the next person)
+    const who = form.name;
+    clearTimeout(draftTimer); dropDraft();
+    form = { ...blank(), nationality: form.nationality, doc: form.doc }; conf = {}; okd = {}; scans = {}; restored = '';
+    try { localStorage.setItem(`crew-sent-${linkId}`, JSON.stringify([...mine, { n: num, name: who }].slice(-200))); } catch { /* private window */ }
     if (link.kind === 'one') return show('Thank you', 'Your form is with the office of Amistad Prefab. You can close this page.', 'ok');
-    app.innerHTML = `<div class="card"><h1>Sent</h1><p class="ok">${esc(form.name)} is with the office (${sent} from this phone).</p><div class="row"><button type="button" class="primary" id="again">Fill in the next person</button></div></div>`;
+    app.innerHTML = `<div class="card"><h1>Sent</h1><p class="ok">${esc(who)} is with the office (${sent} from this phone).</p><div class="row"><button type="button" class="primary" id="again">Fill in the next person</button></div></div>`;
   } catch (err) {
     said = /permission|insufficient/i.test(err.message) ? 'The form could not be sent: this link was used already or has run out. Ask for a new one.' : `Not sent: ${err.message}. Check the connection and press Send again.`;
     busy = false; draw();
@@ -250,6 +313,8 @@ app.addEventListener('click', async e => {
     const why = linkState(link);
     if (why) return show('Crew form', why, 'bad');
     form = blank();
+    const d = await draftOp('readonly', s => s.get(linkId));   // v1.16.0: the form not yet sent comes back
+    if (d && hasInput(d.form)) { form = { ...blank(), ...d.form }; conf = d.conf || {}; okd = d.okd || {}; restored = `${new Date(d.at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}${form.name ? `, ${form.name}` : ''}`; }
     draw();
   } catch (err) { show('Crew form', `The form could not be opened: ${err.message}`, 'bad'); }
 })();

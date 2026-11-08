@@ -25,6 +25,25 @@ export const COST_KINDS = [
 ];
 export const costLabel = id => COST_KINDS.find(([k]) => k === id)?.[1] || 'Other';
 
+// v1.22.0 (owner, G10 T4): how each cost is shared over the goods. Default (owner): freight and insurance by volume,
+// the rest by value. Weight and volume are per line (the whole line, not per unit); missing data falls back to value.
+export const BASES = [['value', 'By value'], ['weight', 'By weight (kg)'], ['cbm', 'By volume (CBM)'], ['qty', 'By quantity']];
+export const basisLabel = b => BASES.find(([k]) => k === b)?.[1] || 'By value';
+export const defaultBasis = kind => (kind === 'freight' || kind === 'insurance' ? 'cbm' : 'value');
+export const basisOf = c => c.basis || defaultBasis(c.kind);
+/** The amount a cost counts for: the actual invoice once entered, else the planned figure. */
+export const costAmount = c => (+c.amount > 0 ? +c.amount : +c.plan || 0);
+export const DOC_KINDS = [['bl', 'Bill of lading'], ['invoice', "Supplier's invoice"], ['packing', 'Packing list'], ['origin', 'Certificate of origin'], ['customs', 'Customs declaration'], ['other', 'Other']];
+export const docLabel = k => DOC_KINDS.find(([v]) => v === k)?.[1] || 'Other';
+export const CONTAINER_SIZES = [['20', "20 ft"], ['40', "40 ft"], ['40hc', "40 ft high cube"], ['lcl', 'LCL (shared)']];
+export const PAY_KINDS = [['deposit', 'Deposit'], ['balance', 'Balance'], ['other', 'Other']];
+
+/** Paid to the supplier so far, in `currency` (payments; an old "paid" tick counts as the whole goods). */
+export function supplierPaid(s, fx, currency, goods) {
+  if ((s.payments || []).length) return sum(s.payments, p => convert(+p.amount || 0, p.currency || s.currency || currency, currency, fx));
+  return s.supplierPaid ? goods : 0;
+}
+
 /** SHP-001, SHP-002, … */
 export function nextRef(shipments) {
   const last = Math.max(0, ...shipments.map(s => +(String(s.ref || '').match(/(\d+)$/)?.[1] || 0)));
@@ -40,15 +59,26 @@ export function landed(shipment, fx, currency) {
   const goodsCur = shipment.currency || currency;
   const lines = (shipment.lines || []).map(l => ({ ...l, value: convert((+l.qty || 0) * (+l.unitCost || 0), goodsCur, currency, fx) }));
   const goods = sum(lines, l => l.value);
-  const costs = (shipment.costs || []).map(c => ({ ...c, value: convert(+c.amount || 0, c.currency || goodsCur, currency, fx) }));
+  const costs = (shipment.costs || []).map(c => ({ ...c, basis: basisOf(c), value: convert(costAmount(c), c.currency || goodsCur, currency, fx),
+    planned: convert(+c.plan || 0, c.currency || goodsCur, currency, fx), actual: convert(+c.amount || 0, c.currency || goodsCur, currency, fx) }));
   const extras = sum(costs, c => c.value);
+  // v1.22.0: each cost shared by its own basis; a basis with no data on the lines falls back to value
+  const weightOf = { value: l => l.value, weight: l => +l.kg || 0, cbm: l => +l.cbm || 0, qty: l => +l.qty || 0 };
+  const shareOf = new Map(lines.map(l => [l, 0]));
+  for (const c of costs) {
+    let w = weightOf[c.basis] || weightOf.value;
+    if (!(sum(lines, w) > 0)) { c.basis = 'value'; w = weightOf.value; }
+    const all = sum(lines, w);
+    if (all > 0) for (const l of lines) shareOf.set(l, shareOf.get(l) + w(l) / all * c.value);
+  }
   const byKind = COST_KINDS.map(([kind, label]) => ({ kind, label, value: sum(costs.filter(c => (c.kind || 'other') === kind), c => c.value) })).filter(k => k.value);
   return {
-    currency, goods, extras, total: goods + extras, byKind,
+    currency, goods, extras, total: goods + extras, byKind, costs,
+    planned: sum(costs, c => c.planned), actual: sum(costs, c => c.actual), allActual: costs.every(c => +c.amount > 0),   // v1.22.0
     // how much the route adds to the purchase price
     uplift: goods > 0 ? extras / goods * 100 : null,
     lines: lines.map(l => {
-      const share = goods > 0 ? l.value / goods * extras : 0;
+      const share = shareOf.get(l) || 0;
       const total = l.value + share;
       return { ...l, share, total, unitLanded: +l.qty > 0 ? total / l.qty : 0, unitBought: +l.qty > 0 ? l.value / l.qty : 0 };
     }),

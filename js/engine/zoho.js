@@ -126,13 +126,19 @@ export function zohoTables({ projects = [], company = {}, fx = null, month, map:
   for (const s of company.shipments || []) {
     const date = day(s.ordered || s.date || s.etd || s.created);
     const where = `Shipment ${s.ref || s.id}`;
+    // v1.22.0 (G10 T4): each deposit or balance paid to the supplier, in the month it was paid
+    for (const p of s.payments || []) {
+      if (!inMonth(p.date) || !take(`co:shppay:${p.id}`, where)) continue;
+      const a = usd(p.amount, p.currency || s.currency || 'USD', s.usdRate, where);
+      T.vpay.push([day(p.date), who(vendors, s.supplier, where), s.ref || `SHP-${s.id}`, a, MODE[p.method] || 'Bank Transfer', p.ref || '', through(p.method), 'USD', PEG, aed(a)]);
+    }
     if (!inMonth(date) || !take(`co:shp:${s.id}`, where)) continue;
     const cur = s.currency || 'USD', vendor = who(vendors, s.supplier, where), num = s.ref || `SHP-${s.id}`;
     for (const l of s.lines || []) {
       const a = usd((+l.qty || 0) * (+l.unitCost || 0), cur, s.usdRate, where), q = +l.qty || 1;
       T.bill.push([date, num, vendor, day(s.eta) || date, 'USD', PEG, s.projectId ? map.projectGoods : map.tradeGoods, l.description || 'Goods', q, r2(a / q), 'Trading', aed(a)]);
     }
-    for (const c of s.costs || []) {
+    for (const c of (s.costs || []).filter(k => +k.amount > 0)) {   // v1.22.0: only costs with their invoice (actual) entered
       const a = usd(c.amount, c.currency || cur, c.usdRate, where);
       T.bill.push([date, num, vendor, day(s.eta) || date, 'USD', PEG, map[c.kind] || map.other, `${num}: ${c.note || c.kind || 'cost'}`, 1, a, 'Trading', aed(a)]);
     }

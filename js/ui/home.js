@@ -263,7 +263,10 @@ function tradingToday(c) {
   const soon = open.filter(x => x.st.daysToArrival != null && x.st.daysToArrival <= 7).sort((a, b) => a.st.daysToArrival - b.st.daysToArrival);
   const owed = st ? st.sales.filter(x => !x.paid) : [];
   const meetings = (c.company.meetings || []).filter(m => (!me() || m.by === me() || (m.invitees || []).some(i => i.email === me())) && String(m.start || '').slice(0, 10) >= c.today).slice(0, 5);
-  const needs = late.length + owed.length;
+  // v1.22.0 (G10 T4, owner): arriving in the next 2 days: the person who opened the deal and the GM are reminded here
+  const mine = x => { const d = (c.company.deals || []).find(y => y.shipmentId === x.s.id); return store.isAdmin || (store.ranks || []).includes('general_manager') || (!!d && d.by === me()); };
+  const arriving = open.filter(x => x.st.daysToArrival != null && x.st.daysToArrival <= 2).filter(mine);
+  const needs = late.length + owed.length + arriving.length;
   const card = (label, value, sub, tone = '') => html`<div class="pcard"><span class="pcard-hd"><b>${label}</b></span><span class="pcard-m"><span><b class="${tone}">${value}</b>${sub}</span></span></div>`;
   return html`
     <section class="today-head"><div><h2>${fmtFull(c.today)}</h2><span class="muted">Trading. ${needs ? `${needs} thing${needs > 1 ? 's' : ''} need${needs > 1 ? '' : 's'} you.` : 'Nothing needs you right now.'}</span></div></section>
@@ -277,6 +280,7 @@ function tradingToday(c) {
       <div class="card">
         <h3 class="card-h">Needs you <em class="count-q">${needs}</em></h3>
         ${needs ? html`<ul class="tlist">
+          ${arriving.map(x => html`<li class="trow"><span class="tic info">${icon('trade', 18)}</span><span class="tt"><b>${x.s.ref || 'Shipment'}${x.s.supplier ? `, ${x.s.supplier}` : ''}</b><span class="muted">Arrives ${x.st.daysToArrival === 0 ? 'today' : x.st.daysToArrival === 1 ? 'tomorrow' : `in ${x.st.daysToArrival} days`}: get clearing and delivery ready.</span></span><span class="tag info">Arriving</span><a class="btn small" href="#trade">Open</a></li>`)}
           ${late.map(x => html`<li class="trow"><span class="tic high">${icon('trade', 18)}</span><span class="tt"><b>${x.s.ref || 'Shipment'}${x.s.supplier ? `, ${x.s.supplier}` : ''}</b><span class="muted">Late by ${x.st.daysLate} day${x.st.daysLate === 1 ? '' : 's'}. ${stageLabel(x.s.stage)}</span></span><span class="tag high">Late</span><a class="btn small" href="#trade">Open</a></li>`)}
           ${owed.slice(0, 8).map(x => html`<li class="trow"><span class="tic warn">${icon('finance', 18)}</span><span class="tt"><b>${x.item}${x.customer ? `, ${x.customer}` : ''}</b><span class="muted">Sold ${fmtDate(x.date)}${c.money ? `, ${money(x.revenue, cur)}` : ''} not paid yet</span></span><span class="tag warn">Owed</span><a class="btn small" href="#stock">Open</a></li>`)}
         </ul>` : html`<p class="empty">All clear. Late shipments and unpaid sales show here.</p>`}

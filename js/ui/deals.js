@@ -10,7 +10,7 @@ import { docHead, docSec, signoff, docFoot, footText } from './print.js';
 import { stampPng } from './seal.js';
 import { productStats } from '../engine/products.js';
 import { partnerOf, termsLabel } from '../engine/partners.js';
-import { nextRef } from '../engine/trade.js';
+import { nextRef, landed } from '../engine/trade.js';
 import { PEG } from '../engine/zoho.js';
 import { STEPS, OPEN, METHODS, MIN_MARGIN, stepLabel, stepIndex, nextStep, blockOf, dealTotals, approvalNeeds, mayApprove, priceAt, dueDate, dealSummary, dealSheets, nextDealRef, nextQuote, nextInvoice, shipmentFor } from '../engine/deals.js';
 import { TRADING } from '../core/division.js';
@@ -64,6 +64,15 @@ function stepFields(d, c) {
   </div>`;
 }
 
+/** v1.22.0 (G10 T4): the deal's shipment now costs more per unit than the cost the price was made from. */
+function costRise(d, ship, c) {
+  if (!ship) return '';
+  const got = landed(ship, c.global.fx, 'USD').lines;
+  const up = (d.lines || []).map((l, i) => ({ l, now: (got.find(x => x.productId && x.productId === l.productId) || got[i])?.unitLanded })).filter(x => x.now > (+x.l.cost || 0) * 1.005);
+  if (!up.length) return '';
+  return html`<p class="callout warn small"><b>The landed cost went up</b> on shipment ${ship.ref}: ${up.map(x => `${x.l.description} ${num(x.l.cost)} → ${num(x.now)} per unit`).join('; ')}. The margin on this deal is lower than quoted.</p>`;
+}
+
 function detail(d, c) {
   const t = dealTotals(d), need = approvalNeeds(d), can = mayApprove(d, { admin: store.isAdmin, gm: isGM() });
   const nx = nextStep(d.status), block = nx ? blockOf(d, nx) : '';
@@ -93,6 +102,7 @@ function detail(d, c) {
       ${need.low ? html` · Admin (margin below ${MIN_MARGIN}%) ${d.admin ? chip(`${d.admin.name}, ${fmtFull(d.admin.at.slice(0, 10))}`, 'ok') : chip('Waiting', 'warn')}` : ''}
       ${can.gm || can.admin ? html` <button class="btn primary small" data-act="dlApprove">Approve</button>` : ''}</div>` : ''}
     ${stepFields(d, c)}
+    ${costRise(d, ship, c)}
     ${stepIndex(d.status) >= stepIndex('order') && d.status !== 'lost' ? html`<p class="small">${ship ? html`Supplier shipment: <b>${ship.ref}</b> ${ship.supplier || ''} (${ship.status}). Open it under Trading > Shipments for freight and dates.`
       : html`No supplier shipment yet. <button class="btn small" data-act="dlShip">Open the supplier shipment</button> <span class="muted">It copies these products at their cost; then add the supplier, freight and dates.</span>`}</p>` : ''}
     ${nx && d.status !== 'lost' ? html`<div class="actions left"><button class="btn primary" data-act="dlNext" ${block ? 'disabled' : ''}>${nxLabel}</button>${block ? html`<span class="muted">${block}</span>` : ''}</div>` : ''}

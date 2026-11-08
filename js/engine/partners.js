@@ -3,7 +3,7 @@
 // by themselves. Overdue = sale date + the partner's payment terms (owner). Pure functions.
 // A partner: { id, name, kind: customer|supplier|both, country, city, phone, email, trn, currency, terms (days), person, notes, off }
 
-import { landed, stockAndSales } from './trade.js';
+import { landed, stockAndSales, supplierPaid, PAY_KINDS } from './trade.js';
 import { dealSales } from './deals.js';   // v1.21.0 (G10 T3)
 import { sum } from '../core/util.js';
 
@@ -59,12 +59,12 @@ export function partnerRecords(p, company, fx, currency, today) {
     const due = dueOf(x, p);
     return { ...x, due, overdue: !x.paid && !!due && due < today, daysLate: !x.paid && due && due < today ? Math.round((Date.parse(today) - Date.parse(due)) / 864e5) : 0 };
   });
-  const shipments = (company.shipments || []).filter(s => norm(s.supplier) === norm(p.name)).map(s => ({ s, goods: goodsOf(s, fx, currency) }));
+  const shipments = (company.shipments || []).filter(s => norm(s.supplier) === norm(p.name)).map(s => { const goods = goodsOf(s, fx, currency); return { s, goods, paid: supplierPaid(s, fx, currency, goods) }; });
   return {
     sales, shipments,
     sold: sum(sales, x => x.revenue), owedToUs: sum(sales.filter(x => !x.paid), x => x.revenue),
     overdue: sum(sales.filter(x => x.overdue), x => x.revenue), overdueCount: sales.filter(x => x.overdue).length,
-    bought: sum(shipments, x => x.goods), weOwe: sum(shipments.filter(x => !x.s.supplierPaid), x => x.goods),
+    bought: sum(shipments, x => x.goods), weOwe: sum(shipments, x => Math.max(0, x.goods - x.paid)),   // v1.22.0: deposit and balance payments
   };
 }
 
@@ -88,7 +88,8 @@ export function statement(p, company, fx, currency, from, to, today) {
   for (const { s, goods } of r.shipments) {
     const day = s.ordered || s.created || s.etd || '';
     lines.push({ date: day, ref: s.ref, what: `Goods bought: ${(s.lines || []).map(l => l.description).join(', ').slice(0, 80) || s.ref}`, debit: 0, credit: goods });
-    if (s.supplierPaid) lines.push({ date: s.supplierPaidOn || day, ref: s.ref, what: 'Paid to the supplier', debit: goods, credit: 0 });
+    if ((s.payments || []).length) for (const pay of s.payments) lines.push({ date: pay.date || day, ref: s.ref, what: `Paid to the supplier (${(PAY_KINDS.find(([k]) => k === pay.kind)?.[1] || 'payment').toLowerCase()})`, debit: supplierPaid({ ...s, payments: [pay] }, fx, currency, goods), credit: 0 });
+    else if (s.supplierPaid) lines.push({ date: s.supplierPaidOn || day, ref: s.ref, what: 'Paid to the supplier', debit: goods, credit: 0 });
   }
   lines.sort((a, b) => String(a.date).localeCompare(String(b.date)));
   let opening = 0;

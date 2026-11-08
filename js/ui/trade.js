@@ -4,7 +4,9 @@
 
 import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
-import { STAGES, MODES, INCOTERMS, COST_KINDS, stageLabel, nextStage, costLabel, nextRef, landed, tradeSummary, stockAndSales, priceForMargin, isStock } from '../engine/trade.js';
+import { STAGES, MODES, INCOTERMS, COST_KINDS, stageLabel, nextStage, costLabel, nextRef, landed, tradeSummary, stockAndSales, priceForMargin, isStock, BASES, defaultBasis, DOC_KINDS, docLabel, CONTAINER_SIZES, PAY_KINDS, supplierPaid } from '../engine/trade.js';
+import { saveBase64 } from '../sync/drive.js';   // v1.22.0: shipment documents to Google Drive
+import { mailReady } from '../sync/mail.js';
 import { convert } from '../engine/pricing.js';
 import { uid, money, num, fmtFull, fmtDate, clamp, todayISO } from '../core/util.js';
 import { html, options, field, chip } from './dom.js';
@@ -141,6 +143,38 @@ function stockView(c, kpi, currencies) {
 const productOptions = (c, chosen) => (c.company.products || []).filter(p => !p.off || p.id === chosen)
   .map(p => html`<option value="${p.id}" ${p.id === chosen ? 'selected' : ''}>${p.code} ${p.name}</option>`);
 
+/** v1.22.0 (G10 T4): containers, documents (Google Drive) and payments to the supplier. */
+function extras(s, c, cost, goodsCur, currencies) {
+  const paid = supplierPaid(s, c.global.fx, goodsCur, cost.goods);
+  const docs = s.docs || [];
+  return html`
+      <h3>Containers</h3>
+      ${(s.containers || []).length ? html`<table class="table compact"><thead><tr><th>Container No.</th><th>Size</th><th>Seal No.</th><th></th></tr></thead>
+        <tbody>${s.containers.map(k => html`<tr><td>${k.no}</td><td>${CONTAINER_SIZES.find(([v]) => v === k.size)?.[1] || k.size}</td><td>${k.seal || ''}</td><td class="r"><button class="btn ghost small" data-act="dropBox" data-id="${k.id}">Remove</button></td></tr>`)}</tbody></table>` : ''}
+      <form data-form="box" class="entry"><input name="no" placeholder="Container No., e.g. MSCU1234567" required maxlength="20" class="wide" aria-label="Container number">
+        <select name="size" aria-label="Size">${options(CONTAINER_SIZES, '40')}</select><input name="seal" placeholder="Seal No." maxlength="30" aria-label="Seal number"><button class="btn">Add container</button></form>
+
+      <h3>Documents</h3>
+      <table class="table compact"><tbody>${DOC_KINDS.map(([k, label]) => { const got = docs.filter(d => d.kind === k); return html`<tr>
+        <td>${label}</td><td>${got.length ? got.map(d => html`<a href="${d.url}" target="_blank" rel="noopener">${d.name}</a> `) : html`<span class="muted">Not received</span>`}</td>
+        <td class="r">${got.length ? html`<span class="tag ok">Received</span>` : ''} <label class="btn small">Add<input type="file" accept="image/*,application/pdf" hidden data-chg="shDoc" data-kind="${k}"></label></td></tr>`; })}</tbody></table>
+      <p class="muted small">Saved to Google Drive in Trading/Shipments/${s.ref}.${mailReady() ? '' : ' Google Drive is not set up on this computer (Backup), so files cannot be added here.'}</p>
+
+      <h3>Paid to the supplier</h3>
+      <p class="small">Goods ${money(cost.goods, goodsCur, 2)} · paid ${money(paid, goodsCur, 2)} · <b class="${cost.goods - paid > 0.005 ? '' : 'ok'}">balance ${money(Math.max(0, cost.goods - paid), goodsCur, 2)}</b></p>
+      ${(s.payments || []).length ? html`<table class="table compact"><thead><tr><th>Date</th><th>Payment</th><th class="r">Amount</th><th>Method</th><th>Ref.</th><th></th></tr></thead>
+        <tbody>${s.payments.map(p => html`<tr><td class="nowrap">${fmtDate(p.date)}</td><td>${PAY_KINDS.find(([v]) => v === p.kind)?.[1] || 'Payment'}</td><td class="r nowrap">${money(p.amount, p.currency || goodsCur, 2)}</td><td>${({ bank: 'Bank transfer', cash: 'Cash', cheque: 'Cheque' })[p.method] || p.method || ''}</td><td>${p.ref || ''}</td>
+          <td class="r"><button class="btn ghost small" data-act="dropPay" data-id="${p.id}">Remove</button></td></tr>`)}</tbody></table>` : ''}
+      <form data-form="supPay" class="entry"><select name="kind" aria-label="Payment">${options(PAY_KINDS, (s.payments || []).length ? 'balance' : 'deposit')}</select>
+        <input type="date" name="date" value="${c.today}" max="${c.today}" required aria-label="Date paid">
+        <input type="number" name="amount" min="0" step="any" placeholder="Amount" required class="amount" aria-label="Amount">
+        <select name="currency" aria-label="Currency">${options(currencies, goodsCur)}</select>
+        <select name="method" aria-label="Method">${options([['bank', 'Bank transfer'], ['cash', 'Cash'], ['cheque', 'Cheque']], 'bank')}</select>
+        <input name="ref" placeholder="Ref., e.g. TT No." aria-label="Reference"><button class="btn">Add payment</button></form>`;
+}
+
+const readB64 = file => new Promise((ok, fail) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1] || ''); fr.onerror = () => fail(fr.error); fr.readAsDataURL(file); });
+
 function detail({ s, state }, c, currencies) {
   const { global } = c;
   const base = global.fx.base;
@@ -183,7 +217,7 @@ function detail({ s, state }, c, currencies) {
 
       <h3>Goods <span class="muted">${goodsCur}</span></h3>
       ${s.lines?.length ? html`<table class="table compact">
-        <thead><tr><th>Item</th><th>Product</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th><th class="r">Value</th><th class="r">Landed per unit</th><th></th></tr></thead>
+        <thead><tr><th>Item</th><th>Product</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th><th class="r">kg (line)</th><th class="r">CBM (line)</th><th class="r">Value</th><th class="r">Landed per unit</th><th></th></tr></thead>
         <tbody>${cost.lines.map(l => html`
           <tr>
             <td><input data-chg="line" data-id="${l.id}" data-f="description" data-fk="ln-d-${l.id}" value="${l.description}" aria-label="Item"></td>
@@ -191,6 +225,8 @@ function detail({ s, state }, c, currencies) {
             <td class="r"><input class="narrow" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="qty" data-fk="ln-q-${l.id}" value="${l.qty}" aria-label="Quantity"></td>
             <td><input class="narrow" data-chg="line" data-id="${l.id}" data-f="unit" data-fk="ln-u-${l.id}" value="${l.unit || ''}" aria-label="Unit"></td>
             <td class="r"><input class="price" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="unitCost" data-fk="ln-c-${l.id}" value="${l.unitCost}" aria-label="Unit price"></td>
+            <td class="r"><input class="narrow" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="kg" data-fk="ln-kg-${l.id}" value="${l.kg ?? ''}" aria-label="Weight of the line, kg"></td>
+            <td class="r"><input class="narrow" type="number" min="0" step="any" data-chg="line" data-id="${l.id}" data-f="cbm" data-fk="ln-cbm-${l.id}" value="${l.cbm ?? ''}" aria-label="Volume of the line, CBM"></td>
             <td class="r nowrap">${num(l.value)}</td>
             <td class="r nowrap"><b>${num(l.unitLanded)}</b></td>
             <td class="r"><button class="btn ghost small" data-act="dropLine" data-id="${l.id}">Remove</button></td>
@@ -207,12 +243,14 @@ function detail({ s, state }, c, currencies) {
 
       <h3>Freight, duties and other costs</h3>
       ${s.costs?.length ? html`<table class="table compact">
-        <thead><tr><th>Cost</th><th>Note</th><th class="r">Amount</th><th>Currency</th><th></th></tr></thead>
+        <thead><tr><th>Cost</th><th>Note</th><th>Shared</th><th class="r">Planned</th><th class="r">Actual</th><th>Currency</th><th></th></tr></thead>
         <tbody>${s.costs.map(x => html`
           <tr>
             <td>${costLabel(x.kind)}</td>
             <td><input data-chg="cost" data-id="${x.id}" data-f="note" data-fk="cs-n-${x.id}" value="${x.note || ''}" aria-label="Note"></td>
-            <td class="r"><input class="price" type="number" min="0" step="any" data-chg="cost" data-id="${x.id}" data-f="amount" data-fk="cs-a-${x.id}" value="${x.amount}" aria-label="Amount"></td>
+            <td><select data-chg="cost" data-id="${x.id}" data-f="basis" data-fk="cs-b-${x.id}" aria-label="Shared over the goods">${options(BASES, x.basis || defaultBasis(x.kind))}</select></td>
+            <td class="r"><input class="price" type="number" min="0" step="any" data-chg="cost" data-id="${x.id}" data-f="plan" data-fk="cs-p-${x.id}" value="${x.plan ?? ''}" aria-label="Planned amount"></td>
+            <td class="r"><input class="price" type="number" min="0" step="any" data-chg="cost" data-id="${x.id}" data-f="amount" data-fk="cs-a-${x.id}" value="${+x.amount ? x.amount : ''}" aria-label="Actual amount" placeholder="invoice"></td>
             <td>${x.currency || goodsCur}</td>
             <td class="r"><button class="btn ghost small" data-act="dropCost" data-id="${x.id}">Remove</button></td>
           </tr>`)}</tbody>
@@ -220,7 +258,8 @@ function detail({ s, state }, c, currencies) {
       <form data-form="cost" class="entry">
         <select name="kind" aria-label="Kind of cost">${options(COST_KINDS, 'freight')}</select>
         <input name="note" placeholder="Note, e.g. invoice No." aria-label="Note" class="wide">
-        <input type="number" name="amount" min="0" step="any" placeholder="Amount" required aria-label="Amount" class="amount">
+        <input type="number" name="plan" min="0" step="any" placeholder="Planned" aria-label="Planned amount" class="amount">
+        <input type="number" name="amount" min="0" step="any" placeholder="Actual" aria-label="Actual amount (invoice)" class="amount">
         <select name="currency" aria-label="Currency">${options(currencies, goodsCur)}</select>
         <button class="btn">Add cost</button>
       </form>
@@ -233,7 +272,11 @@ function detail({ s, state }, c, currencies) {
         ${goodsCur !== base ? html`<dt>In ${base}</dt><dd>${money(convert(cost.total, goodsCur, base, global.fx), base, 2)}</dd>` : ''}
       </dl>
       <p class="muted">${cost.uplift == null ? 'Add the goods to see what the route adds to their price.'
-        : `Freight, duties and the rest add ${num(cost.uplift, 1)}% to the purchase price. They are shared over the items by value to give the landed cost per unit.`}</p>
+        : `Freight, duties and the rest add ${num(cost.uplift, 1)}% to the purchase price. Each is shared over the items as chosen (freight and insurance by volume, the rest by value; by value where kg or CBM are missing) to give the landed cost per unit.`}</p>
+
+      ${cost.planned > 0 ? html`<p class="small">Planned costs ${money(cost.planned, goodsCur, 2)}; actual so far ${money(cost.actual, goodsCur, 2)}${cost.allActual
+        ? html`: <b class="${cost.actual > cost.planned ? 'bad' : 'ok'}">${cost.actual > cost.planned ? 'over' : 'under'} plan by ${money(Math.abs(cost.actual - cost.planned), goodsCur, 2)}</b>` : ' (the landed cost uses the planned figure until each invoice is entered)'}.</p>` : ''}
+      ${extras(s, c, cost, goodsCur, currencies)}
 
       <label>Notes <textarea data-chg="set" data-f="notes" data-fk="sh-notes" rows="2">${s.notes || ''}</textarea></label>
 
@@ -289,6 +332,8 @@ export const actions = {
     selected = null;
     notice = '';
   },
+  dropBox(el) { store.updateCompany(co => { const s = find(co); s.containers = (s.containers || []).filter(k => k.id !== el.dataset.id); }); },
+  dropPay(el) { if (confirm('Remove this payment to the supplier?')) store.updateCompany(co => { const s = find(co); s.payments = (s.payments || []).filter(p => p.id !== el.dataset.id); }); },
   dropLine(el) { store.updateCompany(co => { const s = find(co); s.lines = s.lines.filter(l => l.id !== el.dataset.id); }); },
   dropCost(el) { store.updateCompany(co => { const s = find(co); s.costs = s.costs.filter(x => x.id !== el.dataset.id); }); },
 
@@ -323,6 +368,20 @@ const TEXT_FIELDS = new Set(['supplier', 'origin', 'destination', 'tracking', 'c
 
 export const changes = {
   margin(el) { targetMargin = clamp(field(el), 0, 95); },
+  /** v1.22.0: a shipment document to Google Drive (Trading/Shipments/<ref>), then listed on the shipment. */
+  shDoc(el, c) {
+    const file = el.files?.[0], s = find(c.company), kind = el.dataset.kind;
+    if (!file || !s) return;
+    if (!mailReady()) { notice = 'Google Drive is not set up on this computer (Backup).'; store.notify(); return; }
+    if (file.size > 15e6) { notice = 'The file is larger than 15 MB.'; store.notify(); return; }
+    const ext = (String(file.name).match(/\.[a-z0-9]{1,5}$/i) || [''])[0];
+    const name = `${s.ref} ${docLabel(kind)} ${c.today}${ext}`;
+    notice = `Saving ${docLabel(kind)} to Google Drive…`; store.notify();
+    readB64(file).then(b64 => saveBase64(name, b64, file.type || 'application/octet-stream', { folder: `Trading/Shipments/${s.ref}` }))
+      .then(out => { store.updateCompany(co => { const x = co.shipments.find(y => y.id === s.id); if (x) { x.docs ||= []; x.docs.push({ id: uid('sd'), kind, name, url: out.url || '', fileId: out.id || '', at: c.today, by: store.user?.email || '' }); } }); notice = `${docLabel(kind)} saved to Google Drive.`; })
+      .catch(err => { notice = `Not saved: ${err?.message || err}`; })
+      .finally(() => store.notify());
+  },
   paid(el) { store.updateCompany(co => { const x = co.sales.find(s => s.id === el.dataset.id); if (x) { x.paid = el.checked; x.paidOn = el.checked ? todayISO() : ''; } }); },   // paidOn: v1.20.0 (statements, Zoho)
   set(el) {
     const f = el.dataset.f;
@@ -331,18 +390,29 @@ export const changes = {
   },
   line(el) {
     const f = el.dataset.f;
-    const value = f === 'qty' || f === 'unitCost' ? Math.max(0, field(el)) : el.value.trim();
+    const value = ['qty', 'unitCost', 'kg', 'cbm'].includes(f) ? Math.max(0, field(el)) : el.value.trim();   // kg, cbm: v1.22.0
     if (f === 'description' && !value) return;
     store.updateCompany(co => { const l = find(co)?.lines.find(x => x.id === el.dataset.id); if (l) l[f] = value; });
   },
   cost(el) {
     const f = el.dataset.f;
-    const value = f === 'amount' ? Math.max(0, field(el)) : el.value.trim();
+    const value = f === 'amount' || f === 'plan' ? Math.max(0, field(el)) : el.value.trim();   // plan: v1.22.0
     store.updateCompany(co => { const x = find(co)?.costs.find(k => k.id === el.dataset.id); if (x) x[f] = value; });
   },
 };
 
 export const submits = {
+  box(fd, c) {
+    const no = String(fd.get('no') || '').trim().toUpperCase();
+    if (!no || !find(c.company)) return false;
+    store.updateCompany(co => { const s = find(co); s.containers ||= []; s.containers.push({ id: uid('ct'), no, size: fd.get('size'), seal: String(fd.get('seal') || '').trim() }); });
+  },
+  supPay(fd, c) {
+    const amount = +fd.get('amount');
+    if (!(amount > 0) || !find(c.company)) { notice = 'Enter the amount paid.'; return false; }
+    store.updateCompany(co => { const s = find(co); s.payments ||= []; s.payments.push({ id: uid('sp'), kind: fd.get('kind'), date: fd.get('date') || c.today, amount, currency: fd.get('currency'), method: fd.get('method'), ref: String(fd.get('ref') || '').trim() }); });
+    notice = 'Payment to the supplier added.';
+  },
   sale(fd, c) {
     const [shipmentId, lineId] = fd.get('item').split('|');
     const qty = +fd.get('qty'), unitPrice = +fd.get('unitPrice');
@@ -365,9 +435,9 @@ export const submits = {
     }));
   },
   cost(fd, c) {
-    const amount = +fd.get('amount');
-    if (!(amount > 0) || !find(c.company)) return false;
-    store.updateCompany(co => find(co).costs.push({ id: uid('cs'), kind: fd.get('kind'), note: fd.get('note').trim(), amount, currency: fd.get('currency') }));
+    const amount = Math.max(0, +fd.get('amount') || 0), plan = Math.max(0, +fd.get('plan') || 0);
+    if (!(amount > 0 || plan > 0) || !find(c.company)) { notice = 'Enter the planned or the actual amount.'; return false; }
+    store.updateCompany(co => find(co).costs.push({ id: uid('cs'), kind: fd.get('kind'), note: fd.get('note').trim(), plan, amount, basis: defaultBasis(fd.get('kind')), currency: fd.get('currency') }));
   },
 };
 

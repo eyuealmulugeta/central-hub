@@ -75,9 +75,10 @@ function detail(p, c, cur) {
     ${p.sales.length ? html`<h3>Sales</h3><table class="table compact"><thead><tr><th>Date</th><th>Item</th><th class="r">Qty</th><th class="r">Sale</th><th>Due</th><th>Paid</th></tr></thead>
       <tbody>${p.sales.map(x => html`<tr><td class="nowrap">${fmtDate(x.date)}</td><td>${x.item}</td><td class="r nowrap">${num(x.qty)} ${x.unit}</td><td class="r nowrap">${m(x.revenue)}</td>
         <td class="nowrap">${fmtDate(x.due)} ${x.overdue ? chip(`${x.daysLate} days late`, 'high') : ''}</td><td>${x.paid ? chip('Paid', 'ok') : 'Not yet'}</td></tr>`)}</tbody></table>` : ''}
-    ${p.shipments.length ? html`<h3>Shipments</h3><table class="table compact"><thead><tr><th>Ref.</th><th>Ordered</th><th>Goods</th><th class="r">Goods value</th><th>Paid to supplier</th></tr></thead>
-      <tbody>${p.shipments.map(({ s, goods }) => html`<tr><td class="nowrap">${s.ref}</td><td class="nowrap">${fmtDate(s.ordered || s.created)}</td><td>${(s.lines || []).map(l => l.description).join(', ')}</td><td class="r nowrap">${m(goods)}</td>
-        <td><label class="check"><input type="checkbox" data-chg="ptShipPaid" data-id="${s.id}" ${s.supplierPaid ? 'checked' : ''}> ${s.supplierPaid ? `Paid ${fmtDate(s.supplierPaidOn)}` : 'Not yet'}</label></td></tr>`)}</tbody></table>` : ''}
+    ${p.shipments.length ? html`<h3>Shipments</h3><table class="table compact"><thead><tr><th>Ref.</th><th>Ordered</th><th>Goods</th><th class="r">Goods value</th><th class="r">Paid to supplier</th></tr></thead>
+      <tbody>${p.shipments.map(({ s, goods, paid }) => html`<tr><td class="nowrap">${s.ref}</td><td class="nowrap">${fmtDate(s.ordered || s.created)}</td><td>${(s.lines || []).map(l => l.description).join(', ')}</td><td class="r nowrap">${m(goods)}</td>
+        <td class="r nowrap">${m(paid)} ${goods - paid > 0.005 ? html`<span class="muted">balance ${m(goods - paid)}</span>` : chip('Paid', 'ok')}</td></tr>`)}</tbody></table>
+      <p class="muted small">Deposits and balances paid to the supplier are added on each shipment under Trading > Shipments.</p>` : ''}
     ${!p.sales.length && !p.shipments.length ? html`<p class="empty">No sales or shipments with this name yet.</p>` : ''}
   </section>`;
 }

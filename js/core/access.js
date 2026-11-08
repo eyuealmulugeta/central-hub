@@ -59,7 +59,7 @@ export function tickPage(user, page, on) {
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).
-const PERM = { workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'finance' };
+const PERM = { workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'trade' };   // v1.23.0 (G10 T5, owner): everyone with Trading
 export const permKey = page => PERM[page] || page;
 const key = permKey;
 

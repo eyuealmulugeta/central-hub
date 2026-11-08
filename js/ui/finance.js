@@ -4,7 +4,9 @@
 import { BOOK_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
 import { companyFinance, invoiceExport, entryExport } from '../engine/finance.js';
-import { stockAndSales, tradeSummary } from '../engine/trade.js';
+import { dashPage, dashPaper, dashOf, seesProfit } from './tradedash.js';
+import { dashSheets } from '../engine/tradedash.js';
+import { xlsxBytes } from '../core/xlsxwrite.js';
 import { money, fmtDate, fmtFull, toCSV, downloadText } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { companyCode } from '../engine/docref.js';
@@ -21,7 +23,7 @@ let sheet = false;    // the one-page summary to print (v0.22.2) instead of the 
 let notice = '';
 export const preset = o => { part = o.part === 'trading' ? 'trading' : 'construction'; sheet = false; notice = ''; };
 
-const SHEET_TITLE = { construction: 'Company finance summary', trading: 'Trading summary' };
+const SHEET_TITLE = { construction: 'Company finance summary', trading: 'Trading dashboard' };
 const sheetRef = c => `${companyCode(c.global.company)}-${part === 'trading' ? 'TRD' : 'FIN'}-${c.today}`;
 /** The toolbar of the printable summary: back to the screen, then print and share. */
 const sheetBar = () => html`<div class="toolbar no-print">
@@ -59,32 +61,6 @@ function companyPaper(c, f) {
         <tbody>${f.receivables.slice(0, 12).map(r => html`<tr><td>${r.number}</td><td>${r.project}</td><td>${r.client || '—'}</td><td class="nowrap">${fmtFull(r.due)}${r.overdue > 0 ? `, ${r.overdue} days overdue` : ''}</td><td class="r nowrap">${m(r.amount)}</td></tr>`)}</tbody></table>` : html`<p class="dsr-none">No invoice is waiting for payment.</p>`}`)}
     <p class="muted p-notes">A management view built from the projects, not statutory accounts. Invoiced is before VAT; owed to you is the amount due on the invoice. Amounts are converted with the exchange rates under Settings.</p>
     ${signoff([{ label: 'Prepared by' }, { label: 'Checked by' }, { label: 'Approved by' }])}
-    ${docFoot(foot)}
-  </div></section>`;
-}
-
-/** Trading on one page: the figures, what is in stock and the latest sales. */
-function tradingPaper(c, cur, st, ship) {
-  const m = v => money(v, cur);
-  const ref = sheetRef(c);
-  const foot = footText(c, SHEET_TITLE.trading, ref, { project: false, note: 'internal' });
-  const stock = st.items.filter(i => i.left > 0);
-  return html`<section class="card sheet"><div class="paper dsr doc-paper fin-paper" data-foot="${foot}">
-    ${docHead(c, { title: SHEET_TITLE.trading, sub: fmtFull(c.today), ref, facts: [['As of', fmtFull(c.today)], ['Currency', `${cur}, converted`], ['Shipments open', String(ship.open)]] })}
-    <div class="dsr-kpis" style="grid-template-columns:repeat(5,1fr)">
-      <div><b>${m(st.stockValue)}</b><span>Stock value, landed cost</span></div>
-      <div><b>${m(ship.onTheWay)}</b><span>On the way</span></div>
-      <div><b>${m(st.revenue)}</b><span>Sold · ${st.sales.length} sales</span></div>
-      <div class="${st.profit < 0 ? 'warn' : ''}"><b>${m(st.profit)}</b><span>Profit${st.margin == null ? '' : ` · ${Math.round(st.margin)} % of sales`}</span></div>
-      <div><b>${m(st.unpaid)}</b><span>Owed to you</span></div>
-    </div>
-    ${docSec(1, 'In stock', stock.length ? html`<table class="dsr-t"><thead><tr><th>Goods</th><th>Shipment</th><th class="r">Left</th><th class="r">Landed per unit</th><th class="r">Value</th></tr></thead>
-      <tbody>${stock.map(i => html`<tr><td>${i.description}</td><td>${i.ref}${i.arrived ? '' : ', on the way'}</td><td class="r nowrap">${i.left} ${i.unit}</td><td class="r nowrap">${m(i.unitLanded)}</td><td class="r nowrap">${m(i.stockValue)}</td></tr>`)}</tbody>
-      <tfoot><tr><td colspan="4">Total</td><td class="r nowrap">${m(st.stockValue)}</td></tr></tfoot></table>` : html`<p class="dsr-none">Nothing in stock.</p>`)}
-    ${docSec(2, 'Latest sales', st.sales.length ? html`<table class="dsr-t"><thead><tr><th>Date</th><th>Goods</th><th>Customer</th><th class="r">Sold for</th><th class="r">Profit</th><th>Paid</th></tr></thead>
-      <tbody>${st.sales.slice(0, 15).map(x => html`<tr><td class="nowrap">${fmtFull(x.date)}</td><td>${x.item}</td><td>${x.customer || ''}</td><td class="r nowrap">${m(x.revenue)}</td><td class="r nowrap ${x.profit < 0 ? 'bad' : ''}">${m(x.profit)}</td><td>${x.paid ? 'Paid' : 'Owed'}</td></tr>`)}</tbody></table>` : html`<p class="dsr-none">No sale yet.</p>`)}
-    <p class="muted p-notes">Trading records only; the projects are in the company finance summary. A management view, not statutory accounts.</p>
-    ${signoff([{ label: 'Prepared by' }, { label: 'Checked by' }])}
     ${docFoot(foot)}
   </div></section>`;
 }
@@ -213,50 +189,18 @@ export function render(c) {
     </div>`;
 }
 
-/** The trading side on its own: what is in stock, on the way, sold and still owed. Nothing from the projects is in it. */
+/** v1.23.0 (G10 T5): the trading dashboard (ui/tradedash.js) replaces the old trading summary. */
 function tradingPage(c) {
   const cur = currency || c.global.fx.base;
-  const currencies = BOOK_OPTIONS;   // v0.25.0: USD only
-  const m = v => money(v, cur);
-  const st = stockAndSales(c.company, c.global.fx, cur);
-  const ship = tradeSummary(c.company.shipments, c.global.fx, c.today, cur);
-  const kpi = (label, value, sub, cls = '') => html`
-    <div class="kpi"><span class="kpi-label">${label}</span><strong class="${cls}">${value}</strong><span class="muted">${sub}</span></div>`;
   const toolbar = html`
     <div class="toolbar">
-      <h2>Trading</h2><span class="muted">Stock, sales and what is owed</span><span class="grow"></span>
-      <label class="inline">Show in <select data-chg="currency" data-fk="fin-cur">${options(currencies, cur)}</select></label>
-      ${st.items.length || st.sales.length ? sheetBtn : ''}
+      <h2>Trading dashboard</h2><span class="muted">How trading is doing</span><span class="grow"></span>
+      <label class="inline">Show in <select data-chg="currency" data-fk="fin-cur">${options(BOOK_OPTIONS, cur)}</select></label>
+      <button class="btn" data-act="dashExcel">Excel</button>
+      ${sheetBtn}
     </div>`;
-  if (sheet && (st.items.length || st.sales.length)) return html`${sheetBar()}${tradingPaper(c, cur, st, ship)}`;
-  if (!st.items.length && !st.sales.length && !ship.rows.length) return html`<div class="side">${toolbar}<p class="empty">No trading yet. Add a shipment under Trading, Shipments; its goods become stock, and sales are recorded under Stock and sales.</p></div>`;
-  const unpaid = st.sales.filter(x => !x.paid);
-  return html`
-    <div class="side">
-      ${toolbar}
-      <section class="kpis">
-        ${kpi('Stock value', m(st.stockValue), 'Unsold goods at landed cost')}
-        ${kpi('On the way', m(ship.onTheWay), `${ship.open} shipment${ship.open === 1 ? '' : 's'} not delivered`)}
-        ${kpi('Sold', m(st.revenue), `${st.sales.length} sale${st.sales.length === 1 ? '' : 's'}`)}
-        ${kpi('Trading profit', m(st.profit), st.margin == null ? 'No sale yet' : `${Math.round(st.margin)}% of sales`, st.profit < 0 ? 'bad' : '')}
-        ${kpi('Owed to you', m(st.unpaid), `${unpaid.length} sale${unpaid.length === 1 ? '' : 's'} not paid yet`)}
-      </section>
-      <section class="card">
-        <h2>In stock</h2>
-        ${st.items.some(i => i.left > 0) ? html`<table class="table compact">
-          <thead><tr><th>Goods</th><th>Shipment</th><th class="r">Left</th><th class="r">Landed per unit</th><th class="r">Value</th></tr></thead>
-          <tbody>${st.items.filter(i => i.left > 0).map(i => html`<tr><td>${i.description}</td><td>${i.ref}${i.arrived ? '' : html` <span class="muted">on the way</span>`}</td><td class="r nowrap">${i.left} ${i.unit}</td><td class="r nowrap">${m(i.unitLanded)}</td><td class="r nowrap">${m(i.stockValue)}</td></tr>`)}</tbody>
-        </table>` : html`<p class="empty">Nothing in stock.</p>`}
-      </section>
-      <section class="card">
-        <h2>Sales</h2>
-        ${st.sales.length ? html`<table class="table compact">
-          <thead><tr><th>Date</th><th>Goods</th><th class="r">Sold for</th><th class="r">Profit</th><th></th></tr></thead>
-          <tbody>${st.sales.slice(0, 40).map(x => html`<tr><td class="nowrap">${fmtFull(x.date)}</td><td>${x.item}${x.customer ? html` <span class="muted">${x.customer}</span>` : ''}</td><td class="r nowrap">${m(x.revenue)}</td><td class="r nowrap ${x.profit < 0 ? 'bad' : ''}">${m(x.profit)}</td><td>${x.paid ? chip('Paid', 'ok') : chip('Owed', 'warn')}</td></tr>`)}</tbody>
-        </table>` : html`<p class="empty">No sale yet.</p>`}
-      </section>
-      <p class="muted">Trading figures hold only the trading records. The projects' costs, invoices and shipments for projects are under Installation. This is a management view, not statutory accounts.</p>
-    </div>`;
+  if (sheet) return html`${sheetBar()}${dashPaper(c, cur, SHEET_TITLE.trading, sheetRef(c))}`;
+  return dashPage(c, cur, toolbar);
 }
 
 const fileDate = () => new Date().toISOString().slice(0, 10);
@@ -279,6 +223,7 @@ export const actions = {
   },
   /** Jump to the Costs screen of one project. */
   open(el) { store.switchTo(el.dataset.id); location.hash = '#ledger'; },
+  dashExcel(el, c) { const cur = currency || c.global.fx.base; downloadText(`Trading dashboard ${c.today}.xlsx`, xlsxBytes(dashSheets(dashOf(c, cur), seesProfit())), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); },   // v1.23.0
   exportInvoices(el, c) { if (data) downloadText(`central-hub-invoices-${fileDate()}.csv`, '﻿' + toCSV(invoiceExport(figures(c)))); },
   exportEntries(el, c) { if (data) downloadText(`central-hub-costs-and-receipts-${fileDate()}.csv`, '﻿' + toCSV(entryExport(figures(c)))); },
 };

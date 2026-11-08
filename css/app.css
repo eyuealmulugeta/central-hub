@@ -1971,3 +1971,10 @@ body.viewing { overflow: hidden; }
 :root[data-division="trading"] .sidebar { box-shadow: inset 4px 0 0 #00796b; }
 :root[data-division="trading"] .division button.on { background: #00796b; color: #fff; }
 :root[data-division="trading"] .brand-name small::after { content: " · Trading"; color: #00796b; font-weight: 700; }
+
+/* v1.23.0 (G10 T5): trading dashboard */
+.td-chart { width: 100%; height: auto; display: block; }
+.td-ages { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
+.td-ages > div { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
+.td-ages > div.warn b { color: var(--bad); }
+.td-ages span { font-size: 12px; color: var(--muted); }

@@ -20,7 +20,7 @@ export const ALIASES = {
   income: { view: 'ledger', title: 'Income', preset: { only: 'income' }, switch: 'ledger' },
   expenses: { view: 'ledger', title: 'Expenses', preset: { only: 'expense' }, switch: 'ledger' },
   summary: { view: 'finance', title: 'Summary report', preset: { part: 'construction' } },
-  tradesummary: { view: 'finance', title: 'Trading summary', preset: { part: 'trading' } },
+  tradesummary: { view: 'finance', title: 'Trading dashboard', preset: { part: 'trading' } },   // v1.23.0 (G10 T5)
   crewletters: { view: 'letters', title: 'Letters' },
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },

@@ -33,11 +33,11 @@ export function receiptWrites({ list = [], mine = [], me, name = '', field = 'go
 }
 
 /** The tag under one's own message: { k: 'sent' | 'delivered' | 'seen', text, names }. */
-export function tagOf(m, receipts = [], me) {
+export function tagOf(m, receipts = [], me, nameOf = r => r.name || r.who) {
   const e = low(me), k = chatKey(m), at = String(m.at || '');
   const rs = receipts.filter(r => r.chat === k && r.who !== e);
   const seen = rs.filter(r => String(r.seen || '') >= at), got = rs.filter(r => String(r.got || '') >= at || String(r.seen || '') >= at);
-  const names = list => list.map(r => r.name || r.who).join(', ');
+  const names = list => list.map(nameOf).join(', ');   // the app's own names (Directory name and position)
   if (m.members) return seen.length ? { k: 'seen', text: 'Seen', names: '' } : got.length ? { k: 'delivered', text: 'Delivered', names: '' } : { k: 'sent', text: 'Sent', names: '' };
   if (seen.length) return { k: 'seen', text: `Seen by ${seen.length}`, names: names(seen) };
   if (got.length) return { k: 'delivered', text: `Delivered to ${got.length}`, names: names(got) };

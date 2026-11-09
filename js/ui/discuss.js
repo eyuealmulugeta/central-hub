@@ -45,10 +45,14 @@ export const linked = text => String(text || '').split(LINK).map((part, i) => {
   return html`<a href="${/^www\./.test(url) ? `https://${url}` : url}" target="_blank" rel="noopener noreferrer">${url}</a>${tail}`;
 });
 /** The sender as the directory knows them (full name, title and photo), else as the message says. */
+// v1.38.0 (owner, 9 Nov, D5): names and positions from the Manpower Directory (directory/people), never an email
+const dirOf = email => (store.people?.people || []).find(p => p.e === String(email || '').toLowerCase());
 const sender = (company, m) => {
-  const p = (company.staff || []).find(x => accountOf(x) === m.by);
-  return { name: p?.name || m.name || m.by, title: p?.title || m.title || '', photo: p?.photo || '', email: m.by };
+  const p = (company.staff || []).find(x => accountOf(x) === m.by), d = dirOf(m.by);
+  return { name: p?.name || d?.n || m.name || 'Colleague', title: p?.title || d?.t || m.title || '', photo: p?.photo || '', email: m.by };
 };
+/** "Name · Position" of an email, for the Seen by list. */
+const nameTag = (email, fallback = '') => { const w = sender(store.company || {}, { by: email, name: fallback }); return `${w.name}${w.title ? ` · ${w.title}` : ''}`; };
 const face = (who, big = false) => (who.photo ? html`<img class="avatar ${big ? 'big' : 'small'}" src="${who.photo}" alt="">`
   : html`<span class="avatar ${big ? 'big' : 'small'}" style="background:${colour(who.email)}">${initials(who.name)}</span>`);
 const colour = text => COLOURS[[...String(text)].reduce((n, ch) => n + ch.charCodeAt(0), 0) % COLOURS.length];
@@ -81,7 +85,7 @@ function directs(company) {
   if (isDirect(open) && !last.has(otherOf(open))) last.set(otherOf(open), '~');
   return [...last].sort((a, b) => b[1].localeCompare(a[1])).map(([email]) => {
     const who = sender(company, { by: email, name: names.get(email) || email });
-    return { id: DM + email, name: who.name, about: who.title || email, direct: true, who };
+    return { id: DM + email, name: who.name, about: who.title || 'Direct message', direct: true, who };
   });
 }
 
@@ -149,7 +153,71 @@ export function announce(company, onDiscuss = false) {
   if (!news.length) return;
   ring();
   const last = news.at(-1);
-  if (!(onDiscuss && chatOf(last) === open)) tell(`💬 ${sender(company, last).name}${last.members ? ' (to you)' : ''}: ${last.text.slice(0, 90)}${news.length > 1 ? ` (+${news.length - 1} more)` : ''}`);
+  const hidden = typeof document !== 'undefined' && document.hidden;
+  // v1.38.0 (owner, 9 Nov, D2): a pop-up with Reply and Close (not when that chat is already on the screen),
+  // and the computer's own notification while Central Hub is in the background
+  if (!(onDiscuss && chatOf(last) === open && !hidden)) popUp(company, last, news.length);
+  if (hidden) notifyOs(company, last);
+}
+
+let popTimer = 0;
+const whereOf = m => (m.members ? 'to you' : /^general/.test(m.channel || '') ? 'General' : (store.projects.find(p => p.id === m.channel)?.name || 'Project'));
+/** v1.38.0 (D2): the new-message pop-up: who (name · position), where, the text; Reply sends from it, Close or 30 s takes it away. */
+function popUp(company, m, n = 1) {
+  if (typeof document === 'undefined') return;
+  document.querySelector('.chat-pop')?.remove();
+  const who = sender(company, m), chat = chatOf(m);
+  const el = document.createElement('div');
+  el.className = 'chat-pop'; el.setAttribute('role', 'alertdialog'); el.setAttribute('aria-label', 'New message');
+  el.innerHTML = '<div class="cp-head"><span class="avatar small"></span><div><b></b><span class="muted small"></span></div><button type="button" class="btn ghost small cp-x" aria-label="Close">✕</button></div>'
+    + '<button type="button" class="cp-text" title="Open the chat"></button>'
+    + '<form class="cp-reply"><input name="t" maxlength="2000" placeholder="Reply…" aria-label="Reply" autocomplete="off"><button class="btn small primary">Reply</button><button type="button" class="btn small ghost cp-close">Close</button></form>';
+  const av = el.querySelector('.avatar'); av.textContent = initials(who.name); av.style.background = colour(who.email);
+  el.querySelector('b').textContent = `${who.name}${who.title ? ` · ${who.title}` : ''}`;
+  el.querySelector('.muted').textContent = `${whereOf(m)}${n > 1 ? ` · ${n - 1} more` : ''}`;
+  el.querySelector('.cp-text').textContent = m.text;
+  const close = () => { clearTimeout(popTimer); el.remove(); };
+  el.querySelector('.cp-x').onclick = close;
+  el.querySelector('.cp-close').onclick = close;
+  el.querySelector('.cp-text').onclick = () => { open = chat; close(); location.hash = '#discuss'; store.notify(); };
+  el.querySelector('input').onfocus = () => clearTimeout(popTimer);
+  el.querySelector('form').onsubmit = e => { e.preventDefault(); const t = el.querySelector('input').value.trim(); if (!t) return; sendTo(chat, t); close(); tell('Reply sent.'); };
+  document.body.append(el);
+  popTimer = setTimeout(close, 30000);
+}
+/** v1.38.0 (D2): the computer's notification while Central Hub is in the background (after Turn on notifications). */
+function notifyOs(company, m) {
+  try {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const who = sender(company, m), chat = chatOf(m);
+    const n = new Notification(`${who.name}${who.title ? ` · ${who.title}` : ''} (${whereOf(m)})`, { body: String(m.text || '').slice(0, 200), tag: `chat-${chat}` });
+    n.onclick = () => { window.focus(); open = chat; location.hash = '#discuss'; store.notify(); n.close(); };
+  } catch { /* no notifications here */ }
+}
+/** Send a message to a channel or chat; the phones are told by the server (functions/chatpush.js). */
+function sendTo(channel, text) {
+  const base = { id: uid('msg'), by: me(), name: myName(), title: store.profile?.title || '', text: String(text).slice(0, MAX_LENGTH), at: new Date().toISOString(), sentMs: Date.now() };
+  if (isDirect(channel)) store.updateCompany(co => { (co.direct ||= []).push({ ...base, members: pairOf(me(), otherOf(channel)) }); });
+  else store.updateCompany(co => { (co.messages ||= []).push({ ...base, channel }); });
+  if (store.cloud) setTimeout(() => { try { Promise.resolve(store.callServer('chatPush', { id: base.id, dm: isDirect(channel) })).catch(() => {}); } catch { /* not signed in */ } }, 2500);
+}
+
+// v1.38.0 (owner, 9 Nov, D3/D4): New chat first; the person is chosen from the Directory by project, position and name
+let picking = false, pickProj = '', pickPos = '';
+const mayAll = () => store.role === 'owner' || (store.ranks || []).includes('general_manager');
+function picker() {
+  const dir = store.people?.people || [];
+  const all = mayAll(), projs = (store.projects || []).filter(p => !p.binned);
+  const proj = pickProj || (all ? '@all' : (projs.find(p => p.id === open)?.id || projs[0]?.id || ''));
+  const inProj = dir.filter(p => p.e !== me() && (proj === '@all' || (p.p || []).includes('@all') || (p.p || []).includes(proj)));
+  const positions = [...new Set(inProj.map(p => p.t).filter(Boolean))].sort();
+  const list = inProj.filter(p => !pickPos || p.t === pickPos);
+  return html`<div class="chat-pick">
+    <label>Project<select data-chg="pickProj">${all ? html`<option value="@all" ${proj === '@all' ? 'selected' : ''}>All projects</option>` : ''}${projs.map(p => html`<option value="${p.id}" ${p.id === proj ? 'selected' : ''}>${p.name}</option>`)}</select></label>
+    <label>Position<select data-chg="pickPos"><option value="">All positions</option>${positions.map(t => html`<option value="${t}" ${t === pickPos ? 'selected' : ''}>${t}</option>`)}</select></label>
+    <label>Name<select data-chg="pickWho"><option value="">Choose a person (${list.length})</option>${list.map(p => html`<option value="${p.e}">${p.n}${p.t ? ` · ${p.t}` : ''}</option>`)}</select></label>
+    ${dir.length ? '' : html`<p class="muted small">The list comes from the Manpower Directory and is being prepared; try again in a few minutes.</p>`}
+  </div>`;
 }
 
 const sameDay = (a, b) => a.slice(0, 10) === b.slice(0, 10);
@@ -159,7 +227,6 @@ const timeLabel = iso => new Date(iso).toLocaleTimeString([], { hour: '2-digit',
 export function render(c) {
   const all = channels(c.company);
   if (!all.some(ch => ch.id === open)) open = general();
-  const people = colleagues(c.company);
   const current = all.find(ch => ch.id === open);
   const seen = readSeen();
   const q = filter.trim().toLowerCase();
@@ -186,20 +253,17 @@ export function render(c) {
 
   return html`
     <aside class="card chat-side">
+      <button type="button" class="btn ${picking ? '' : 'primary'} small chat-newbtn" data-act="pick" aria-expanded="${picking}">${picking ? '✕ Close' : '＋ New chat'}</button>
+      ${picking ? picker() : ''}
       <input class="search" type="search" data-chg="search" data-fk="chat-q" value="${filter}" placeholder="Search channels and people" aria-label="Search channels and people">
       <span class="side-label">Channels</span>
       <ul class="list">${listed.filter(ch => !ch.direct).map(item)}</ul>
       <span class="side-label">Direct messages</span>
       ${dms.length ? html`<ul class="list">${dms.map(item)}</ul>` : ''}
-      <form data-form="dm" class="chat-new">
-        <input name="who" list="chat-people" placeholder="Write to a colleague…" aria-label="Write to a colleague (name or email)" autocomplete="off" required>
-        <datalist id="chat-people">${people.map(p => html`<option value="${p.email}">${p.name}</option>`)}</datalist>
-        <button class="btn small">Chat</button>
-      </form>
       ${listed.length ? '' : html`<p class="muted">No channel or person with that name.</p>`}
     </aside>
     <section class="card chat-main">
-      <div class="toolbar"><h2>${current.id === general() ? '# General' : current.name}</h2><span class="muted">${current.direct ? `🔒 Private: only you and ${current.name} see these messages` : current.about}${store.cloud ? '' : '. Demo: messages stay in this browser'}</span></div>
+      <div class="toolbar"><h2>${current.id === general() ? '# General' : current.name}</h2>${typeof Notification !== 'undefined' && Notification.permission === 'default' && store.cloud ? html`<button type="button" class="btn ghost small" data-act="notifOn" title="A notification on this computer when a message comes while Central Hub is in the background">🔔 Turn on notifications</button>` : ''}<span class="muted">${current.direct ? `🔒 Private: only you and ${current.name} see these messages` : current.about}${store.cloud ? '' : '. Demo: messages stay in this browser'}</span></div>
       ${card ? profileCard(card) : ''}
       <div class="chat-log">${rows.length ? rows.map(({ m, newDay }) => {
         const who = sender(c.company, m);
@@ -230,13 +294,13 @@ export function render(c) {
 }
 
 /** v1.37.0 (owner, 9 Nov): Sent / Delivered / Seen under one's own message; in a channel, who (on hover). */
-const receiptTag = m => { const t = tagOf(m, store.receipts, me()); return html`<span class="rc rc-${t.k}" title="${t.names}">${tick(t)} ${t.text}</span>`; };
+const receiptTag = m => { const t = tagOf(m, store.receipts, me(), r => nameTag(r.who, r.name)); return html`<span class="rc rc-${t.k}" title="${t.names}">${tick(t)} ${t.text}</span>`; };
 
 /** The sender's card: photo, full name and position. */
 const profileCard = who => html`
   <div class="chat-card" role="dialog" aria-label="${who.name}">
     ${face(who, true)}
-    <div><b>${who.name}</b><span class="muted">${who.title || 'No position recorded'}</span><span class="muted">${who.email}</span></div>
+    <div><b>${who.name}</b><span class="muted">${who.title || 'No position recorded'}</span></div>
     <button type="button" class="btn ghost small" data-act="profile" data-id="" aria-label="Close">✕</button>
   </div>`;
 
@@ -244,6 +308,8 @@ export const actions = {
   open(el) { open = el.dataset.id; editing = null; profile = null; },
   profile(el) { profile = el.dataset.id && el.dataset.id !== profile ? el.dataset.id : null; },
   edit(el) { editing = el.dataset.id || null; },
+  pick() { picking = !picking; pickPos = ''; },   // v1.38.0
+  notifOn() { try { Promise.resolve(Notification.requestPermission()).then(() => store.notify()); } catch { /* not here */ } },
   /** Take a message back: everyone then sees "This message was deleted" and when. The sender, or the Admin. */
   unsend(el, c) {
     const sec = isDirect(open) ? 'direct' : 'messages';
@@ -261,16 +327,16 @@ export const actions = {
 
 export const changes = {
   search(el) { filter = el.value; },
+  pickProj(el) { pickProj = el.value; pickPos = ''; },
+  pickPos(el) { pickPos = el.value; },
+  pickWho(el) { if (el.value) { open = DM + el.value; picking = false; editing = null; profile = null; filter = ''; } },
 };
 
 export const submits = {
   send(fd) {
     const text = String(fd.get('text') || '').trim().slice(0, MAX_LENGTH);
     if (!text) return false;
-    const channel = open || general();
-    const base = { id: uid('msg'), by: me(), name: myName(), title: store.profile?.title || '', text, at: new Date().toISOString(), sentMs: Date.now() };
-    if (isDirect(channel)) store.updateCompany(co => { (co.direct ||= []).push({ ...base, members: pairOf(me(), otherOf(channel)) }); });
-    else store.updateCompany(co => { (co.messages ||= []).push({ ...base, channel }); });
+    sendTo(open || general(), text);
   },
   /** v0.65.0: start (or open) a one-to-one chat with a colleague, chosen from the list or by email. */
   dm(fd, c) {

@@ -68,6 +68,25 @@ export function usersIntoDirectory({ staff = [], users = [], admins = [], newId,
   return { add, link, twice };
 }
 
+/**
+ * v1.38.0 (owner, 9 Nov, Discuss D4/D5): the people one can write to, from the Manpower Directory: everyone with a sign-in
+ * email, as { e: email, n: name, t: position, p: Central Hub project ids or ['@all'] }, and the projects { id, name, code }.
+ * Kept in directory/people by the server, read by Central Hub and Field Report (names and positions, never emails shown).
+ */
+export function chatPeople({ staff = [], projects = [], users = [], admins = [] }) {
+  const adm = new Set(admins.map(low)), out = new Map();
+  for (const p of staff) {
+    const e = accountOf(p);
+    if (!e || left(p)) continue;
+    const pids = [...new Set([p.projectId, ...(p.assignments || []).filter(a => a.active !== false).map(a => a.projectId)].filter(Boolean))];
+    const all = adm.has(e) || p.allProjects || /general manager|^gm$/i.test(String(p.title || '').trim());
+    out.set(e, { e, n: String(p.name || '').trim() || e.split('@')[0], t: String(p.title || '').trim(), p: all ? ['@all'] : pids });
+  }
+  for (const a of adm) if (a && !out.has(a)) { const u = users.find(x => low(x.email) === a) || {}; out.set(a, { e: a, n: u.name || 'Admin', t: u.title || 'Admin', p: ['@all'] }); }
+  return { people: [...out.values()].sort((x, y) => x.n.localeCompare(y.n)),
+    projects: projects.filter(p => p && !p.binned).map(p => ({ id: p.id, name: String(p.name || ''), code: String(p.fieldCode || '').toUpperCase() })) };
+}
+
 /** v1.31.0 (owner, 9 Nov): who may be given "All projects" in the Directory: the Admin's own account, the GM and Tier 1. */
 export const mayAllProjects = (p, tier, admins = []) => tier === 1 || frRoleOf(p && p.title) === 'exec' || admins.map(low).includes(accountOf(p));
 /** The people who should use the apps, from the Directory (with a sign-in email, not left): { email, name, position }. */

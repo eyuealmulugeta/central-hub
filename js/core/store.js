@@ -53,7 +53,8 @@ let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Repor
 let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
 let feed = null;   // v1.2.0 (G5): datafeed/latest
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
-let rcpt = { ch: [], dm: [], c: false, d: false };   // v1.37.0: Discuss receipts (engine/receipts.js)
+let rcpt = { ch: [], dm: [], c: false, d: false };
+let people = null;   // v1.38.0: directory/people (Discuss names, positions, projects)   // v1.37.0: Discuss receipts (engine/receipts.js)
 /** v1.37.0: write this person's Delivered (got) or, for the conversation on screen, Seen. */
 function receiptsTick(field = 'got', only = '') {
   if (!api || !me || !rcpt.c || !rcpt.d) return;
@@ -386,6 +387,7 @@ export const store = {
     shared.push(api.watchCol(`${COMPANY_PATH}/direct`, docs => { company.direct = sectionFromDocs('direct', docs); emit(); receiptsTick(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
     // v1.37.0 (owner, 9 Nov): who has received and seen each conversation (Sent / Delivered / Seen under one's own messages)
     rcpt = { ch: [], dm: [], c: false, d: false };
+    shared.push(api.watchDoc('directory/people', d => { people = d; emit(); }, () => {}));   // v1.38.0
     shared.push(api.watchCol(`${COMPANY_PATH}/chatSeen`, docs => { rcpt.ch = docs; rcpt.c = true; emit(); receiptsTick(); }, () => {}));
     shared.push(api.watchCol(`${COMPANY_PATH}/dmSeen`, docs => { rcpt.dm = docs; rcpt.d = true; emit(); receiptsTick(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
     // v0.72.0: urgent notices from the GM: the Admin reads them all (the log), everyone else those sent to them
@@ -586,6 +588,8 @@ export const store = {
   get urgent() { return urgent; },
   /** v1.37.0: Discuss receipts of everyone (channels) and of this person's one-to-one chats. */
   get receipts() { return [...rcpt.ch, ...rcpt.dm]; },
+  /** v1.38.0: the Discuss people list { people: [{ e, n, t, p }], projects: [{ id, name, code }] }, or null. */
+  get people() { return people; },
   /** v1.37.0: the conversation `chat` (chatKey) is on screen: Seen up to its newest message. */
   markChatSeen(chat) { receiptsTick('seen', chat); },
   /** v0.72.0: send an urgent notice (engine/urgent.js urgentRecord). */

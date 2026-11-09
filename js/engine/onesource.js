@@ -43,6 +43,31 @@ export function named(list = [], staff = []) {
   const who = directoryWho(staff);
   return list.map(e => { const p = who.get(low(e && e.email)); return p ? { ...e, name: p.name || e.name, position: p.title || e.position, typed: e.name !== p.name ? e.name : undefined } : e; });
 }
+/**
+ * v1.36.0 (owner, 9 Nov: "anyone authorized should automatically come to the manpower directory"): a Central Hub
+ * account (users/, not the Admin's own) whose email no Directory person has as sign-in email becomes a Directory person
+ * with that sign-in email, its name, position and projects. A Directory person of the same name without a sign-in
+ * email is linked instead; one of the same name with another sign-in email is left alone and listed (two emails).
+ */
+export function usersIntoDirectory({ staff = [], users = [], admins = [], newId, today = '' }) {
+  const have = new Set(staff.map(accountOf).filter(Boolean)), adm = new Set(admins.map(low));
+  const add = [], link = [], twice = [];
+  for (const u of users) {
+    const email = low(u && u.email);
+    if (!email.includes('@') || u.role === 'owner' || u.role === 'disabled' || adm.has(email) || have.has(email)) continue;
+    const name = String(u.name || '').trim();
+    const same = name ? staff.filter(p => !left(p) && norm(p.name) === norm(name)) : [];
+    if (same.length === 1 && !accountOf(same[0])) { link.push({ id: same[0].id, accountEmail: email }); have.add(email); continue; }
+    if (same.length) { twice.push({ email, name, other: same.map(accountOf).filter(Boolean) }); continue; }
+    const pids = (u.projects || []).filter(Boolean);
+    add.push({ id: newId(), name: name || email.split('@')[0], title: String(u.title || '').trim(), department: '', projectId: pids[0] || '', status: 'active', started: today,
+      agreement: {}, documents: [], notes: '', level: u.role === 'office' ? 'staff' : 'crew', accountEmail: email, email,
+      assignments: pids.map(projectId => ({ projectId, role: String(u.title || '').trim(), dayRate: 0, active: true })), addedBy: 'Central Hub access', addedOn: today, from: 'Central Hub access (automatic)', noField: true });   // Central Hub only: Field Report access stays the Admin's choice
+    have.add(email);
+  }
+  return { add, link, twice };
+}
+
 /** v1.31.0 (owner, 9 Nov): who may be given "All projects" in the Directory: the Admin's own account, the GM and Tier 1. */
 export const mayAllProjects = (p, tier, admins = []) => tier === 1 || frRoleOf(p && p.title) === 'exec' || admins.map(low).includes(accountOf(p));
 /** The people who should use the apps, from the Directory (with a sign-in email, not left): { email, name, position }. */
@@ -148,6 +173,7 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
       const have = new Set(u.projects || []), more = pids.filter(id => !have.has(id));
       if (more.length) out.users.push({ email, projects: [...(u.projects || []), ...more] });
     }
+    if (p.noField && !cur) continue;   // v1.36.0: brought in from Central Hub access, no Field Report access made for them
     if (adminSet.has(email) || (cur && KEEP_ROLES.includes(cur.role))) { if (cur) out.kept.push(cur); continue; }
     const role = frRoleOf(p.title);
     if (KEEP_ROLES.includes(role)) { if (cur) out.kept.push(cur); continue; }   // a GM is set up by the Admin once, then kept

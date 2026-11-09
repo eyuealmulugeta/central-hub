@@ -358,6 +358,7 @@ function oneSourceCard(people) {
     <p class="muted small">Field Report and Central Hub follow the Manpower Directory${st ? `. Last check ${when(st.at)}: ${st.set} set, ${st.removed} removed, ${st.users} Central Hub ${st.users === 1 ? 'record' : 'records'} given projects` : ': the first check runs within 2 minutes'}.</p>
     ${waitingNote(st)}
     ${errs.length ? html`<div class="callout warn small"><b>Not applied</b><ul>${errs.map(e => html`<li>${e.name || e.email}: ${e.text}</li>`)}</ul></div>` : ''}
+    ${(st?.twoEmails || []).length ? html`<div class="callout warn small"><b>Two sign-in emails</b> (v1.36.0): ${st.twoEmails.map(x => `${x.name} signs in to Central Hub as ${x.email}, but the Directory has ${x.other.join(', ') || 'another email'}`).join('; ')}. Put the right one as the sign-in email in the Manpower Directory.</div>` : ''}
     ${strays.length || plan.length ? html`<div class="callout warn small"><b>Not from the Directory</b>: ${[...new Set([...strays.map(x => x.email), ...plan.map(x => x.email)])].join(', ')}. Bring them in, or remove the sign-in email in Field Report's own list.</div>${list}
       ${plan.length ? html`<div class="actions left"><button class="btn" type="button" data-act="fuOneSource" ${busy ? 'disabled' : ''}>Add ${plan.length} to the Directory</button></div>` : ''}` : html`<p class="ok small">✓ Everyone on Field Report comes from the Directory.</p>`}
   </section>`;

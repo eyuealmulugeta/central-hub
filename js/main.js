@@ -1111,7 +1111,8 @@ async function startCloud() {
       console.warn(err);
       gate(/permission/i.test(`${err.code} ${err.message}`)
         ? `The database refused ${user.email} (signed in with ${user.via || 'an unknown method'}) while reading ${err.step || 'the data'}. Send this line to whoever set up Central Hub. If the access rules were changed today, publish them again and reload.`
-        : 'Could not load the data. Check the internet connection and reload.', null, true);
+        // v1.36.0 (owner, 9 Nov): the reason too, so a sign-in that stops can be put right without guessing
+        : `Could not load the data. Check the internet connection and reload. (${[err.step, err.code, String(err.message || err).slice(0, 160)].filter(Boolean).join(' · ')})`, null, true);
       return;
     }
     gate(null);

@@ -660,7 +660,7 @@ button.link:hover { text-decoration: underline; }
 body.not-admin #view [data-act^="remove"], body.not-admin #view [data-act^="drop"]:not([data-act="dropPack"]), body.not-admin #view [data-act^="delete"], body.not-admin #view [data-act="clearField"], body.not-admin #view [data-act="copyMeasure"] { display: none !important; }
 
 /* ---- shell: five sections in the menu, their pages as tabs across the top ---- */
-body { grid-template: "side top" 56px "side tabs" auto "side main" minmax(0, 1fr) / 240px minmax(0, 1fr); }
+body { grid-template: "side top" 56px "side tabs" auto "side sub" auto "side main" minmax(0, 1fr) / 240px minmax(0, 1fr); }   /* sub: v1.41.0 the group switch */
 body.side-narrow { grid-template-columns: 64px minmax(0, 1fr); }
 .tabs { grid-area: tabs; display: flex; align-items: center; gap: 2px; padding: 0 20px 10px; min-width: 0; overflow-x: auto; }
 .tab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer; border-radius: 8px 8px 0 0; }
@@ -695,7 +695,7 @@ dialog.palette input { width: 100%; padding: 12px 14px; font: inherit; font-size
 #palette-list .chip { flex: none; min-width: 82px; text-align: center; }
 dialog.palette p { margin: 0; font-size: 12px; }
 @media (max-width: 900px) {
-  body, body.side-narrow { grid-template: "top" auto "tabs" auto "main" minmax(0, 1fr) "side" auto / minmax(0, 1fr); }
+  body, body.side-narrow { grid-template: "top" auto "tabs" auto "sub" auto "main" minmax(0, 1fr) "side" auto / minmax(0, 1fr); }
   .tabs { padding: 0 12px 8px; }
   .btn.search { min-width: 0; }
   .btn.search kbd, #btn-collapse, #role-badge { display: none; }
@@ -2061,4 +2061,7 @@ a.xfin:hover, a.xcnt:hover { opacity: .9; }
 .subrow a { border-radius: 8px; padding: 6px 14px; font-weight: 600; font-size: 13px; color: var(--muted); text-decoration: none; }
 .subrow a.on { background: var(--primary-soft); color: var(--ink); }
 .subrow a:hover { color: var(--ink); }
-.view-docs:has(> .subrow) { grid-template-rows: auto auto minmax(0, 1fr); }   /* v1.40.0: the switch takes its own row */
+#subrow { grid-area: sub; padding: 0 20px; min-width: 0; }
+#subrow:empty { display: none; }
+@media (max-width: 900px) { #subrow { padding: 0 12px; } }
+body.presenting #subrow { display: none; }

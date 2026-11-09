@@ -478,7 +478,11 @@ function render() {
   const off = offPage(name);
   if (key !== lastKey && !off) view?.preset?.(ALIASES[name]?.preset || {});
   try {
-    root.innerHTML = String(off ? offCard(name) : html`${subRow(name)}${view.render(ctx)}`);   // v1.14.2; v1.40.0 the group switch
+    // v1.41.0: the group switch sits just above the page, outside its layout
+    let sub = document.getElementById('subrow');
+    if (!sub) { sub = document.createElement('div'); sub.id = 'subrow'; root.before(sub); }
+    sub.innerHTML = String(off ? '' : subRow(name));
+    root.innerHTML = String(off ? offCard(name) : view.render(ctx));   // v1.14.2
     groupShare(root);
     printFoot(root);
     fillPhotos(root);   // v0.23.1: site photos from Drive

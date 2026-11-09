@@ -352,15 +352,16 @@ export function render(c) {
   const bars = c.money ? summaries.filter(s => s.money && +s.budget > 0) : [];
   const has = { today: true, money: !!c.money, action: true, spot: may('spotlight'), requests: may('requests'), book: may('siteinstr'), people: true };
 
-  const kpi = (tone, label, value, hint, bar = null) => html`<div class="xkpi" style="--c:${tone}"><span class="lab">${label}</span><b>${value}</b><small>${hint}</small>${bar != null ? html`<span class="bar"><i style="width:${Math.min(100, Math.max(0, bar))}%"></i></span>` : ''}</div>`;
+  // v1.30.0 (owner, 9 Nov): each of the five tiles opens its page
+  const kpi = (tone, label, value, hint, bar = null, to = '') => html`<a class="xkpi" href="#${to}" style="--c:${tone}" title="Open ${label}"><span class="lab">${label}</span><b>${value}</b><small>${hint}</small>${bar != null ? html`<span class="bar"><i style="width:${Math.min(100, Math.max(0, bar))}%"></i></span>` : ''}</a>`;
   const health = healthOf(own);
   const basis = own.basis && own.basis !== 'none';
   const kpis = [   // v0.94.0: always the same five (Budget paid only for those who see money); '–' when there is nothing yet
-    kpi('#2563eb', own.basis === 'billed' ? 'Invoiced' : 'Progress', basis ? `${Math.round(own.progress || 0)}%` : '–', basis ? `${c.project.name} · ${health.label}` : 'No progress measured yet', basis ? own.progress || 0 : 0),
-    c.money ? kpi('#0d9488', 'Budget paid', split ? `${split.paidPct}%` : '–', split ? `${money(split.paid, c.project.currency)} of ${money(split.budget, c.project.currency)}` : 'No budget set yet', split ? split.paidPct : 0) : '',
-    kpi('#d97706', 'Requests open', reqs.open || 0, `${reqs.pending || 0} pending · ${reqs.transit || 0} in transit`),
-    kpi('#e11d48', 'Needs your action', needs.length, urgent ? `${urgent} urgent` : 'none urgent'),
-    kpi('#7c3aed', 'On site today', people.length, c.project.name),
+    kpi('#2563eb', own.basis === 'billed' ? 'Invoiced' : 'Progress', basis ? `${Math.round(own.progress || 0)}%` : '–', basis ? `${c.project.name} · ${health.label}` : 'No progress measured yet', basis ? own.progress || 0 : 0, 'dashboard'),
+    c.money ? kpi('#0d9488', 'Budget paid', split ? `${split.paidPct}%` : '–', split ? `${money(split.paid, c.project.currency)} of ${money(split.budget, c.project.currency)}` : 'No budget set yet', split ? split.paidPct : 0, 'ledger') : '',
+    kpi('#d97706', 'Requests open', reqs.open || 0, `${reqs.pending || 0} pending · ${reqs.transit || 0} in transit`, null, 'requests'),
+    kpi('#e11d48', 'Needs your action', needs.length, urgent ? `${urgent} urgent` : 'none urgent', null, 'notifications'),
+    kpi('#7c3aed', 'On site today', people.length, c.project.name, null, 'attendance'),
   ].filter(Boolean);
 
   const BOX = {

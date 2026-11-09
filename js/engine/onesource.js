@@ -29,6 +29,23 @@ const titleOfRole = role => ({ engineer: 'Site Engineer', coordinator: 'Project 
 export const accountOf = p => low(p && p.accountEmail);
 const left = p => !p || p.status === 'left';
 
+/**
+ * v1.30.0 (owner, 9 Nov: "Jony is Project engineer, in the Directory Site engineer"): the name and position a sign-in
+ * record, the Engagement page or Sign-in history shows come from the Directory person with that sign-in email, never
+ * from what a phone typed or kept ("Jojo, Project Engineer"). Records of someone not in the Directory keep their own.
+ */
+export function directoryWho(staff = []) {
+  const m = new Map();
+  for (const p of staff) { const e = accountOf(p); if (e && (!m.has(e) || !left(p))) m.set(e, p); }
+  return m;
+}
+export function named(list = [], staff = []) {
+  const who = directoryWho(staff);
+  return list.map(e => { const p = who.get(low(e && e.email)); return p ? { ...e, name: p.name || e.name, position: p.title || e.position, typed: e.name !== p.name ? e.name : undefined } : e; });
+}
+/** The people who should use the apps, from the Directory (with a sign-in email, not left): { email, name, position }. */
+export const appPeople = (staff = []) => staff.filter(p => accountOf(p) && !left(p)).map(p => ({ email: accountOf(p), name: p.name || '', position: p.title || '' }));
+
 /** Field Report code <-> Central Hub project id, for connected projects only. */
 export function codeMaps(projects = []) {
   const toPid = new Map(), toCode = new Map();

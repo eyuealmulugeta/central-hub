@@ -6,14 +6,20 @@ import { html, chip } from './dom.js';
 import { toCSV, downloadText, todayISO } from '../core/util.js';
 import { onlineNow, hm, APPS } from '../engine/signlog.js';
 import { rows, isQuiet, byPosition, csvRows, mayView, QUIET_DAYS } from '../engine/engagement.js';
+import { named, appPeople } from '../engine/onesource.js';   // v1.30.0: names and positions from the Directory
 
 let app = '';
-const people = () => (store.users || []).filter(u => u.email && u.role !== 'disabled').map(u => ({ email: u.email, name: u.name || '', position: u.title || (u.ranks || [])[0] || '' }));
+// v1.30.0 (owner, 9 Nov): the people are the Manpower Directory's (sign-in email set); Central Hub office accounts not in it are added
+const people = () => {
+  const dir = appPeople(store.company?.staff || []), have = new Set(dir.map(p => p.email));
+  const office = (store.users || []).filter(u => u.email && u.role !== 'disabled' && !have.has(String(u.email).toLowerCase())).map(u => ({ email: u.email, name: u.name || '', position: u.title || (u.ranks || [])[0] || '' }));
+  return [...dir, ...office];
+};
 const when = ms => (ms ? new Date(ms + 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') : 'Never');
 
 function data() {
-  const now = Date.now(), list = (store.signlogs || []).filter(e => !app || e.app === app);
-  return { now, list, rs: rows(list, now, { people: app === 'FR' ? [] : people() }) };
+  const now = Date.now(), list = named(store.signlogs || [], store.company?.staff || []).filter(e => !app || e.app === app);
+  return { now, list, rs: rows(list, now, { people: people() }) };
 }
 
 export function render() {

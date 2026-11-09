@@ -65,6 +65,10 @@ export function weekDays(today) {
   const t = new Date(`${today}T00:00:00Z`), back = (t.getUTCDay() + 6) % 7;
   return Array.from({ length: 7 }, (_, i) => new Date(t.getTime() + (i - back) * 864e5).toISOString().slice(0, 10));
 }
+/** v1.32.0 (owner, 9 Nov): the week `off` weeks from this one (0 this week, -1 the week before), and the day it opens on. */
+export const weekAt = (today, off = 0) => weekDays(new Date(Date.parse(`${today}T00:00:00Z`) + off * 7 * 864e5).toISOString().slice(0, 10));
+export const dayIn = (week, chosen, today) => (week.includes(chosen) && chosen <= today ? chosen : week.includes(today) ? today : week.filter(d => d <= today).pop() || week[0]);
+export const weekWords = (week, off) => (off === 0 ? 'This week' : off === -1 ? 'Last week' : `${new Date(`${week[0]}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })} – ${new Date(`${week[6]}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}`);
 /** The photos the site sent for a day before its report is posted (script dayPhotos), in the shape of a report's photos. */
 export const livePhotos = (list = []) => list.filter(x => x && x.id && x.report)
   .map(x => ({ r: { field: { pdf: x.report } }, p: { id: x.id, time: x.time, caption: x.caption, zone: x.zone, task: x.task } }));

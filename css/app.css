@@ -1948,6 +1948,9 @@ body.viewing { overflow: hidden; }
 .xbox-today .xm { border-radius: 0; }
 .xbox-today .xm.big { grid-column: span 2; grid-row: span 2; }
 .xbox-spot .xspot { max-height: 300px; overflow-y: auto; }
+/* v1.32.0: week arrows above the day tabs */
+.xweek { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.xweek b { min-width: 110px; text-align: center; }
 /* v1.28.0: × on each notice, Clear for all */
 .xbox-action .xclear { display: flex; justify-content: flex-end; margin: 0 0 6px; }
 .xbox-action .xgone { border: 0; background: none; font-size: 18px; line-height: 1; padding: 2px 6px; cursor: pointer; color: var(--muted, #64748b); border-radius: 6px; }

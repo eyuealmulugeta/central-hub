@@ -17,7 +17,7 @@ import { healthOf, projectLine, needsYou, needGroups } from '../engine/today.js'
 import { tradeSummary, stockAndSales, shipmentState, stageLabel } from '../engine/trade.js';
 import { fieldVideos, fieldDayPhotos, fieldPhoto, fieldVideoKeep, fieldVideoAdd } from '../sync/fieldreport.js';
 import { fillPhotos, photoAt } from './photos.js';
-import { rowsOf, rowsFor, HOME_ORDER, todayMedia, weekDays, livePhotos, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
+import { rowsOf, rowsFor, HOME_ORDER, todayMedia, weekDays, weekAt, dayIn, weekWords, livePhotos, viewerItems, stepIn, requestBoard, requestedAmount, moneySplit, bookLog, onSite } from '../engine/exechome.js';
 import { titleOf } from '../engine/requests.js';
 import { expenseTitle, isExpense } from '../engine/expenses.js';
 import { siNo, SI_STATUS, SI_TONE } from '../engine/siteinstr.js';
@@ -61,7 +61,9 @@ function todayBox(m, c) {
   const nPh = m.photos.length, nV = m.videos.length;
   const when = m.day === c.today ? (m.live ? 'Today · live from site' : 'Today') : fmtDate(m.day);
   // v0.95.0 (owner, 5 Nov): a tab per day of this week; a day opens its photos and videos
-  const tabs = html`<div class="xdays">${m.week.map(d => html`<button type="button" class="${d === m.day ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="mediaDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
+  // v1.32.0 (owner, 9 Nov): arrows to the weeks before, every photo and video of any earlier week
+  const weekNav = html`<div class="xweek"><button type="button" class="btn small" data-act="mediaWeek" data-v="-1" aria-label="Previous week">◀</button><b>${weekWords(m.week, mediaWeek)}</b><button type="button" class="btn small" data-act="mediaWeek" data-v="1" aria-label="Next week" ${mediaWeek >= 0 ? 'disabled' : ''}>▶</button>${mediaWeek < 0 ? html`<button type="button" class="btn small ghost" data-act="mediaWeek" data-v="0">This week</button>` : ''}</div>`;
+  const tabs = html`${weekNav}<div class="xdays">${m.week.map(d => html`<button type="button" class="${d === m.day ? 'on' : ''} ${d === c.today ? 'today' : ''}" data-act="mediaDay" data-d="${d}" ${d > c.today ? 'disabled' : ''}>
       <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${m.counts[d] ? html`<i>${m.counts[d]}</i>` : ''}</button>`)}</div>`;
   const tile = (x, i) => html`<button type="button" class="xm ${i === 0 ? 'big' : ''} ${x.kind}" data-act="mediaOpen" data-i="${i}" title="Open on the full screen"><figure>${x.kind === 'video'
     ? html`<video class="xvid" muted autoplay loop playsinline preload="none" poster="https://drive.google.com/thumbnail?id=${x.fileId}&sz=w600" data-fvideo="${x.proj}|${x.id}" aria-label="Site video"></video><span class="xplay ${i === 0 ? '' : 's'}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span>
@@ -167,6 +169,7 @@ if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
 // v0.95.0: the photos of a day not posted yet, straight from the site (script dayPhotos); today's are read again after 2 minutes
 const live = new Map();   // "CODE|date" -> { list, at, busy }
 let mediaDay = '';        // the day tab chosen; '' = today
+let mediaWeek = 0;        // v1.32.0: 0 this week, -1 the week before, ...
 let spotDay = '';         // v1.27.0: the Spotlight day tab; '' = today
 let lastLive = null;      // v0.95.1: the project and day the Dashboard last showed, for the 2-minute refresh
 // v0.95.1: while the Dashboard is open, today's photos are asked for again every 2 minutes (the page redraws when new ones come)
@@ -396,8 +399,8 @@ export function render(c) {
  * the report's photos; today (or a day not posted yet) shows what the site has sent so far, live.
  */
 function mediaFor(c, mayRead) {
-  const code = String(c.project.fieldCode || '').toUpperCase(), week = weekDays(c.today), reports = c.ws.reports || [];
-  const day = week.includes(mediaDay) && mediaDay <= c.today ? mediaDay : c.today;
+  const code = String(c.project.fieldCode || '').toUpperCase(), week = weekAt(c.today, mediaWeek), reports = c.ws.reports || [];
+  const day = dayIn(week, mediaDay, c.today);
   const videos = code && vids.code === code ? vids.list : [];
   // v0.95.1 (owner, 5 Nov): every day of the week is read from the site and kept in step: the posted report's photos
   // plus any the site sent that the report (as imported here) does not have yet
@@ -447,6 +450,7 @@ function addVideo(c, day) {
 export const actions = {
   videoAdd(el, c) { if (!vids.adding) addVideo(c, el.dataset.d); },
   mediaDay(el) { mediaDay = el.dataset.d || ''; },
+  mediaWeek(el) { const v = +el.dataset.v; mediaWeek = v === 0 ? 0 : Math.min(0, mediaWeek + v); mediaDay = ''; },   // v1.32.0
   spotDay(el) { spotDay = el.dataset.d || ''; },   // v1.27.0
   mediaOpen(el) { showAt(Math.min(+el.dataset.i || 0, viewList.length - 1)); },
   mediaKind(el) { mediaKind = el.dataset.k || ''; },

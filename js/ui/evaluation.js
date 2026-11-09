@@ -159,9 +159,6 @@ function adminBox(c) {
     <details class="setup"><summary>Who may evaluate (Tiers 1, 2 and 3): ${raters.filter(u => u.evaluate !== false).length} of ${raters.length}</summary>
       ${raters.length ? html`<ul class="plain">${raters.map(u => html`<li><label><input type="checkbox" data-chg="evMay" data-id="${u.email}" ${u.evaluate === false ? '' : 'checked'}> ${u.name || u.email} <span class="muted">${(u.ranks || []).map(rankLabel).join(', ')}</span></label></li>`)}</ul>` : html`<p class="muted">Nobody with a Tier 1, 2 or 3 title has a sign-in yet.</p>`}</details>
     ${reviews.length ? html`<h3>Salary reviews for the General Manager</h3><ul class="plain">${reviews.map(r => html`<li><b>${r.subjectName}</b>: ${score(r.prevOverall)} → ${score(averages(r.scores).overall)} (${r.period?.label || r.date}) <button type="button" class="btn small" data-act="salaryDone" data-id="${r.id}">Reviewed</button></li>`)}</ul>` : ''}
-    ${old.length ? html`<h3>Old evaluations: ${old.length}</h3><p class="muted">The old form (four pillars) is replaced. Export them once: it is the only copy. Then remove them from the app.</p>
-      <div class="actions left"><button type="button" class="btn" data-act="oldCsv">Export CSV</button> <button type="button" class="btn" data-act="oldPdf">Export PDF (print page)</button>
-      ${store.global?.oldEvalsExported ? html`<button type="button" class="btn danger" data-act="oldRemove">Remove the old evaluations</button>` : html`<span class="muted">Remove becomes possible after the export.</span>`}</div>` : ''}
   </section>`;
 }
 

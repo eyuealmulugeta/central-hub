@@ -143,6 +143,7 @@ function entries(c) {
       ${kpi('Cash position', money(led.cash, cur), led.cpi == null ? 'Cost index not available yet' : `Cost index ${led.cpi.toFixed(2)} (1.00 = on budget)`, led.cash < 0 ? 'bad' : '')}
     </section>
 
+    <div class="seg" role="tablist" aria-label="Show">${[[null, 'All'], ['income', 'In (received)'], ['expense', 'Out (spent)']].map(([k, l]) => html`<button type="button" class="${only === k ? 'on' : ''}" data-act="ledOnly" data-k="${k || ''}">${l}</button>`)}</div>
     ${hasTradeBudgets(p) ? html`<section class="card"><div class="toolbar"><h3>Labour by trade</h3><span class="muted">From the approved daily reports at the Manpower Directory day pay. Budgets under Settings, This project.</span></div>${tradeTable(c)}</section>` : ''}
     <section class="card">
       <form data-form="entry" class="entry">
@@ -203,6 +204,8 @@ export const changes = {
 };
 
 export const actions = {
+  /** v1.39.0 (owner, 9 Nov): Income and Expenses are no longer pages; the Ledger shows all, money in or money out. */
+  ledOnly(el) { only = el.dataset.k || null; },
   // v0.78.0 (owner): a crew payment deleted from Expenses, as on Payments (the payment and its labour cost)
   removePay(el) {
     if (!store.seesPay || !confirm('Delete this crew payment? It leaves Payments and the costs.')) return;

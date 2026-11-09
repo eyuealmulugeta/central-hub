@@ -45,7 +45,7 @@ const HEADS = {
 };
 const box = (k, body, { n = '', link = null } = {}) => {
   const [hue, ic, title] = HEADS[k];
-  return html`<section class="card xbox xbox-${k}"><div class="xhead" style="--xh:${hue}">${icon(ic, 17)}<h3>${title}</h3>${n !== '' ? html`<span class="xn">${n}</span>` : ''}<span class="grow"></span>${link ? html`<a class="xlink" href="#${link[0]}">${link[1]}</a>` : ''}</div><div class="xbody">${body}</div></section>`;
+  return html`<section class="card xbox xbox-${k}"><div class="xhead" style="--xh:${hue}">${icon(ic, 17)}${link ? html`<h3><a class="xtitle" href="#${link[0]}" title="Open ${link[1]}">${title}</a></h3>` : html`<h3>${title}</h3>`}${n !== '' ? html`<span class="xn">${n}</span>` : ''}<span class="grow"></span>${link ? html`<a class="xlink" href="#${link[0]}">${link[1]}</a>` : ''}</div><div class="xbody">${body}</div></section>`;
 };
 const pctOf = (a, b) => (b > 0 ? Math.round(a / b * 100) : 0);
 const initials = name => String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
@@ -73,8 +73,7 @@ function todayBox(m, c) {
     ${shown.length ? html`<div class="xmedia">${shown.map(tile)}
       ${more > 0 ? html`<button type="button" class="xm xmore" data-act="mediaOpen" data-i="9"><b>+${more}</b><span>more</span></button>` : ''}</div>`
     : html`<p class="empty">${!c.project.fieldCode ? 'This project is not linked to Field Report yet.' : m.busy ? 'Getting the photos from the site…' : m.day === c.today ? 'No photos from the site yet today. Each one shows here as soon as it is taken.' : 'No photos or videos on this day.'}</p>`}
-    ${c.project.fieldCode && store.cloud ? html`<p class="xfoot"><button type="button" class="btn small" data-act="videoAdd" data-d="${m.day}" ${vids.adding ? 'disabled' : ''}>${vids.adding || '+ Add a video from the gallery'}</button></p>` : ''}
-    <p class="xfoot">Photos are taken live with the Field Report camera, not uploaded. Videos are recorded live or added from the gallery (marked so), kept 30 days, then deleted unless saved.</p>`,
+    <p class="xfoot">Photos and videos are taken live with the Field Report camera, not uploaded. Videos are kept 30 days, then deleted unless saved.</p>`,
   { n: [when, `${nPh} photo${nPh === 1 ? '' : 's'}`, nV ? `${nV} video${nV === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '), link: ['reports', 'Open reports'] });
 }
 
@@ -200,7 +199,7 @@ function loadVideos(c) {
 function moneyBox(split, c, rows) {
   const cur = c.project.currency, R = 15.9, L = 2 * Math.PI * R;
   const arc = (pct, start, color) => html`<circle cx="21" cy="21" r="${R}" fill="none" stroke="${color}" stroke-width="6" stroke-dasharray="${pct / 100 * L} ${L}" stroke-dashoffset="${-start / 100 * L}" transform="rotate(-90 21 21)"/>`;
-  return box('money', html`${split ? html`<div class="xfin">
+  return box('money', html`${split ? html`<a class="xfin" href="#ledger" title="Open the Ledger">
       <svg viewBox="0 0 42 42" width="120" height="120" role="img" aria-label="Budget: ${split.paidPct}% paid, ${split.requestedPct}% requested, ${split.remainingPct}% remaining">
         <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--line)" stroke-width="6"/>
         ${arc(split.paidPct, 0, '#0d9488')}${arc(split.requestedPct, split.paidPct, '#f59e0b')}${arc(split.remainingPct, split.paidPct + split.requestedPct, '#93c5fd')}
@@ -208,8 +207,8 @@ function moneyBox(split, c, rows) {
       <div class="xlegend"><div><i style="background:currentColor"></i>Budget<b>${money(split.budget, cur)}</b></div>
         <div><i style="background:#0d9488"></i>Paid ${split.paidPct}%<b>${money(split.paid, cur)}</b></div>
         <div><i style="background:#f59e0b"></i>Requested ${split.requestedPct}%<b>${money(split.requested, cur)}</b></div>
-        <div><i style="background:#93c5fd"></i>Remaining ${split.remainingPct}%<b>${money(split.remaining, cur)}</b></div></div></div>` : ''}
-    ${rows.map(s => { const paid = pctOf(s.money.spent, s.budget), done = Math.round(s.progress || 0); return html`<button type="button" class="xprow" data-act="openProject" data-id="${s.project.id}" data-to="dashboard" title="Open ${s.project.name}">
+        <div><i style="background:#93c5fd"></i>Remaining ${split.remainingPct}%<b>${money(split.remaining, cur)}</b></div></div></a>` : ''}
+    ${rows.map(s => { const paid = pctOf(s.money.spent, s.budget), done = Math.round(s.progress || 0); return html`<button type="button" class="xprow" data-act="openProject" data-id="${s.project.id}" data-to="ledger" title="Open the Ledger">
       <span><span>${s.project.name}</span><b>${done}% done · ${paid}% paid</b></span><span class="bar"><i class="${paid > done ? 'r' : ''}" style="width:${Math.min(100, done)}%"></i></span></button>`; })}
     ${rows.some(s => pctOf(s.money.spent, s.budget) > Math.round(s.progress || 0)) ? html`<p class="xnote">Red bar: paid ahead of the work done.</p>` : ''}
     ${split || rows.length ? '' : html`<p class="empty">No budget set yet. The budget, what is paid and what is asked for show here.</p>`}`,
@@ -218,21 +217,21 @@ function moneyBox(split, c, rows) {
 
 function requestsBox(b) {
   const title = r => (isExpense(r) ? expenseTitle(r) : titleOf(r));
-  return box('requests', html`<div class="xcnt"><div class="p"><b>${b.pending}</b><small>Pending</small></div><div class="a"><b>${b.approved}</b><small>Approved</small></div><div class="t"><b>${b.transit}</b><small>In transit</small></div></div>
-    ${b.lines.length ? '' : html`<p class="empty">No open site requests.</p>`}<ul class="xlist">${b.lines.slice(0, 3).map(({ r, stage }) => html`<li><i class="xdot ${stage}"></i><span class="xt"><b>${title(r)}</b>${r.neededBy ? html` <small>needed ${fmtDate(r.neededBy)}</small>` : ''}</span></li>`)}</ul>`,
+  return box('requests', html`<a class="xcnt" href="#requests" title="Open Requests"><div class="p"><b>${b.pending}</b><small>Pending</small></div><div class="a"><b>${b.approved}</b><small>Approved</small></div><div class="t"><b>${b.transit}</b><small>In transit</small></div></a>
+    ${b.lines.length ? '' : html`<p class="empty">No open site requests.</p>`}<ul class="xlist">${b.lines.slice(0, 3).map(({ r, stage }) => html`<li><a class="xrowlink" href="#requests"><i class="xdot ${stage}"></i><span class="xt"><b>${title(r)}</b>${r.neededBy ? html` <small>needed ${fmtDate(r.neededBy)}</small>` : ''}</span></a></li>`)}</ul>`,
   { n: `${b.open} open`, link: ['requests', 'Open'] });
 }
 
 function bookBox(list) {
-  return box('book', html`${list.length ? '' : html`<p class="empty">No site instruction sent to the consultant yet.</p>`}<ul class="xlist">${list.map(x => html`<li><span class="xt"><b>${siNo(x.no)} · ${x.subject || '(no subject)'}</b><br><small>${[x.consultant?.name || x.from, fmtDate(String(x.consultant?.at || x.date || '').slice(0, 10))].filter(Boolean).join(' · ')}</small></span>
-      ${x.consultant?.image ? html`<img class="xsig" src="${x.consultant.image}" alt="Signature of ${x.consultant.name || 'the consultant'}">` : ''}<span class="tag ${SI_TONE[x.status] || ''}">${SI_STATUS[x.status] || x.status}</span></li>`)}</ul>`,
+  return box('book', html`${list.length ? '' : html`<p class="empty">No site instruction sent to the consultant yet.</p>`}<ul class="xlist">${list.map(x => html`<li><a class="xrowlink" href="#siteinstr"><span class="xt"><b>${siNo(x.no)} · ${x.subject || '(no subject)'}</b><br><small>${[x.consultant?.name || x.from, fmtDate(String(x.consultant?.at || x.date || '').slice(0, 10))].filter(Boolean).join(' · ')}</small></span>
+      ${x.consultant?.image ? html`<img class="xsig" src="${x.consultant.image}" alt="Signature of ${x.consultant.name || 'the consultant'}">` : ''}<span class="tag ${SI_TONE[x.status] || ''}">${SI_STATUS[x.status] || x.status}</span></a></li>`)}</ul>`,
   { n: String(list.length), link: ['siteinstr', 'Site book'] });
 }
 
 function peopleBox(list, rated) {
   const shown = list.slice(0, 6);
-  return box('people', html`${list.length ? '' : html`<p class="empty">No one marked present in today's report yet.</p>`}<ul class="xlist xpeople">${shown.map(p => html`<li>${p.photo ? html`<img class="xav" src="${p.photo}" alt="">` : html`<span class="xav">${initials(p.name)}</span>`}
-      <span class="xt"><b>${p.name}</b><br><small>${p.role}</small></span>${rated && p.stars != null ? starsOf(p.stars) : ''}</li>`)}</ul>
+  return box('people', html`${list.length ? '' : html`<p class="empty">No one marked present in today's report yet.</p>`}<ul class="xlist xpeople">${shown.map(p => html`<li><a class="xrowlink" href="#attendance">${p.photo ? html`<img class="xav" src="${p.photo}" alt="">` : html`<span class="xav">${initials(p.name)}</span>`}
+      <span class="xt"><b>${p.name}</b><br><small>${p.role}</small></span>${rated && p.stars != null ? starsOf(p.stars) : ''}</a></li>`)}</ul>
     ${list.length > shown.length ? html`<a class="xlink2" href="#attendance">+ ${list.length - shown.length} more on site</a>` : ''}`,
   { n: `${list.length} ${list.length === 1 ? 'person' : 'people'}`, link: ['attendance', 'Attendance'] });
 }
@@ -352,7 +351,7 @@ export function render(c) {
       <b>${new Date(`${d}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short' })}</b><small>${d === c.today ? 'Today' : d.slice(8)}</small>${n ? html`<i>${n}</i>` : ''}</button>`; })}</div>`;
   const people = onSite({ reports: c.ws.reports || [], team: c.ws.team || [], staff: c.company.staff || [], evaluations: may('evaluation') ? c.company.evaluations || [] : null, today: c.today });
   const split = c.money && c.led ? moneySplit({ budget: c.led.budget, spent: c.led.spent, requested: requestedAmount(c.ws.requests || [], c.project.currency, c.global.fx) }) : null;
-  const bars = c.money ? summaries.filter(s => s.money && +s.budget > 0) : [];
+  const bars = c.money ? summaries.filter(s => s.project.id === c.project.id && s.money && +s.budget > 0) : [];   // v1.39.0 (owner): the open project only
   const has = { today: true, money: !!c.money, action: true, spot: may('spotlight'), requests: may('requests'), book: may('siteinstr'), people: true };
 
   // v1.30.0 (owner, 9 Nov): each of the five tiles opens its page
@@ -372,9 +371,9 @@ export function render(c) {
     money: () => moneyBox(split, c, bars),
     action: () => box('action', (needs.length ? [html`<p class="xclear"><button type="button" class="btn small ghost" data-act="needsClear" title="Take away every notice here">Clear</button></p>`] : []).concat(needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
-          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`])), { n: String(needs.length) }),
-    spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></li>`
-      : html`<li><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></li>`)}</ul>`, { n: `${spot.filter(x => x.date >= wk[0]).length} this week`, link: ['spotlight', 'All'] }),
+          <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`])), { n: String(needs.length), link: ['notifications', 'All'] }),
+    spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><a class="xrowlink" href="#spotlight"><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></a></li>`
+      : html`<li><a class="xrowlink" href="#spotlight"><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></a></li>`)}</ul>`, { n: `${spot.filter(x => x.date >= wk[0]).length} this week`, link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),
     people: () => peopleBox(people, may('evaluation')),
@@ -389,8 +388,8 @@ export function render(c) {
     </section>
     <section class="xkpis" style="--n:${kpis.length}">${kpis}</section>
     ${signStrip(c)}
-    ${outBox()}
-    ${feedBox()}
+    ${outBox(c.project.id)}
+    ${feedBox(c.project.id)}
     ${rows.map((r, i) => html`<section class="xrow ${i === 0 && r.length === 2 ? 'wide' : ''} n${r.length}">${r.map(k => BOX[k]())}</section>`)}`;
 }
 

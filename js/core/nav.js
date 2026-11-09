@@ -17,11 +17,8 @@ export const ALIASES = {
   status: { view: 'docs', title: 'Status report', preset: { mode: 'status' }, switch: 'docs' },
   invoices: { view: 'docs', title: 'Invoices', preset: { mode: 'invoices' }, switch: 'docs' },
   quotations: { view: 'docs', title: 'Quotations', preset: { mode: 'quotations' }, switch: 'docs' },
-  income: { view: 'ledger', title: 'Income', preset: { only: 'income' }, switch: 'ledger' },
-  expenses: { view: 'ledger', title: 'Expenses', preset: { only: 'expense' }, switch: 'ledger' },
   summary: { view: 'finance', title: 'Summary report', preset: { part: 'construction' } },
   tradesummary: { view: 'finance', title: 'Trading dashboard', preset: { part: 'trading' } },   // v1.23.0 (G10 T5)
-  crewletters: { view: 'letters', title: 'Letters' },
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },
   attendance: { view: 'attendance', title: 'Attendance sheet', switch: 'reports' },
@@ -30,7 +27,9 @@ export const ALIASES = {
 };
 
 /** Old addresses (links, alerts, bookmarks) that now belong to a page of the new menu. */
-export const REDIRECT = { docs: 'invoices', finance: 'summary' };
+// v1.39.0 (owner, 9 Nov: "remove them"): Income and Expenses are the In / Out switch of the Ledger, Crew letters is
+// Letters, Engagement is in Sign-in history and Activity, holidays are the company calendar, Currency is in Company details
+export const REDIRECT = { docs: 'invoices', finance: 'summary', income: 'ledger', expenses: 'ledger', crewletters: 'letters', engagement: 'activity', weather: 'reports', catalog: 'company' };
 
 export const baseOf = page => ALIASES[page]?.view || page;
 /** The project page that a project switches off to hide this page. */
@@ -39,13 +38,13 @@ export const resolve = page => REDIRECT[page] || page;
 
 // v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
 // project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
-const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'notifications', 'signins', 'activity', 'outgoing', 'datafeed', 'engagement'] };   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
+const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'notifications', 'signins', 'activity', 'outgoing', 'datafeed'] };   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
 // v0.92.0 (owner, 5 Nov, R2): Quick moved out of Today's tabs into the main menu
 const quickHub = { id: 'quick', label: 'Quick', icon: 'apps', tabs: ['quick'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
 const team = [
   { id: 'discuss', label: 'Discuss', icon: 'discuss', tabs: ['discuss'], team: true },
   { id: 'meetings', label: 'Meetings', icon: 'meetings', tabs: ['meetings'], team: true },
-  { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'], team: true },
+  { id: 'settings', label: 'Settings', icon: 'prices', tabs: ['mine', 'apps', 'prices', 'access', 'company', 'links', 'bin'], team: true },
 ];
 
 // v1.22.2 (owner, 8 Nov: "in trading, installation settings, apps and features not related to trading should not be seen")
@@ -58,9 +57,9 @@ export const MENUS = {
     today,
     quickHub,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
-    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'weather', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
-    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'income', 'expenses', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
+    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'evaluation', 'directory', 'officeatt', 'payroll'] },   // crewforms: v0.33.0
+    { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'requests', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
   ],
@@ -68,7 +67,7 @@ export const MENUS = {
     today,
     quickHub,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['deals', 'trade', 'stock', 'products', 'partners'] },   // deals: v1.21.0 (G10 T3)   // products: v1.19.0 (G10 T1)
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'crewletters', 'payroll'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'crewforms', 'employment', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
     ...tradingTeam,

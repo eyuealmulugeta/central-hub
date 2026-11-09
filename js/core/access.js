@@ -11,7 +11,7 @@ export const TRADING_PAGES = ['trade', 'stock', 'products', 'partners', 'deals']
 export const COMPANY_PAGES = ['finance', 'contracts'];
 /** Admin only, always. */
 /** The five Settings pages, in menu order. */
-export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'catalog', 'company', 'links', 'bin'];
+export const SETTINGS_PAGES = ['mine', 'apps', 'prices', 'access', 'company', 'links', 'bin'];   // v1.39.0: Currency is in Company details
 /** v0.24.0: Settings in two: My settings (everyone) and the Admin settings (the rest). */
 export const MY_SETTINGS = ['mine'];
 export const ADMIN_PAGES = ['hr', 'letters', 'payroll', 'setup', 'owners', 'notifications', 'spotlight', ...SETTINGS_PAGES.filter(k => !MY_SETTINGS.includes(k))];   // notifications: v0.23.0
@@ -122,7 +122,7 @@ export const APPS = [
     { page: 'meetings', name: 'Meetings', does: 'Meetings with colleagues, scheduled here, and the booking page where clients and suppliers pick a free time' },
   ] },
   { group: 'Projects', about: 'Running each construction job', apps: [
-    { page: 'dashboard', name: 'Overview', does: 'Progress, forecast finish, alerts and follow-ups for one project', fixed: true },
+    { page: 'dashboard', name: 'Follow-ups', does: 'Progress, forecast finish, alerts and follow-ups for one project', fixed: true },
     { page: 'reports', name: 'Daily report', does: 'Site reports from Field Report or typed here, confirmed by the office' },
     { page: 'schedule', name: 'Schedule', does: 'Tasks, dependencies and a plan that moves with the daily reports' },
     { page: 'requests', name: 'Requests', does: 'Material, manpower and equipment asked for by the site, approved by the office, with a follow-up when approved' },
@@ -156,7 +156,6 @@ export const APPS = [
     { page: 'activity', name: 'Activity', does: 'What each person did in Central Hub' },
     { page: 'outgoing', name: 'Outgoing', does: 'Emails and documents sent out' },
     { page: 'datafeed', name: 'Data tracker', does: 'Which project data is late, and who answers for it' },
-    { page: 'engagement', name: 'Engagement', does: 'How much each person uses the apps' },
   ] },
   { group: 'Project and report pages', about: 'The pages of Project and Reports', apps: [
     { page: 'setup', name: 'Project setup', does: 'Create and set up projects' },
@@ -166,13 +165,11 @@ export const APPS = [
     { page: 'siteinstr', name: 'Site instructions', does: 'Instructions to the site, signed' },
     { page: 'sitestore', name: 'Site store', does: 'The store kept on Field Report, read only, Excel' },
     { page: 'usage', name: 'Materials used', does: 'Materials used against work done' },
-    { page: 'weather', name: 'Weather and holidays', does: 'Weather days and public holidays for claims' },
     { page: 'workphotos', name: 'Work photos', does: 'Technicians\' photos from Field Report' },
   ] },
   { group: 'People pages', about: 'The pages of People', apps: [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
     { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
-    { page: 'crewletters', name: 'Crew letters', does: 'Letters for the crew' },
     { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person: always on', fixed: true },
     { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },
   ] },
@@ -180,8 +177,6 @@ export const APPS = [
     { page: 'invoices', name: 'Invoices', does: 'Invoices to clients' },
     { page: 'quotations', name: 'Quotations', does: 'Quotations to clients' },
     { page: 'purchases', name: 'Purchases', does: 'Purchase orders and the three-way check' },
-    { page: 'income', name: 'Income', does: 'Money received' },
-    { page: 'expenses', name: 'Expenses', does: 'Money spent' },
     { page: 'summary', name: 'Summary report', does: 'The construction summary' },
     { page: 'excel', name: 'Excel link', does: 'Data to and from Excel' },
     { page: 'zoho', name: 'Zoho export', does: 'The UAE company\'s month for Zoho Books' },   // v1.18.0 (G9)

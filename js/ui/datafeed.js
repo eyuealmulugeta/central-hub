@@ -15,8 +15,8 @@ const pct = n => (n == null ? '–' : `${n}%`);
 const tone = n => (n == null ? '' : n >= 80 ? 'ok' : n >= 50 ? 'warn' : 'bad');
 
 /** Home: management sees the projects behind; each person their own overdue items. */
-export function homeBox() {
-  const sum = store.datafeed;
+export function homeBox(pid = '') {
+  const raw = store.datafeed, sum = raw && pid ? { ...raw, projects: (raw.projects || []).filter(p => p.id === pid) } : raw;   // v1.39.0 (owner): the open project only
   if (!sum) return '';
   if (all()) {
     const behind = (sum.projects || []).filter(p => p.score != null && p.score < 80);

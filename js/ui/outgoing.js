@@ -112,8 +112,8 @@ export function markSent(bar, channel) {
 let f = { kind: '', status: '', q: '' };
 
 /** Home: what waits for this approver, and what came back to the person who asked. */
-export function homeBox() {
-  const all = store.outgoing || [];
+export function homeBox(pid = '') {
+  const all = (store.outgoing || []).filter(e => !pid || e.project === pid);   // v1.39.0 (owner): the Dashboard shows the open project only
   if (iApprove()) {
     const w = waiting(all);
     if (!w.length) return '';

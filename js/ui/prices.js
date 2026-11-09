@@ -76,7 +76,8 @@ export function indexText(c) {
   } finally { ({ projTab, accTab, linkTab } = keep); }
   return parts.join(' ');
 }
-const SECTION_OF = { fx: 'catalog', company: 'company', calendar: 'company', monthly: 'company', field: 'links', import: 'links' };
+// v1.39.0: the exchange rates are a box of Company details
+const SECTION_OF = { fx: 'company', company: 'company', calendar: 'company', monthly: 'company', field: 'links', import: 'links' };
 /** Jump to the tab that holds a card (Setup's "Do this" buttons use the card's id). */
 const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team' };
 export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
@@ -122,7 +123,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 // The pages of Settings, listed down the left with their icons, the way a settings screen
 // usually is: the list stays put and only the right side changes.
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
-  ['catalog', 'Currency', 'ledger'], ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links'], ['bin', 'Recycle bin', 'backup']];
+  ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links'], ['bin', 'Recycle bin', 'backup']];
 const link = ([k, label, ic]) => html`
       <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
 // v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)

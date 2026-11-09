@@ -159,7 +159,10 @@ export function buildPdf(JsPDF, d) {
   const progLines = progress.flatMap(z => [{ t: z.zone, b: true }, ...z.lines.flatMap(ln => lines(`• ${ln}`, CW * rest - 6).map(t => ({ t })))]);
   const planLines = plan.flatMap(x => lines(`• ${planLine(x)}`, CW * rest - 6).map(t => ({ t })));
   const colLines = [null, ...(show.progress ? [progLines] : []), ...(show.plan ? [planLines] : [])];
-  const infoH = info.length * 14, tallest = Math.max(infoH, ...colLines.slice(1).map(l => l.length * 11));
+  // 2.89.0 (QA D3): a long project name or location wraps to up to 3 lines instead of being cut
+  font(8.8, 'normal');
+  const infoLines = info.map(([, v, pic]) => lines(v || ' ', CW * cols[0].w - 66 - (pic ? 18 : 0)).slice(0, 3));
+  const infoH = infoLines.reduce((h, l) => h + 14 + (l.length - 1) * 10.5, 0), tallest = Math.max(infoH, ...colLines.slice(1).map(l => l.length * 11));
   room(Math.min(tallest + 30, bottom - M));
   y += 12;
   const top = y;
@@ -168,12 +171,12 @@ export function buildPdf(JsPDF, d) {
     const w = CW * c.w;
     y = top; heading(c.title, cx, w); y += 18;
     if (i === 0) {
-      for (const [k, v, pic] of info) {
+      info.forEach(([k, v, pic], n) => {
         font(6.8, 'bold', MUTED); doc.text(k.toUpperCase(), cx, y);
-        font(8.8, 'normal'); doc.text(lines(v || ' ', w - 66 - (pic ? 18 : 0))[0] || '', cx + 64, y);
+        font(8.8, 'normal'); infoLines[n].forEach((t, j) => doc.text(t, cx + 64, y + j * 10.5));
         if (pic && v && d.weather) { try { doc.addImage(d.weather, 'PNG', cx + w - 16, y - 11, 15, 15); } catch { /* no picture */ } }
-        y += 14;
-      }
+        y += 14 + (infoLines[n].length - 1) * 10.5;
+      });
     } else {
       for (const ln of colLines[i]) {
         if (y + 11 > bottom) { end = Math.max(end, y); newPage(); y += 6; }
@@ -249,9 +252,13 @@ export function buildPdf(JsPDF, d) {
   const safeEnd = y;
   font(8, 'bold', MUTED); doc.text('PREPARED BY:', ox, ry);
   font(10, 'bold', INK); doc.text(lines(profile.name || '', ow)[0] || '', ox, ry + 15);
-  font(9, 'normal', MUTED);
-  const pos = lines(profile.position || '', ow * 0.45)[0] || '', px = ox + Math.min(doc.getTextWidth(pos), ow * 0.45) + 8;
-  doc.text(pos, ox, ry + 37);
+  // 2.89.0 (QA D4): the whole job title: a smaller font first, then two lines (it was cut: "Senior Site")
+  const posText = profile.position || '';
+  let fs = 9; font(fs, 'normal', MUTED);
+  while (fs > 7 && doc.getTextWidth(posText) > ow * 0.45) { fs -= 0.5; font(fs, 'normal', MUTED); }
+  const posL = lines(posText, ow * 0.45).slice(0, 2);
+  const px = ox + Math.min(Math.max(0, ...posL.map(t => doc.getTextWidth(t))), ow * 0.45) + 8;
+  posL.forEach((t, j) => doc.text(t, ox, ry + 37 - (posL.length - 1 - j) * 9));
   const lx2 = ox + ow;
   // 2.26.0: the signature sits under the name (it covered the name's last letters)
   if (d.sig) { try { doc.addImage(d.sig, 'PNG', px, ry + 19, Math.min(lx2 - px, 66), 19); } catch { /* a bad signature image leaves the line blank */ } }

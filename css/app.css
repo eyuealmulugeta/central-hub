@@ -2065,3 +2065,6 @@ a.xfin:hover, a.xcnt:hover { opacity: .9; }
 #subrow:empty { display: none; }
 @media (max-width: 900px) { #subrow { padding: 0 12px; } }
 body.presenting #subrow { display: none; }
+/* v1.45.0 (QA D1): the floating notifications bell never prints on a report */
+/* (QA D2): an empty box left outside the sheet (bell holder, page switch row) printed a blank page before or after */
+@media print { #notif-fab, .notif-fab, #subrow, .chat-pop, .install-box, .upd-tag { display: none !important; } }

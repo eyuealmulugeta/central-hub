@@ -43,6 +43,9 @@ export const GROUPS = {
   directory: { label: 'Manpower Directory', pages: [['directory', 'Directory'], ['hr', 'Employee data']] },
   employment: { label: 'Employment & forms', pages: [['employment', 'Agreements'], ['crewforms', 'Crew forms']] },
   attendance: { label: 'Attendance', pages: [['attendance', 'Site'], ['officeatt', 'Office']] },
+  // v1.42.0 (R3): Reports
+  reports: { label: 'Daily report', pages: [['reports', 'Daily report'], ['workphotos', 'Work photos']] },
+  sitestore: { label: 'Site store', pages: [['sitestore', 'Store'], ['usage', 'Materials used']] },
 };
 /** The group a page belongs to ('' for none). */
 export const groupOf = page => Object.keys(GROUPS).find(k => GROUPS[k].pages.some(([p]) => p === page)) || '';
@@ -74,11 +77,11 @@ export const MENUS = {
   installation: [
     today,
     quickHub,
-    { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'setup'] },
+    { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'requests', 'setup'] },   // v1.42.0 (R3): Requests is site work
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'officeatt', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
-    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'requests', 'contacts', 'owners'] },   // logsheet: v0.51.0
+    { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
   ],
   trading: [

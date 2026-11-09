@@ -49,7 +49,8 @@ export const linked = text => String(text || '').split(LINK).map((part, i) => {
 const dirOf = email => (store.people?.people || []).find(p => p.e === String(email || '').toLowerCase());
 const sender = (company, m) => {
   const p = (company.staff || []).find(x => accountOf(x) === m.by), d = dirOf(m.by);
-  return { name: p?.name || d?.n || m.name || 'Colleague', title: p?.title || d?.t || m.title || '', photo: p?.photo || '', email: m.by };
+  const typed = m.name && !String(m.name).includes('@') ? m.name : '';   // v1.38.1: an email is never shown as a name
+  return { name: p?.name || d?.n || typed || 'Colleague (not in the Directory)', title: p?.title || d?.t || m.title || '', photo: p?.photo || '', email: m.by };
 };
 /** "Name · Position" of an email, for the Seen by list. */
 const nameTag = (email, fallback = '') => { const w = sender(store.company || {}, { by: email, name: fallback }); return `${w.name}${w.title ? ` · ${w.title}` : ''}`; };

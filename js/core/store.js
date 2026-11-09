@@ -16,6 +16,7 @@ import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } fro
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
 import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, seesPay, companySections, MONEY_SECTIONS, PAY_SECTIONS } from './access.js';
 import { movePayOut } from '../engine/people.js';
+import { receiptWrites, keep as keepReceipt } from '../engine/receipts.js';   // v1.37.0: Sent / Delivered / Seen
 import { joinDates } from '../engine/people.js';
 import { divisionsOf } from './nav.js';
 import { DIVIDED, stampPlan } from './division.js';
@@ -52,6 +53,17 @@ let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Repor
 let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
 let feed = null;   // v1.2.0 (G5): datafeed/latest
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
+let rcpt = { ch: [], dm: [], c: false, d: false };   // v1.37.0: Discuss receipts (engine/receipts.js)
+/** v1.37.0: write this person's Delivered (got) or, for the conversation on screen, Seen. */
+function receiptsTick(field = 'got', only = '') {
+  if (!api || !me || !rcpt.c || !rcpt.d) return;
+  if (field === 'seen' && typeof document !== 'undefined' && document.hidden) return;
+  const writes = receiptWrites({ list: [...(company.messages || []), ...(company.direct || [])], mine: [...rcpt.ch, ...rcpt.dm], me: me.email, name: profile.name || me.name || '', field, only });
+  for (const w of writes) {
+    if (w.sec === 'dmSeen') rcpt.dm = keepReceipt(rcpt.dm, w); else rcpt.ch = keepReceipt(rcpt.ch, w);
+    Promise.resolve(api.set(`${COMPANY_PATH}/${w.sec}/${w.id}`, w.data)).catch(() => {});
+  }
+}
 let booking = null;              // settings of the public booking page (public/booking); null = the defaults
 const cache = new Map();
 const subscribers = new Set();
@@ -366,12 +378,16 @@ export const store = {
       for (const section of companySections(role, pages)) {
         // the rules let an Office or Site user read only their own division of a divided section, so the app asks for just that
         const only = role !== 'owner' && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
-        shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); }, section === 'messages' ? () => {} : fail, only));
+        shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); if (section === 'messages') receiptsTick(); }, section === 'messages' ? () => {} : fail, only));
       }
     }
 
     // v0.65.0: one-to-one messages are read only by the two people in them (not the Admin): the query says so
-    shared.push(api.watchCol(`${COMPANY_PATH}/direct`, docs => { company.direct = sectionFromDocs('direct', docs); emit(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
+    shared.push(api.watchCol(`${COMPANY_PATH}/direct`, docs => { company.direct = sectionFromDocs('direct', docs); emit(); receiptsTick(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
+    // v1.37.0 (owner, 9 Nov): who has received and seen each conversation (Sent / Delivered / Seen under one's own messages)
+    rcpt = { ch: [], dm: [], c: false, d: false };
+    shared.push(api.watchCol(`${COMPANY_PATH}/chatSeen`, docs => { rcpt.ch = docs; rcpt.c = true; emit(); receiptsTick(); }, () => {}));
+    shared.push(api.watchCol(`${COMPANY_PATH}/dmSeen`, docs => { rcpt.dm = docs; rcpt.d = true; emit(); receiptsTick(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
     // v0.72.0: urgent notices from the GM: the Admin reads them all (the log), everyone else those sent to them
     shared.push(api.watchCol('urgent', docs => { urgent = docs; emit(); }, () => {}, role === 'owner' ? undefined : ['emails', 'array-contains', String(me.email).toLowerCase()]));
     // evaluations are read only by whoever wrote them (the Admin reads all): the query says so, or the database refuses it
@@ -568,6 +584,10 @@ export const store = {
   /** Settings of the public booking page. Null until the Admin changes something: the page then uses its defaults. */
   get booking() { return booking; },
   get urgent() { return urgent; },
+  /** v1.37.0: Discuss receipts of everyone (channels) and of this person's one-to-one chats. */
+  get receipts() { return [...rcpt.ch, ...rcpt.dm]; },
+  /** v1.37.0: the conversation `chat` (chatKey) is on screen: Seen up to its newest message. */
+  markChatSeen(chat) { receiptsTick('seen', chat); },
   /** v0.72.0: send an urgent notice (engine/urgent.js urgentRecord). */
   async sendUrgent(rec) {
     if (!api) { urgent = [...urgent, rec]; emit(); return; }

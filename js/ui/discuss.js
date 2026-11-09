@@ -10,6 +10,7 @@ import { uid } from '../core/util.js';
 import { html } from './dom.js';
 import { tell } from '../core/image.js';
 import { accountOf } from '../engine/people.js';
+import { tagOf, tick } from '../engine/receipts.js';   // v1.37.0
 import { currentDivision, TRADING } from '../core/division.js';
 
 // Installation and Trading each have their own General channel (and only Installation has the project channels),
@@ -167,6 +168,7 @@ export function render(c) {
   // drawn newest first inside a reversed column, so the page rests at the latest message
   const rows = log.map((m, i) => ({ m, newDay: i === 0 || !sameDay(log[i - 1].at, m.at) })).reverse();
   markSeen(c.company, open);
+  if (store.cloud) store.markChatSeen(isDirect(open) ? pairOf(me(), otherOf(open)).join('|') : open);   // v1.37.0: Seen
   const shown = profile && log.find(m => m.id === profile);
   const card = shown && sender(c.company, shown);
 
@@ -209,6 +211,7 @@ export function render(c) {
           <button type="button" class="chat-face" data-act="profile" data-id="${m.id}" title="${who.name}${who.title ? `, ${who.title}` : ''}">${face(who)}</button>
           <div class="chat-body">
             <span class="chat-meta"><b>${who.name}</b><span class="muted">${timeLabel(m.at)}${m.edited && !m.deleted ? ', edited' : ''}</span>
+              ${own && !m.deleted && store.cloud ? receiptTag(m) : ''}
               ${!m.deleted && left && editing !== m.id ? html`<button type="button" class="btn ghost small" data-act="edit" data-id="${m.id}" title="You can correct it for ${left} more seconds">Edit</button>` : ''}
               ${!m.deleted && (own || (c.admin && !current.direct)) ? html`<button type="button" class="btn ghost small" data-act="unsend" data-id="${m.id}" title="${own && !takeBackLeft(m) ? 'Delete from your view (the others still see it)' : 'Delete this message for everyone'}">Delete</button>` : ''}</span>
             ${m.deleted ? html`<p class="chat-gone">This message was deleted, ${timeLabel(m.deletedAt || m.at)}${sameDay(m.deletedAt || m.at, m.at) ? '' : ` on ${dayLabel(m.deletedAt)}`}</p>`
@@ -225,6 +228,9 @@ export function render(c) {
       </form>
     </section>`;
 }
+
+/** v1.37.0 (owner, 9 Nov): Sent / Delivered / Seen under one's own message; in a channel, who (on hover). */
+const receiptTag = m => { const t = tagOf(m, store.receipts, me()); return html`<span class="rc rc-${t.k}" title="${t.names}">${tick(t)} ${t.text}</span>`; };
 
 /** The sender's card: photo, full name and position. */
 const profileCard = who => html`

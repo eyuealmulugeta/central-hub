@@ -988,6 +988,9 @@ input.emp-name:hover, input.emp-job:hover, input.emp-name:focus, input.emp-job:f
 .chat-msg.mine .chat-body p { background: var(--primary-soft); }
 .chat-meta { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
 .chat-meta .muted { font-size: 12px; }
+/* v1.37.0: Sent / Delivered / Seen */
+.rc { font-size: 11px; color: var(--muted, #6b7280); white-space: nowrap; }
+.rc-seen { color: #2f7de1; font-weight: 600; }
 .chat-meta .btn { visibility: hidden; padding: 0 6px; min-height: 0; }
 .chat-msg:hover .chat-meta .btn { visibility: visible; }
 .chat-meta .btn[data-act="edit"] { visibility: visible; }

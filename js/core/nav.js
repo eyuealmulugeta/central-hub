@@ -31,6 +31,20 @@ export const ALIASES = {
 // Letters, Engagement is in Sign-in history and Activity, holidays are the company calendar, Currency is in Company details
 export const REDIRECT = { docs: 'invoices', finance: 'summary', income: 'ledger', expenses: 'ledger', crewletters: 'letters', engagement: 'activity', weather: 'reports', catalog: 'company' };
 
+/**
+ * v1.40.0 (owner, 9 Nov, R1): pages that do one job share one tab. The first page of a group is its tab in the row
+ * along the top; the others are opened from a switch at the top of the page. Access is unchanged: each page keeps its own.
+ */
+export const GROUPS = {
+  invoices: { label: 'Invoices & quotations', pages: [['invoices', 'Invoices'], ['quotations', 'Quotations']] },
+  summary: { label: 'Money reports', pages: [['summary', 'Summary'], ['cashflow', 'Cash flow']] },
+  contracts: { label: 'Agreements', pages: [['contracts', 'Agreements'], ['documentsign', 'Document sign']] },
+};
+/** The group a page belongs to ('' for none). */
+export const groupOf = page => Object.keys(GROUPS).find(k => GROUPS[k].pages.some(([p]) => p === page)) || '';
+/** The tabs drawn in a section's row: a page of a group is left out when its group's first page is there. */
+export const rowTabs = tabs => tabs.filter(t => { const g = groupOf(t); return !g || g === t || !tabs.includes(g); });
+
 export const baseOf = page => ALIASES[page]?.view || page;
 /** The project page that a project switches off to hide this page. */
 export const switchOf = page => ALIASES[page]?.switch || baseOf(page);

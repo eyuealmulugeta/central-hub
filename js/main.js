@@ -77,6 +77,7 @@ import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
 import { syncPeople } from './ui/peoplesync.js';
 import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, isDelete, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
+import { GROUPS, groupOf, rowTabs } from './core/nav.js';   // v1.40.0 (R1)
 import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS, arranged, orderOf, MENU_ORDER } from './core/nav.js';
 import { healthOf } from './engine/today.js';
 import { footCss } from './ui/print.js';
@@ -245,6 +246,12 @@ const offPage = raw => {
   return !!VIEWS[name] && divisionFor(name, division, myDivisions()) !== null && store.can(name) && !(appOn(store.global, permKey(name)) && appOn(store.global, name));
 };
 const shown = t => allowed(t) || offPage(t);
+/** v1.40.0 (R1): the switch at the top of a page that shares its tab (Invoices / Quotations, Summary / Cash flow ...). */
+function subRow(name) {
+  const g = groupOf(name);
+  const list = g ? GROUPS[g].pages.filter(([x]) => allowed(x)) : [];
+  return list.length < 2 ? '' : html`<nav class="seg subrow" aria-label="${GROUPS[g].label}">${list.map(([x, l]) => html`<a href="#${x}" class="${x === name ? 'on' : ''}" ${x === name ? html`aria-current="page"` : ''}>${l}</a>`)}</nav>`;
+}
 const offCard = name => html`<section class="card off-card"><span class="off-chip">Turned off</span><h2>${TITLES[name] || name} is turned off</h2>
   <p class="muted">The Admin turned this page off for everyone under Settings, Apps. Nothing was deleted: it comes back as it was when it is turned on again.</p>
   ${store.isAdmin ? html`<div class="actions left"><a class="btn primary" href="#apps">Open Settings, Apps</a></div>` : ''}</section>`;
@@ -362,9 +369,11 @@ function renderSidebar(name, summaries) {
     return html`<a href="#${to}" class="ptab ${h === here ? 'on' : ''}">${icon(h.icon)}<span>${label}</span>${badge(h.tabs.filter(allowed).reduce((n, t) => n + (count[t] || 0), 0))}</a>`;
   })}<button type="button" class="ptab ${document.body.classList.contains('more-open') ? 'on' : ''}" id="phone-more" aria-expanded="${document.body.classList.contains('more-open')}">${icon('apps')}<span>More</span></button>`);
   // the tabs of the open section, across the top of the page
-  const tabs = here && p ? here.tabs.filter(shown) : [];
+  const tabs = here && p ? rowTabs(here.tabs.filter(shown)) : [];   // v1.40.0: one tab per group of pages
+  const isOn = t => t === name || groupOf(name) === t;
+  const tabCount = t => (GROUPS[t] ? GROUPS[t].pages.reduce((n, [x]) => n + (count[x] || 0), 0) : count[t]);
   $('#tabs').innerHTML = String(html`${tabs.map(t => html`
-    <a href="#${t}" class="tab ${t === name ? 'on' : ''} ${offPage(t) ? 'off' : ''}" ${t === name ? html`aria-current="page"` : ''}>${TITLES[t]}${offPage(t) ? html`<span class="off-chip">Turned off</span>` : badge(count[t])}</a>`)}
+    <a href="#${t}" class="tab ${isOn(t) ? 'on' : ''} ${offPage(t) ? 'off' : ''}" ${isOn(t) ? html`aria-current="page"` : ''}>${GROUPS[t]?.label || TITLES[t]}${offPage(t) ? html`<span class="off-chip">Turned off</span>` : badge(tabCount(t))}</a>`)}
     ${here && PROJECT_PAGES.includes(switchOf(name)) && here.id !== 'projects' ? html`<span class="muted tab-note">For ${p.name}</span>` : ''}
     ${tabs.some(t => count[t]) ? html`<button type="button" class="tab mark-read" data-markread="hub" title="Hide the red numbers of this section until something new needs attention">✓ Mark as read</button>` : ''}`);
   // a section with a single page needs no row of tabs
@@ -469,7 +478,7 @@ function render() {
   const off = offPage(name);
   if (key !== lastKey && !off) view?.preset?.(ALIASES[name]?.preset || {});
   try {
-    root.innerHTML = String(off ? offCard(name) : view.render(ctx));   // v1.14.2
+    root.innerHTML = String(off ? offCard(name) : html`${subRow(name)}${view.render(ctx)}`);   // v1.14.2; v1.40.0 the group switch
     groupShare(root);
     printFoot(root);
     fillPhotos(root);   // v0.23.1: site photos from Drive

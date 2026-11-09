@@ -26,6 +26,7 @@ export function compareReports(script = [], db = [], start = '', startAt = '') {
     db: { n: d.size, last: last(d) },
     onlyScript: since.filter(k => !d.has(k)).sort(),
     onlyDb: [...d.keys()].filter(k => !s.has(k)).sort(),
+    byServer: db.filter(r => on(r) && r.fromScript).map(r => r.date).sort(),   // v1.33.0: the phone did not send these
     numbers: [...d.keys()].filter(k => s.has(k) && s.get(k) && d.get(k) && s.get(k) !== d.get(k)).sort().map(k => ({ date: k, script: s.get(k), db: d.get(k) })),
   };
 }

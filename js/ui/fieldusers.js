@@ -298,8 +298,9 @@ function compareBox() {
     <div class="actions left"><button class="btn small" type="button" data-act="fuCompare" ${cmpBusy ? 'disabled' : ''}>${cmpBusy ? 'Reading…' : cmp ? 'Compare again' : 'Compare'}</button>${cmp ? html`<span class="muted small">Read ${when(cmp.at)}${store.fieldRouteSince ? `. Counted from ${day(store.fieldRouteSince)}, the day Both was switched on` : ''}</span>` : ''}</div>
     ${cmp ? html`<div class="table-wrap"><table class="table compact"><thead><tr><th>Project</th><th>Since</th><th>Script</th><th>Database</th><th>Differences</th></tr></thead><tbody>
       ${cmp.rows.map(({ p, c }) => html`<tr><td>${p.name}</td><td>${day(c.from)}</td><td>${c.script.n} · last ${day(c.script.last)}</td><td>${c.db.n} · last ${day(c.db.last)}</td>
-        <td>${!c.from ? html`<span class="muted">No report in the database yet</span>` : clean(c) ? html`<span class="chip ok">None</span>` : html`<span class="bad small">${[
-          c.onlyScript.length ? `Only in the script: ${c.onlyScript.map(day).join(', ')}${c.why?.length ? `. Refused: ${c.why.join(' ')}` : '. No refusal recorded: the phone has not sent its copy (not connected, or another phone)'}` : '',
+        <td>${!c.from ? html`<span class="muted">No report in the database yet</span>` : clean(c) ? html`<span class="chip ok">None</span>${c.byServer?.length ? html` <span class="muted small">Copied by the server from the script: ${c.byServer.map(day).join(', ')} (the phone did not send it)</span>` : ''}` : html`<span class="bad small">${[
+          c.byServer?.length ? `Copied by the server from the script: ${c.byServer.map(day).join(', ')}` : '',
+          c.onlyScript.length ? `Only in the script: ${c.onlyScript.map(day).join(', ')}${c.why?.length ? `. Refused: ${c.why.join(' ')}` : '. No refusal recorded: the phone has not sent its copy yet; the server copies it from the script after 30 minutes'}` : '',
           c.onlyDb.length ? `Only in the database: ${c.onlyDb.map(day).join(', ')}` : '',
           ...c.numbers.map(n => `${day(n.date)}: No. ${n.script} in the script, ${n.db} in the database`)].filter(Boolean).join(' · ')}</span>`}</td></tr>`)}
     </tbody></table></div>` : ''}`;

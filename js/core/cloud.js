@@ -71,7 +71,8 @@ export async function connectCloud(config) {
     /** Call a server function (functions/index.js, europe-west1) with this person's sign-in. Loaded on first use. */
     async call(name, data) {
       const Fn = await sdk('functions');
-      return (await Fn.httpsCallable(Fn.getFunctions(app, 'europe-west1'), name)(data)).data;
+      // v1.29.0: wait as long as the server function may run (120 s), not the SDK's 70 s
+      return (await Fn.httpsCallable(Fn.getFunctions(app, 'europe-west1'), name, { timeout: 130000 })(data)).data;
     },
 
     watchDoc: (path, fn, onError) => F.onSnapshot(ref(path), snap => fn(snap.exists() ? snap.data() : null), onError),

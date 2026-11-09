@@ -66,7 +66,8 @@ export async function load(force) {
   if (isDemo()) { if (!feed) feed = { ...demoFeed(), at: Date.now() }; store.notify(); return; }
   busy = true; store.notify();
   try { feed = { ...(await fieldUsers()), at: Date.now() }; said = null; }
-  catch (err) { said = { ok: false, text: err.message }; }
+  // v1.29.0: a background re-read that fails keeps the list already shown; it asks again in 2 minutes
+  catch (err) { if (force || !feed) said = { ok: false, text: err.message }; }
   busy = false; store.notify();
   await takeApproved();
 }
@@ -79,6 +80,10 @@ async function takeApproved() {
   for (const [code, list] of by) await crewDecide(code, true, list, true);
 }
 export const current = () => feed;
+/** v1.29.0: why a result email did not go, in words the Admin can act on. */
+export const mailWhy = e => /EMAIL_PERMISSION|send_mail|MailApp/.test(e || '')
+  ? 'The email was not sent: Google has not yet allowed the Field Report script to send email. The script owner opens the script once, runs allowEmail and presses Allow; then press Email again under Decided.'
+  : `The email could not be sent (${e || 'unknown reason'}): tell them yourself, or press Email again under Decided later.`;
 
 /* v1.12.1 (owner, 8 Nov, R3): approvals sync by themselves. A Field Report change (crew sent or approved on a phone,
    a report sent or answered) leaves fieldPing/<project>; the Admin's Central Hub reloads the Field Report list at once,
@@ -147,7 +152,7 @@ function signupsCard(catalog) {
     <p class="muted small">People who signed in to Field Report with a Google account that has no access yet. Choose who they are in the Manpower Directory: Approve sets this email as their sign-in, and their position and projects there give the role and projects. Someone not in the Directory is added there first (Manpower, Employee data). Either way they get an email with the result.</p>
     ${wait.length ? html`<ul class="list fu-devs">${wait.map(r => signupRow(r, catalog))}</ul>
       ${wait.length > 1 ? html`<div class="actions left"><button class="btn small ghost" type="button" data-act="fuRejectAll" ${busy ? 'disabled' : ''}>Reject all ${wait.length}</button></div>` : ''}` : html`<p class="muted">No request is waiting.</p>`}
-    ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span></li>`)}</ul></details>` : ''}`;
+    ${done.length ? html`<details><summary class="muted">Decided (${done.length})</summary><ul class="plain">${done.map(r => html`<li>${chip(...SU_WORDS[r.st])} ${r.name || r.email} <span class="muted">${r.email} · ${r.by || ''} ${when(r.decidedAt)}${r.mailed ? ' · emailed' : ' · not emailed'}</span>${!r.mailed && store.isAdmin && !store.readOnly ? html` <button type="button" class="btn small" data-act="suMail" data-e="${r.email}" ${busy ? 'disabled' : ''}>Email again</button>` : ''}</li>`)}</ul></details>` : ''}`;
 }
 
 /** v0.28.0 (script 7.37.0): the crew list the site sent, per project, for the Admin to approve as that project's crew. */
@@ -436,9 +441,20 @@ Each person gets an email saying it was not approved, and cannot ask again from 
         await apply('userSet', { email: r.email, full: who.name, pos: who.title || '', ok: true });
       }
       const out = await apply('signupDecide', { email: r.email, decision: yes ? 'approve' : 'reject', by: store.profile.name || store.user?.name || 'Admin' });
-      const mail = out?.demo ? ' (demo: no email is sent)' : out?.mailed ? ` An email went to ${r.email}.` : ` The email could not be sent (${out?.mailError || 'unknown reason'}): tell them yourself.`;
+      const mail = out?.demo ? ' (demo: no email is sent)' : out?.mailed ? ` An email went to ${r.email}.` : ` ${mailWhy(out?.mailError)}`;
       say(true, `${yes ? `Approved: ${who.name}, ${FR_ROLE_WORD[role]}${projects.length ? ` on ${projects.join(', ')}` : ''}` : `Rejected: ${r.name || r.email}`}.${mail}`);
       if (yes && isDemo()) feed.people.push({ email: r.email, id: r.email.split('@')[0].toUpperCase().slice(0, 6), role, projects, st: 'active', full: who.name, pos: who.title || '', uName: r.name || '', uPos: '', ok: true });
+    } catch (err) { say(false, err.message); }
+    finally { busy = false; store.notify(); }
+  },
+  /** v1.29.0: send the result email again to a decided request that was not emailed. */
+  async suMail(el) {
+    if (busy) return;
+    busy = true; store.notify();
+    try {
+      const out = await apply('signupMail', { email: el.dataset.e });
+      if (out?.signups && feed) feed.signups = out.signups;
+      say(!!out?.mailed, out?.mailed ? `An email went to ${el.dataset.e}.` : mailWhy(out?.mailError));
     } catch (err) { say(false, err.message); }
     finally { busy = false; store.notify(); }
   },

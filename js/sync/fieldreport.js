@@ -39,7 +39,13 @@ const SERVER_DOWN = /not-found|unavailable|internal|deadline-exceeded|unauthenti
 async function post(body) {
   if (fieldServer.call) {
     try { return await fieldServer.call(body); }
-    catch (err) {
+    catch (first) {
+      // v1.29.0: Field Report slow or busy for a moment: ask once more before saying anything
+      let err = first;
+      if (/deadline-exceeded|unavailable/.test(String(first?.code || ''))) {
+        await new Promise(r => setTimeout(r, 3000));
+        try { return await fieldServer.call(body); } catch (again) { err = again; }
+      }
       const code = String(err?.code || '');
       const msg = String(err?.message || err).replace(/^Firebase(Error)?:s*/, '');
       const old = fieldConfig.get();
@@ -499,7 +505,7 @@ export async function fieldPhoto(proj, report, id, full = false, size = '') {
  * devDecide { email, device, decision } or (script 7.35.0) signupDecide { email, decision, by }, which emails the person the result.
  */
 export async function fieldUserDo(action, body) {
-  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide', 'crewDecide', 'accessRules'].includes(action)) throw new Error('Unknown change.');   // crewDecide: script 7.37.0; accessRules: 7.38.0
+  if (!['userSet', 'accessSet', 'accessRemove', 'devDecide', 'signupDecide', 'signupMail', 'crewDecide', 'accessRules'].includes(action)) throw new Error('Unknown change.');   // crewDecide: script 7.37.0; accessRules: 7.38.0
   const out = await post({ action, ...body });
   if (!out.ok) throw new Error(out.error || 'Field Report refused the change.');
   return out;

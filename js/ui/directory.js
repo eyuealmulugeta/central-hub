@@ -10,6 +10,9 @@ import { stamp } from '../core/division.js';
 import { positionGroups, ROLES, ROLE_GROUPS, normRole, setExtraPositions, linkTrades, departmentOf } from '../engine/positions.js';
 import { chooseGroups, chosenValue } from './choose.js';
 import { assign, unassign, activeProjects, accountOf } from '../engine/people.js';
+import { mayAllProjects } from '../engine/onesource.js';   // v1.31.0
+const ALL = '@all';
+const adminMails = () => (store.users || []).filter(u => u.role === 'owner').map(u => u.email);
 import { ratingOf } from '../engine/hr.js';
 import { tierOfTitle, tierOfPerson, positionsOf, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, addedName, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
 import { syncPages, sendRules } from './prices.js';
@@ -82,7 +85,8 @@ function payCells(p, c) {
 
 function row(p, i, c, edit) {
   const tier = tierOfPerson(p), more = positionsOf(p).slice(1), pay = payOf(p), r = ratingOf(p, c.company.evaluations || []);
-  const proj = projectOfRow(p), names = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
+  const mayAll = mayAllProjects(p, tier, adminMails());
+  const proj = p.allProjects ? ALL : projectOfRow(p), names = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
   const dis = edit ? '' : 'disabled';
   return html`<tr class="${p.status === 'left' ? 'muted' : ''}">
     <td>${i + 1}</td>
@@ -94,7 +98,7 @@ function row(p, i, c, edit) {
       ${more.map(w => html`<span class="chip">${w}${edit ? html` <button type="button" class="mini" data-act="mpDropPos" data-id="${p.id}" data-w="${w}" aria-label="Remove ${w} from ${p.name}">✕</button>` : ''}</span>`)}
       ${edit && p.title ? html`<select data-chg="mpAddPos" data-id="${p.id}" aria-label="Another position for ${p.name}">${chooseGroups(positionGroups(), '', '+ Another position')}</select>` : ''}
       ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}${departmentOf(p) ? html`<br><span class="muted small">${departmentOf(p)}</span>` : ''}</td>
-    <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
+    <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(mayAll || proj === ALL ? [[ALL, 'All projects']] : []), ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
     <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
     <td class="nowrap mp-pay">${edit ? payCells(p, c) : pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>
     <td>${addedName(p.addedBy, store.company?.staff, store.users) || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>
@@ -304,6 +308,14 @@ export const changes = {
   mpProject(el, c) {
     const p = find(c, el.dataset.id);
     if (!p || el.value === '*') { store.notify(); return; }
+    // v1.31.0 (owner, 9 Nov): All projects, for the Admin, the GM and Tier 1: Central Hub and Field Report give every project, new ones too
+    if (el.value === ALL) {
+      if (!mayAllProjects(p, tierOfPerson(p), adminMails())) { tell(`"All projects" is for the Admin, the GM and Tier 1 only. ${p.name} is not.`); store.notify(); return; }
+      if (!ask(`Give ${p.name} all projects, now and future ones, in Central Hub and Field Report?`)) { store.notify(); return; }
+      store.updateCompany(co => { const x = co.staff.find(y => y.id === p.id); x.allProjects = true; });
+      return;
+    }
+    if (p.allProjects) store.updateCompany(co => { const x = co.staff.find(y => y.id === p.id); delete x.allProjects; });
     const pn = store.projects.find(x => x.id === el.value)?.name;
     const was = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
     if (!ask(el.value ? `Put ${p.name} on ${pn}${was.length ? `, and take them off ${was.join(', ')}` : ''}?` : `Take ${p.name} off ${was.join(', ') || 'every project'}?`)) { store.notify(); return; }

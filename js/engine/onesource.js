@@ -43,6 +43,8 @@ export function named(list = [], staff = []) {
   const who = directoryWho(staff);
   return list.map(e => { const p = who.get(low(e && e.email)); return p ? { ...e, name: p.name || e.name, position: p.title || e.position, typed: e.name !== p.name ? e.name : undefined } : e; });
 }
+/** v1.31.0 (owner, 9 Nov): who may be given "All projects" in the Directory: the Admin's own account, the GM and Tier 1. */
+export const mayAllProjects = (p, tier, admins = []) => tier === 1 || frRoleOf(p && p.title) === 'exec' || admins.map(low).includes(accountOf(p));
 /** The people who should use the apps, from the Directory (with a sign-in email, not left): { email, name, position }. */
 export const appPeople = (staff = []) => staff.filter(p => accountOf(p) && !left(p)).map(p => ({ email: accountOf(p), name: p.name || '', position: p.title || '' }));
 
@@ -134,7 +136,8 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
   for (const p of staff) {
     const email = accountOf(p);
     if (!email || left(p) || want.has(email)) continue;
-    const pids = [...new Set((p.assignments || []).filter(a => a.active !== false).map(a => a.projectId))];
+    // v1.31.0: "All projects" (Admin, GM, Tier 1): every project, a new one too (this runs every 2 minutes)
+    const pids = p.allProjects ? projects.map(x => x.id).filter(Boolean) : [...new Set((p.assignments || []).filter(a => a.active !== false).map(a => a.projectId))];
     want.set(email, { p, pids });
   }
   for (const [email, { p, pids }] of want) {

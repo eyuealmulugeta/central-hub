@@ -57,6 +57,14 @@
       <h2>Backup</h2>
       <p class="muted" id="bk-where"></p>
       <p class="muted" id="bk-last"></p>
+      <div id="bk-server" hidden>
+        <h3>Server copy</h3>
+        <p class="muted" id="bk-server-line"></p>
+        <div class="actions left">
+          <button class="btn" type="button" id="bk-server-get">Download server copy</button>
+          <button class="btn" type="button" id="bk-server-now">Make a server copy now</button>
+        </div>
+      </div>
       <div class="actions left">
         <button class="btn" type="button" id="bk-export">Export JSON</button>
         <label class="btn">Import JSON<input type="file" id="bk-import" accept="application/json" hidden></label>

@@ -32,6 +32,7 @@ import { entry as actEntry, isRepeat } from '../engine/activity.js';   // v0.99.
 
 const K = { meta: 'sf:meta', global: 'sf:global', company: 'sf:company', ws: id => `sf:ws:${id}`, active: 'sf:active' };
 const COMPANY_PATH = 'company/main';
+export const SERVER_BACKUP_URL = 'https://europe-west1-amistad-ops.cloudfunctions.net/backupFile';   // v1.46.0 (QA B1)
 const VERSION = 1;
 // What a Site user may read. Must match firestore.rules.
 const SUMMARY_REPEAT_MS = 10 * 60 * 1000;
@@ -432,6 +433,14 @@ export const store = {
   /** A server function, with this person's sign-in (cloud only). */
   /** v0.33.0: one record written straight to the database (a crew form link made by someone who does not load the list). */
   cloudPut(path, data) { if (!api?.set) throw new Error('Not signed in to the cloud.'); return api.set(path, data); },
+  /** v1.46.0 (QA B1): the server's weekly copy: its status (system/backup) and the file, for the Admin. */
+  async serverBackup() { return api ? api.get('system/backup').catch(() => null) : null; },
+  async serverBackupFile() {
+    if (!api?.idToken) throw new Error('Not signed in to the cloud.');
+    const res = await fetch(SERVER_BACKUP_URL, { headers: { Authorization: `Bearer ${await api.idToken()}` } });
+    if (!res.ok) throw new Error((await res.text()) || `The server answered ${res.status}.`);
+    return res.text();
+  },
   callServer(name, data) { if (!api?.call) throw new Error('Not signed in to the cloud.'); return api.call(name, data); },
   async fieldServer() { if (!api) return null; try { return await api.get('system/fieldImport'); } catch { return null; } },
   get user() { return me; },

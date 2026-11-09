@@ -31,6 +31,8 @@ export async function connectCloud(config) {
     },
     signOut: () => A.signOut(auth),
     /** Fetch a fresh sign-in token. One issued the moment an address was confirmed can still say "not confirmed". */
+    /** v1.46.0: this person's sign-in token, for the Admin's download of a server backup (functions backupFile). */
+    idToken: async () => auth.currentUser?.getIdToken(),
     refresh: async () => { await auth.currentUser?.reload(); await auth.currentUser?.getIdToken(true); },
     /** v0.24.0: email and password, in place of the activation link. */
     async signInPassword(email, password) {

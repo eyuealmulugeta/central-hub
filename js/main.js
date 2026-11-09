@@ -854,8 +854,28 @@ document.addEventListener('click', e => {
     : 'Data is stored in this browser. Export it regularly, or push a snapshot to Google Drive through your Apps Script web app.';
   $('#bk-reset').hidden = store.cloud;
   $('#bk-last').textContent = store.cloud && store.isAdmin ? backupLine() : '';
+  $('#bk-server').hidden = !(store.cloud && store.isAdmin);   // v1.46.0 (QA B1)
+  if (store.cloud && store.isAdmin) serverLine();
   status('');
   $('#dlg-backup').showModal();
+});
+/** v1.46.0 (QA B1): the server's own weekly copy, made each week without anyone's browser. */
+export const serverText = s => {
+  const base = 'The server makes a full copy by itself once a week (the 8 latest are kept), including the logs. Download one and use Import JSON to restore it.';
+  if (!s?.at) return `No server copy yet. ${base}`;
+  const fail = s.error ? ` The last try failed on ${new Date(s.failedAt).toLocaleString()}: ${s.error}` : '';
+  return `Last server copy: ${new Date(s.at).toLocaleString()} (${s.projects} projects, ${Math.round(s.bytes / 1024)} KB).${fail} ${base}`;
+};
+async function serverLine() { $('#bk-server-line').textContent = serverText(await store.serverBackup()); }
+$('#bk-server-get').addEventListener('click', async () => {
+  status('Downloading the server copy…');
+  try { const text = await store.serverBackupFile(); downloadText(`central-hub-server-${JSON.parse(text).exportedAt?.slice(0, 10) || stamp()}.json`, text, 'application/json'); status('Server copy downloaded.'); }
+  catch (err) { status(`Not downloaded: ${err.message}`); }
+});
+$('#bk-server-now').addEventListener('click', async () => {
+  status('Making a server copy (up to a few minutes)…');
+  try { await store.callServer('backupNow', {}); await serverLine(); status('Server copy made.'); }
+  catch (err) { status(`Not made: ${err.message}`); }
 });
 $('#bk-export').addEventListener('click', async () => downloadText(`central-hub-${stamp()}.json`, await snapshot(), 'application/json'));
 $('#bk-import').addEventListener('change', async e => {

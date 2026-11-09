@@ -355,7 +355,11 @@ export function render(c) {
   const has = { today: true, money: !!c.money, action: true, spot: may('spotlight'), requests: may('requests'), book: may('siteinstr'), people: true };
 
   // v1.30.0 (owner, 9 Nov): each of the five tiles opens its page
-  const kpi = (tone, label, value, hint, bar = null, to = '') => html`<a class="xkpi" href="#${to}" style="--c:${tone}" title="Open ${label}"><span class="lab">${label}</span><b>${value}</b><small>${hint}</small>${bar != null ? html`<span class="bar"><i style="width:${Math.min(100, Math.max(0, bar))}%"></i></span>` : ''}</a>`;
+  const kpi = (tone, label, value, hint, bar = null, to = '') => {
+    const inside = html`<span class="lab">${label}</span><b>${value}</b><small>${hint}</small>${bar != null ? html`<span class="bar"><i style="width:${Math.min(100, Math.max(0, bar))}%"></i></span>` : ''}`;
+    // v1.44.0 (owner): a tile whose page is switched off (Settings, Apps) shows its number but opens nothing
+    return to && may(to) ? html`<a class="xkpi" href="#${to}" style="--c:${tone}" title="Open ${label}">${inside}</a>` : html`<div class="xkpi" style="--c:${tone}">${inside}</div>`;
+  };
   const health = healthOf(own);
   const basis = own.basis && own.basis !== 'none';
   const kpis = [   // v0.94.0: always the same five (Budget paid only for those who see money); '–' when there is nothing yet

@@ -117,7 +117,7 @@ export function companySections(role, pages) {
  */
 export const APPS = [
   { group: 'Communication', about: 'Talking to each other', apps: [
-    { page: 'discuss', name: 'Discuss', does: 'Messages between the people of Amistad: one channel for everyone and one per project' },
+    { page: 'discuss', name: 'Discuss', does: 'Messages between the people of Amistad: one channel for everyone and one per project. Off here is off on the phones too' },
     { page: 'contacts', name: 'Contacts', does: 'Email addresses and phone numbers saved once, found by name, and who each project\'s documents go to' },
     { page: 'meetings', name: 'Meetings', does: 'Meetings with colleagues, scheduled here, and the booking page where clients and suppliers pick a free time' },
   ] },
@@ -198,13 +198,17 @@ export const APPS = [
     { page: 'fr_media', name: 'FR Dashboard', does: 'Photos and videos of all projects (GM)' },
     { page: 'fr_store', name: 'Store', does: 'The site store' },
     { page: 'fr_shots', name: 'Share work', does: 'Technicians\' work photos' },
-    { page: 'fr_chat', name: 'Discuss', does: 'The Discuss tab on the phone' },
+    { page: 'fr_chat', name: 'Discuss', does: 'The Discuss tab on the phone; switches with Discuss in Central Hub' },
   ] },
 ];
 /** v1.14.0: the Field Report features switched off, for the phones (public/fieldFeatures). */
 export const frOff = global => (global?.appsOff || []).filter(k => k.startsWith('fr_'));
 /** Is the app switched on for the company? Settings pages and Home cannot be switched off. */
 export const appOn = (global, page) => !(global?.appsOff || []).includes(page);
+/** v1.44.0 (owner, 9 Nov): one app in both places switches as one: Discuss in Central Hub is Discuss on the phones. */
+export const TWINS = { discuss: 'fr_chat', fr_chat: 'discuss' };
+/** Discuss is on only when neither half is switched off (the database and the server check the same). */
+export const chatOn = global => appOn(global, 'discuss') && appOn(global, 'fr_chat');
 
 /** Pages a project can switch off because they do not apply to it. Home always stays. */
 export const SWITCHABLE = PROJECT_PAGES.filter(p => p !== 'dashboard');

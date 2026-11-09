@@ -9,7 +9,7 @@ import * as fieldusers from './fieldusers.js';
 import * as directory from './directory.js';   // v0.45.0: the Manpower Directory, also a tab of People and access
 import { binPage, binActions, binChanges, purgeOld } from './bin.js';
 import { typesOf } from '../core/seed.js';
-import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, appOn, frOff, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
+import { GRANTABLE, GRANT_GROUPS, SWITCHABLE, APPS, TWINS, appOn, frOff, pagesOf, pageOn, grantableFor, tickPage, defaultPages, MONEY_PAGES } from '../core/access.js';
 import { icon } from './dom.js';
 import { MARKS } from './icons.js';   // v1.14.0
 import { record as recordFault } from '../core/diagnostics.js';
@@ -879,12 +879,14 @@ export const actions = {
   /** Switch one app on or off for the whole company. */
   app(el) {
     const page = el.dataset.p;
+    const both = [page, TWINS[page]].filter(Boolean);   // v1.44.0: Discuss switches in both apps at once
     store.updateGlobal(g => {
-      const off = (g.appsOff || []).filter(k => k !== page);
-      if (appOn(g, page)) off.push(page);
+      const turnOff = appOn(g, page);
+      const off = (g.appsOff || []).filter(k => !both.includes(k));
+      if (turnOff) off.push(...both);
       g.appsOff = off;
     });
-    if (page.startsWith('fr_')) store.setFieldFeatures(frOff(store.global));   // v1.14.0: the phones follow within seconds
+    if (both.some(k => k.startsWith('fr_'))) store.setFieldFeatures(frOff(store.global));   // v1.14.0: the phones follow within seconds
   },
   appsAll() { store.updateGlobal(g => { g.appsOff = []; }); store.setFieldFeatures([]); },
   async copyRules() {

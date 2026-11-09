@@ -331,7 +331,7 @@ function renderSidebar(name, summaries) {
   // what the project still needs before it runs smoothly: the essentials left on its checklist
   const toSet = ctx && store.isAdmin ? setup.itemsOf(ctx).remaining : 0;
   const raw = { siteinstr: ctx ? siteinstr.pendingCount(ctx) + diaryWaiting(ctx.ws.reports, ctx.today).length : 0,   // v0.80.0: + daily reports waiting for the consultant
-    setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
+    setup: toSet, requests: asked, dashboard: unseen, trade: late, contracts: dated, hr: people, discuss: name === 'discuss' || !allowed('discuss') ? 0 : discuss.unreadCount(scoped(), division), access: store.requests.length, meetings: name === 'meetings' || !store.can('meetings') ? 0 : meetings.unseenCount(scoped()) };
   // the counts that are only counts can be marked as read; alerts, chat and meetings remember what was opened
   const key = { setup: `${p?.id}:setup`, requests: `${p?.id}:requests`, trade: `${division}:trade`, contracts: `${division}:contracts`, hr: `${division}:hr`, access: 'access' };
   lastCounts = { raw, key };
@@ -461,6 +461,7 @@ function render() {
   renderSidebar(name, summaries);
   ctx.counts = lastShown;
   if (appOn(store.global, 'discuss')) discuss.announce(scoped(), name === 'discuss');   // a ring and a note for a new message
+  else discuss.closePop();   // v1.44.0: switched off: no pop-up left on the screen
   if (appOn(store.global, 'meetings') && store.can('meetings')) meetings.announce(scoped());   // a note for a new invitation
   store.saveSummary(summaryOf(ctx));
 

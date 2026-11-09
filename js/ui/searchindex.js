@@ -2,6 +2,7 @@
 // each page shows. Built fresh each time the box opens, from what this person may open now. Each entry is
 // { kind, label, hint, body, run }: `body` is the rest of the text, matched but not shown (the box shows a snippet of it).
 
+import { appOn } from '../core/access.js';   // v1.44.0
 import { flatText, htmlToText, headingsOf } from '../engine/find.js';
 import { fmtFull } from '../core/util.js';
 
@@ -21,27 +22,28 @@ export function buildIndex(env) {
   const items = [];
   const add = (kind, label, hint, body, run) => { if (label || body) items.push({ kind, label: label || kind, hint: hint || '', body: body || '', run }); };
   const installation = env.division === 'installation';
+  const on = p => appOn(store.global, p);   // v1.44.0 (owner): an app switched off is not found by search either
 
   // ---- the company's records, with all of their text
   if (store.isAdmin) {
-    for (const s of company.staff) add('Person', s.name, s.title || s.department || '', flatText(without(s, 'photo', 'passportImage')), () => goTo('hr', () => focus.hr.focusOn(s.id)));
-    for (const o of company.owners || []) add('Owner', o.name, o.title || '', flatText(without(o, 'photo', 'passportImage')), () => goTo('owners', () => focus.owners.focusOn(o.id)));
-    for (const l of company.letters) add('Letter', `${l.number || ''} ${l.subject || ''}`.trim(), l.to || '', flatText(l, 1500), () => goTo('letters', () => focus.letters.focusOn(l.id)));
-    for (const r of company.payroll) add('Payroll', `Payroll ${r.month}`, r.status || '', flatText(r, 1200), () => goTo('payroll', () => focus.payroll.focusOn(r.id)));
+    if (on('hr')) for (const s of company.staff) add('Person', s.name, s.title || s.department || '', flatText(without(s, 'photo', 'passportImage')), () => goTo('hr', () => focus.hr.focusOn(s.id)));
+    if (on('owners')) for (const o of company.owners || []) add('Owner', o.name, o.title || '', flatText(without(o, 'photo', 'passportImage')), () => goTo('owners', () => focus.owners.focusOn(o.id)));
+    if (on('letters')) for (const l of company.letters) add('Letter', `${l.number || ''} ${l.subject || ''}`.trim(), l.to || '', flatText(l, 1500), () => goTo('letters', () => focus.letters.focusOn(l.id)));
+    if (on('payroll')) for (const r of company.payroll) add('Payroll', `Payroll ${r.month}`, r.status || '', flatText(r, 1200), () => goTo('payroll', () => focus.payroll.focusOn(r.id)));
   }
   if (store.can('contracts')) {
-    for (const k of company.contracts) add('Contract', `${k.ref || ''} ${k.title || ''}`.trim(), k.party || '', flatText(k, 1200), () => goTo('contracts', () => focus.contracts.focusOn(k.id)));
-    for (const g of company.signs || []) add('Signature request', g.title || g.ref, g.status || '', flatText(without(g, 'chunks', 'hash')), () => goTo('documentsign'));
+    if (on('contracts')) for (const k of company.contracts) add('Contract', `${k.ref || ''} ${k.title || ''}`.trim(), k.party || '', flatText(k, 1200), () => goTo('contracts', () => focus.contracts.focusOn(k.id)));
+    if (on('documentsign')) for (const g of company.signs || []) add('Signature request', g.title || g.ref, g.status || '', flatText(without(g, 'chunks', 'hash')), () => goTo('documentsign'));
   }
   if (store.can('trade')) {
-    for (const s of company.shipments) add('Shipment', `${s.ref || ''} ${s.supplier || ''}`.trim(), [s.origin, s.destination].filter(Boolean).join(' to '), flatText(s, 1500), () => goTo('trade', () => focus.trade.focusOn(s.id)));
-    for (const x of company.sales || []) add('Sale', `Sale to ${x.customer || ''}`.trim(), x.date ? fmtFull(x.date) : '', flatText(x), () => goTo('stock'));
+    if (on('trade')) for (const s of company.shipments) add('Shipment', `${s.ref || ''} ${s.supplier || ''}`.trim(), [s.origin, s.destination].filter(Boolean).join(' to '), flatText(s, 1500), () => goTo('trade', () => focus.trade.focusOn(s.id)));
+    if (on('stock')) for (const x of company.sales || []) add('Sale', `Sale to ${x.customer || ''}`.trim(), x.date ? fmtFull(x.date) : '', flatText(x), () => goTo('stock'));
   }
-  if (store.can('contacts')) for (const x of company.contacts || []) add('Contact', x.name, x.email || x.phone || '', flatText(x), () => goTo('contacts'));
-  if (store.can('meetings')) for (const b of company.bookings || []) add('Meeting', `${b.name || ''}${b.company ? `, ${b.company}` : ''}`, b.start ? fmtFull(b.start.slice(0, 10)) : '', flatText(b), () => goTo('meetings'));
+  if (store.can('contacts') && on('contacts')) for (const x of company.contacts || []) add('Contact', x.name, x.email || x.phone || '', flatText(x), () => goTo('contacts'));
+  if (store.can('meetings') && on('meetings')) for (const b of company.bookings || []) add('Meeting', `${b.name || ''}${b.company ? `, ${b.company}` : ''}`, b.start ? fmtFull(b.start.slice(0, 10)) : '', flatText(b), () => goTo('meetings'));
   // messages of this department's channels
   const trading = env.division === 'trading';
-  for (const m of store.company.messages || []) {
+  for (const m of allowed('discuss') ? store.company.messages || [] : []) {
     if ((m.channel === 'general-trading') !== trading) continue;   // each department searches its own conversations
     if (String(m.at || '') < store.seesFrom(m.channel, trading ? 'general-trading' : 'general')) continue;   // written before this person joined
     add('Message', trim(m.text, 70), m.name || '', flatText(m), () => goTo('discuss'));

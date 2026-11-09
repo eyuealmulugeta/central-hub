@@ -12,6 +12,7 @@ import { tell } from '../core/image.js';
 import { accountOf } from '../engine/people.js';
 import { tagOf, tick } from '../engine/receipts.js';   // v1.37.0
 import { currentDivision, TRADING } from '../core/division.js';
+import { chatOn } from '../core/access.js';   // v1.44.0
 
 // Installation and Trading each have their own General channel (and only Installation has the project channels),
 // so the two never share a conversation. The older 'general' channel is the Installation one.
@@ -165,7 +166,7 @@ let popTimer = 0;
 const whereOf = m => (m.members ? 'to you' : /^general/.test(m.channel || '') ? 'General' : (store.projects.find(p => p.id === m.channel)?.name || 'Project'));
 /** v1.38.0 (D2): the new-message pop-up: who (name · position), where, the text; Reply sends from it, Close or 30 s takes it away. */
 function popUp(company, m, n = 1) {
-  if (typeof document === 'undefined') return;
+  if (typeof document === 'undefined' || !chatOn(store.global)) return;
   document.querySelector('.chat-pop')?.remove();
   const who = sender(company, m), chat = chatOf(m);
   const el = document.createElement('div');
@@ -182,7 +183,7 @@ function popUp(company, m, n = 1) {
   el.querySelector('.cp-close').onclick = close;
   el.querySelector('.cp-text').onclick = () => { open = chat; close(); location.hash = '#discuss'; store.notify(); };
   el.querySelector('input').onfocus = () => clearTimeout(popTimer);
-  el.querySelector('form').onsubmit = e => { e.preventDefault(); const t = el.querySelector('input').value.trim(); if (!t) return; sendTo(chat, t); close(); tell('Reply sent.'); };
+  el.querySelector('form').onsubmit = e => { e.preventDefault(); const t = el.querySelector('input').value.trim(); if (!t) return; close(); if (sendTo(chat, t)) tell('Reply sent.'); };
   document.body.append(el);
   popTimer = setTimeout(close, 30000);
 }
@@ -197,11 +198,15 @@ function notifyOs(company, m) {
 }
 /** Send a message to a channel or chat; the phones are told by the server (functions/chatpush.js). */
 function sendTo(channel, text) {
+  if (!chatOn(store.global)) { tell('Discuss is turned off by the Admin (Settings, Apps).'); return false; }   // v1.44.0
   const base = { id: uid('msg'), by: me(), name: myName(), title: store.profile?.title || '', text: String(text).slice(0, MAX_LENGTH), at: new Date().toISOString(), sentMs: Date.now() };
   if (isDirect(channel)) store.updateCompany(co => { (co.direct ||= []).push({ ...base, members: pairOf(me(), otherOf(channel)) }); });
   else store.updateCompany(co => { (co.messages ||= []).push({ ...base, channel }); });
   if (store.cloud) setTimeout(() => { try { Promise.resolve(store.callServer('chatPush', { id: base.id, dm: isDirect(channel) })).catch(() => {}); } catch { /* not signed in */ } }, 2500);
+  return true;
 }
+/** v1.44.0: Discuss switched off: a pop-up already on the screen goes at once. */
+export function closePop() { if (typeof document !== 'undefined') document.querySelector('.chat-pop')?.remove(); }
 
 // v1.38.0 (owner, 9 Nov, D3/D4): New chat first; the person is chosen from the Directory by project, position and name
 let picking = false, pickProj = '', pickPos = '';

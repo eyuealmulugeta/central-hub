@@ -46,6 +46,9 @@ export const GROUPS = {
   // v1.42.0 (R3): Reports
   reports: { label: 'Daily report', pages: [['reports', 'Daily report'], ['workphotos', 'Work photos']] },
   sitestore: { label: 'Site store', pages: [['sitestore', 'Store'], ['usage', 'Materials used']] },
+  // v1.43.0 (R4): the Admin's records and the exports
+  activity: { label: 'Activity', pages: [['activity', 'Activity'], ['signins', 'Sign-ins'], ['outgoing', 'Outgoing register']] },
+  excel: { label: 'Exports', pages: [['excel', 'Excel link'], ['zoho', 'Zoho export']] },
 };
 /** The group a page belongs to ('' for none). */
 export const groupOf = page => Object.keys(GROUPS).find(k => GROUPS[k].pages.some(([p]) => p === page)) || '';
@@ -59,7 +62,7 @@ export const resolve = page => REDIRECT[page] || page;
 
 // v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
 // project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
-const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'notifications', 'signins', 'activity', 'outgoing', 'datafeed'] };   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
+const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'notifications', 'activity', 'signins', 'outgoing', 'datafeed'] };   // v1.43.0: Activity first of its group   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
 // v0.92.0 (owner, 5 Nov, R2): Quick moved out of Today's tabs into the main menu
 const quickHub = { id: 'quick', label: 'Quick', icon: 'apps', tabs: ['quick'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
 const team = [

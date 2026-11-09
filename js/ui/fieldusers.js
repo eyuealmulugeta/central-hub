@@ -288,7 +288,15 @@ function routeCard() {
   return html`<section class="card set-box"><h3>Data route <span class="muted">Phase E, one database</span></h3>
     <p class="muted">How Field Report phones get their data. With Live reads, a phone signed in to the database sees approvals, comments and project changes at once; reports are still sent through the script. Back to Script undoes it at once.</p>
     <div class="actions left"><select data-chg="fuRoute" aria-label="Field Report data route">${options(ROUTE_WORDS, r)}</select>
-    <span class="chip ${r === 'script' ? '' : 'ok'}">${r === 'script' ? 'Script' : r === 'both' ? 'Both' : 'Live reads on'}</span></div>${r === 'both' ? compareBox() : ''}</section>`;
+    <span class="chip ${r === 'script' ? '' : 'ok'}">${r === 'script' ? 'Script' : r === 'both' ? 'Both' : 'Live reads on'}</span></div>${r === 'both' ? html`${firstBox()}${compareBox()}` : ''}</section>`;
+}
+
+/** v1.34.0 (owner, 9 Nov, E3b-1): Database first, project by project; untick to go back at once. */
+function firstBox() {
+  const ps = (store.projects || []).filter(p => p.fieldCode);
+  return html`<h4>Database first <span class="muted">E3b-1</span></h4>
+    <p class="muted small">A ticked project's report is in Central Hub seconds after the phone sends it, built from the phone's own copy in the database. The script still keeps the PDF and the photos and sends the notifications; it fills in anything the phone's copy did not bring. Untick to go back at once.</p>
+    <div class="pills">${ps.map(p => html`<label class="pill check"><input type="checkbox" data-chg="fuFirst" data-id="${p.id}" ${p.dataFirst ? 'checked' : ''}> ${p.name}</label>`)}</div>`;
 }
 
 /** v0.44.0: Compare: per project, the reports from the script beside the reports written to the database. */
@@ -486,6 +494,7 @@ Each person gets an email saying it was not approved, and cannot ask again from 
 
 export const changes = {
   fuRoute(el) { store.setFieldRoute(el.value); },
+  fuFirst(el) { if (store.role === 'owner') store.patchProject(el.dataset.id, { dataFirst: !!el.checked }); },   // v1.34.0 (E3b-1)
   fuCrewEdit(el) { const v = el.value.trim(); if (v || el.dataset.f === 'trade') crewEdits[el.dataset.id] = { ...(crewEdits[el.dataset.id] || {}), [el.dataset.f]: v }; },
   fuEdit(el) { edit(el.dataset.e, { [el.dataset.f]: el.value }); },
   fuAll(el) {

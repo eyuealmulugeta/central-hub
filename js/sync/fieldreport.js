@@ -231,7 +231,9 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
     const others = (older.get(meta.date) || []).map(olderLine);
     for (const o of older.get(meta.date) || []) putFile(ws, olderId(id, olderLine(o)), o.pdfId, o.folderId);
     const version = meta.version || 1;
-    const sameVersion = old && !old.field?.nowork && old.field?.version === version;
+    // v1.34.0 (E3b-1): a report built from the database copy (Database first) and the script's copy of it share a hash:
+    // the script's then only adds the PDF, status and comments, whatever its version number
+    const sameVersion = old && !old.field?.nowork && (old.field?.version === version || (!!old.field?.hash && old.field.hash === meta.hash));
     if (sameVersion && old.field.v === FIELD_SCHEMA) {
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
@@ -253,7 +255,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       ...approvedHere(old, meta),   // v0.44.2
       // every entry the Field Report app collects, kept as the site wrote it
       field: {
-        v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted',
+        v: FIELD_SCHEMA, no: meta.reportNo || '', version, status: meta.status || 'submitted', hash: meta.hash || '', ...(meta.fromDb ? { fromDb: true } : {}),
         pdf: meta.pdf || '', comments: meta.comments || [], reviewedBy: meta.reviewedBy || '', ...(meta.checked ? { checked: meta.checked } : {}),
         history: meta.history || [],   // v0.37.0: every step with its time (script history)
         position: meta.position || '', location: meta.location || '', activities: meta.activities || [],

@@ -990,16 +990,18 @@ function start() {
 
 /** The sign-in screen. `state` is 'signin', 'waiting', 'refused', 'sent', or a plain message. */
 let working = 0;    // v0.24.0: Field Report requests on their way (the blue "Working…" tag)
-let gateNote = '';   // a line under the sign-in form, for example why an activation link was not accepted
+let gateNote = '';
+/** v1.35.0 (owner, 9 Nov): what an address the Admin has not added is told (Field Report says the same). */
+export const UNAUTHORIZED = 'Unauthorized user, please contact the Admin';   // a line under the sign-in form, for example why an activation link was not accepted
 function gate(state, user, canLeave = false) {
   const el = $('#gate');
   el.hidden = state === null;
   if (state === null) return;
   $('#gate-msg').textContent = state === 'signin' ? 'Sign in to continue.'
-    : state === 'waiting' ? `${user.email} is waiting for the Admin's approval. Your request has been sent. You can come in as soon as the Admin approves it.`
+    // v1.35.0 (owner, 9 Nov): an address the Admin has not added is told one line only; its request still reaches the Admin, quietly
+    : state === 'waiting' || state === 'refused' ? UNAUTHORIZED
     : state === 'locked' ? `${user.email} is already signed in on another device (${describeSession(store.lockedBy)}). Only one device can be signed in at a time. Sign out there, or ask the Admin to reset your session, then click Check again. If that device is lost or broken, only the Admin can free it.`
     : state === 'unassigned' ? `${user.email} has access, but the Admin has not assigned a division yet (Installation or Trading). Nobody comes in before that. Ask the Admin to choose one under Settings, People and access, then click Check again.`
-    : state === 'refused' ? `${user.email} has not been given access yet. Ask the Admin to add this address under Settings, People and access.`
     : state === 'sent' ? "We emailed you a link to set your password. Check your spam folder if you don't get it within 3 minutes."
     : state === 'confirm' ? `We emailed ${user.email} a link to confirm the address. Open it, then click Check again. Check your spam folder if you don't get it within 3 minutes.`
     : state;

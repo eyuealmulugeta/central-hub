@@ -63,10 +63,9 @@ service cloud.firestore {
     // The pages a person may open. Keep in step with pagesOf in js/core/access.js. A record the Admin has ticked since
     // v0.15.0 holds them all (pagesV 2). An older one: a Site person had the site pages; an Office person the pages
     // ticked (all until chosen) plus Meetings, Contacts and the staff directory, which came with the role.
-    // v1.48.0 (owner R2): the GM (rank general_manager, Office, not an Executive) has Payments by default
+    // v1.51.0: the GM (rank general_manager, Office, not an Executive) counts as the Admin (isOwner, seesAll), so pages() is only the ticks
     function gmRank() { return hasUser() && user().role == 'office' && 'general_manager' in user().get('ranks', []) && user().get('readOnly', false) != true; }
-    function pages() { return pagesTicked().concat(gmRank() ? ['payments'] : []); }
-    function pagesTicked() {
+    function pages() {
       let u = user();
       return u.get('pagesV', 0) == 2 ? u.get('pages', [])
         : u.role == 'site' ? ['dashboard', 'reports', 'schedule', 'requests', 'directory']
@@ -475,8 +474,6 @@ service cloud.firestore {
 
     match /company/main/{section}/{record} {
       allow read: if (seesAll() && section != 'direct' && section != 'dmSeen')
-        // v1.48.0 (owner R2): the GM reads Employee data, Salary (payroll) and Letters
-        || (section in ['staff', 'letters', 'payroll'] && gmRank())
         || (section == 'messages' && hasUser())
         || (section == 'messages' && fieldOn(resource.data.channel))   // v1.13.0 (owner, R4): the project's channel on Field Report
         || (section in ['shipments', 'sales', 'products', 'partners', 'deals'] && staffWith(['trade', 'finance']) && mine(resource.data))
@@ -486,7 +483,6 @@ service cloud.firestore {
       allow create: if (section == 'messages' && (isOwner() || hasUser() || fieldOn(request.resource.data.channel)) && request.resource.data.by == me() && chatOn()
         && request.resource.data.get('text', '') is string && request.resource.data.get('text', '').size() <= 2000) && !readOnlyUser();
       allow create, update: if ((isOwner() && !(section in ['messages', 'direct', 'chatSeen', 'dmSeen']))
-        || (section == 'letters' && gmRank())   // v1.48.0 (owner R2): the GM makes letters
         || (section in ['shipments', 'sales', 'products', 'partners', 'deals'] && staffWith(['trade']) && keptMine())
         || (section == 'contracts' && staffWith(['contracts']) && keptMine())
         || (section == 'contacts' && staffWith(['contacts']) && keptMine())

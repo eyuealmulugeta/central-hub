@@ -260,7 +260,7 @@ function accessPane(p) {
         <label>Title <span class="readonly">${u.title || 'No title'}</span></label>
         <p class="muted small">The title follows the position in the Manpower Directory.</p>
         <label>Department <select data-chg="accessDivision">${divisionsOf(u).length ? '' : html`<option value="">Not assigned: cannot sign in</option>`}${options(DIVISIONS, divisionsOf(u)[0] || null)}</select></label>
-        <p class="muted">${projects.length ? `Linked to: ${projects.map(x => x.name).join(', ')}.` : 'Not linked to a project yet: put the person on one under Projects.'} What they may see and do is set under Settings, People and access, Access rules.</p>
+        <p class="muted">${projects.length ? `Linked to: ${projects.map(x => x.name).join(', ')}.` : 'Not linked to a project yet: put the person on one under Projects.'} What they may see and do is set under Settings, Access rules.</p>
         <div class="actions left"><button class="btn danger small" data-act="removeAccess">Remove access</button></div>`
       : html`
         <p class="muted">${mail} cannot sign in yet.</p>

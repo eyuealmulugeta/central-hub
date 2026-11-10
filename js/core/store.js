@@ -104,6 +104,7 @@ let lastAct = null;
 let lockedBy = null;     // the record of the device that holds this person's session, when this one was refused
 const endedSubscribers = [];
 let divisions = [];       // the divisions this person works in (empty = both); set by the Admin
+let gmAdmin = false;   // v1.51.0 (owner, 10 Nov): the GM does all the Admin does, but is not the first Admin (no hand-over, no Executive Partners)
 let gmView = false;   // v1.48.0 (owner R2): the GM reads HR, salary and pay; changes only letters there
 let execView = false;   // v1.47.0 (owner Q2): an Executive reads every page but pay and HR, and changes nothing
 let limited = false;      // sees only the projects linked to their email (every Site user; an Office user the Admin limited)
@@ -179,7 +180,7 @@ function fail(err) {
 let toldAt = 0;
 /** A co-owner reads everything and changes nothing: every way of writing stops here, and says so (not more than once in a few seconds). */
 const viewOnly = (quiet = false) => {
-  if (!api || ((primary || role !== 'owner') && !execView)) return false;
+  if (!api || ((primary || gmAdmin || role !== 'owner') && !execView)) return false;
   const now = Date.now();
   if (!quiet && now - toldAt > 4000 && typeof dispatchEvent === 'function') {
     toldAt = now;
@@ -317,7 +318,9 @@ export const store = {
     ownerEmail = setup?.owner || '';
     coOwners = Array.isArray(setup?.coOwners) ? setup.coOwners : [];
     primary = setup?.owner === me.email;
-    if (primary || coOwners.includes(me.email)) {
+    const first = primary || coOwners.includes(me.email) ? null : await api.get(`users/${me.email}`).catch(() => null);
+    gmAdmin = !!first && first.role === 'office' && isGMRanks('office', first.ranks || []) && first.readOnly !== true;
+    if (primary || coOwners.includes(me.email) || gmAdmin) {
       role = 'owner';
       pages = ROLE_PAGES.office;
       ranks = OWNER_RANKS;
@@ -327,10 +330,10 @@ export const store = {
       gmView = false;
       approver = true;
       // the Owner's own entry under users/ exists only to hold their name and title
-      const own = await api.get(`users/${me.email}`).catch(() => null);
+      const own = first || await api.get(`users/${me.email}`).catch(() => null);
       profile = { name: own?.name || '', title: own?.title || '' };
     } else {
-      const mine = await api.get(`users/${me.email}`).catch(() => null);
+      const mine = first;
       if (!mine) { role = null; return false; }
       role = mine.role === 'office' ? 'office' : 'site';
       pages = pagesOf({ ...mine, role });
@@ -364,7 +367,7 @@ export const store = {
     global = await reading('global/main', api.get('global/main'));
     if (!global) {
       global = seed(today).global; // starter materials, regions and sample prices
-      if (role === 'owner' && primary) await api.set('global/main', global);   // a co-owner never writes
+      if (role === 'owner' && (primary || gmAdmin)) await api.set('global/main', global);   // a co-owner never writes
     }
     shared.push(api.watchDoc('global/main', data => { if (data) { global = data; emit(); } }, fail));
     if (role === 'owner') shared.push(api.watchDoc('public/fieldRoute', data => { fieldRoute = data; emit(); }, () => {}));
@@ -464,7 +467,8 @@ export const store = {
     if (role === 'owner') return '';
     return channel === generalChannel ? since : joined[channel] || '';
   },
-  get readOnly() { return !!api && ((role === 'owner' && !primary) || execView); },
+  get readOnly() { return !!api && ((role === 'owner' && !primary && !gmAdmin) || execView); },
+  get isGMAdmin() { return !!api && gmAdmin; },   // v1.51.0
   get executive() { return !!api && execView; },
   get coOwners() { return coOwners; },
   /** The Admin and the co-owners. */
@@ -977,7 +981,7 @@ export const store = {
     }
     // the Admin's backup also holds who has access, so a lost database can be rebuilt with its people
     let access;
-    if (api && role === 'owner' && primary) {
+    if (api && role === 'owner' && (primary || gmAdmin)) {
       const setup = await api.get('config/setup').catch(() => null);
       access = { users: structuredClone(users), coOwners: setup?.coOwners || [] };
     }

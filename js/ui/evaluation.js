@@ -53,7 +53,7 @@ export function render(c) {
   const ranks = store.ranks;
   if (!raterTier(ranks)) {
     return html`<section class="card"><h2>Evaluation</h2>
-      <p class="empty">Your title does not rate anybody yet. The Admin sets it under Settings, People and access.</p></section>`;
+      <p class="empty">Your title does not rate anybody yet. The Admin sets it under Settings, Access rules.</p></section>`;
   }
   if (store.profile?.evaluate === false && !store.isAdmin) return html`<section class="card"><h2>Evaluation</h2><p class="empty">The Admin has not allowed you to evaluate.</p></section>`;
   const all = c.company.evaluations;

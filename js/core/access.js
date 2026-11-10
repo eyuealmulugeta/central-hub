@@ -84,7 +84,7 @@ export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'master') return role === 'owner' || isGMRanks(role, ranks) || (role === 'office' && pages.includes('master'));   // v1.48.0 (M1–M4): Admin, GM, Executive (never ticked for others)
   if (isGMRanks(role, ranks) && GM_PAGES.includes(permKey(page))) return true;   // v1.48.0 (owner R2)
   if (page === 'peopleaccess') return role === 'owner' || (role === 'office' && ranks.includes('general_manager'));   // v1.47.0: People & Access, the Admin and the GM
-  if (page === 'directory') return role === 'owner' || pages.includes('directory');   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory
+  if (page === 'directory') return role === 'owner' || isGMRanks(role, ranks) || pages.includes('directory');   // v1.50.0: the GM manages access there   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory
   if (role === 'owner' || page === 'home' || page === 'quick' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
   return pages.includes(key(page));
@@ -180,8 +180,7 @@ export const APPS = [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
     { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
     { page: 'master', name: 'Master', does: 'The whole company on one read-only page: the Admin, the GM and the Executive', fixed: true },   // v1.48.0
-    { page: 'peopleaccess', name: 'People & Access', does: 'Who may use Central Hub and Field Report: the Admin and the GM, always on', fixed: true },   // v1.47.0
-    { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person: always on', fixed: true },
+    { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person, with their Central Hub and Field Report ticks (the Admin and the GM): always on', fixed: true },
     { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },
   ] },
   { group: 'Money and document pages', about: 'The pages of Money and Documents', apps: [

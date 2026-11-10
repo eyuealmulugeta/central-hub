@@ -29,7 +29,7 @@ export const ALIASES = {
 /** Old addresses (links, alerts, bookmarks) that now belong to a page of the new menu. */
 // v1.39.0 (owner, 9 Nov: "remove them"): Income and Expenses are the In / Out switch of the Ledger, Crew letters is
 // Letters, Engagement is in Sign-in history and Activity, holidays are the company calendar, Currency is in Company details
-export const REDIRECT = { docs: 'invoices', finance: 'summary', income: 'ledger', expenses: 'ledger', crewletters: 'letters', engagement: 'activity', weather: 'reports', catalog: 'company' };
+export const REDIRECT = { docs: 'invoices', finance: 'summary', income: 'ledger', expenses: 'ledger', crewletters: 'letters', engagement: 'activity', weather: 'reports', catalog: 'company', peopleaccess: 'directory' };   // peopleaccess: v1.50.0 (one People control page)
 
 /**
  * v1.40.0 (owner, 9 Nov, R1): pages that do one job share one tab. The first page of a group is its tab in the row
@@ -82,7 +82,7 @@ export const MENUS = {
     quickHub,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'requests', 'setup'] },   // v1.42.0 (R3): Requests is site work
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'officeatt', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['peopleaccess', 'directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.47.0: People & Access first   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.47.0: People & Access first   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
@@ -91,7 +91,7 @@ export const MENUS = {
     today,
     quickHub,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['deals', 'trade', 'stock', 'products', 'partners'] },   // deals: v1.21.0 (G10 T3)   // products: v1.19.0 (G10 T1)
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['peopleaccess', 'hr', 'employment', 'crewforms', 'payroll'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['directory', 'hr', 'employment', 'crewforms', 'payroll'] },   // v1.50.0: the Directory with the access ticks
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
     ...tradingTeam,

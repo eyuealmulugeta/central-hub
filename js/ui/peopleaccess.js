@@ -32,14 +32,14 @@ async function call(body, done) {
 
 const tick = (r, app, you, local) => {
   const on = r[app], name = app === 'ch' ? 'Central Hub' : 'Field Report';
-  const locked = r.admin || r.left || !r.email || local || (!you.admin && r.title && /general manager|^gm$/i.test(r.title)) || (app === 'fr' && st.data && !st.data.frOk);
+  const locked = r.admin || r.left || !r.email || local || (app === 'fr' && st.data && !st.data.frOk);
   const why = r.admin ? 'The Admin always has access' : r.left ? 'Has left' : !r.email ? 'Add a sign-in email first' : local ? 'Signed-in version only' : '';
   return html`<label class="pa-tick" title="${why || `${on ? 'Take off' : 'Give'} ${name} access`}"><input type="checkbox" data-chg="paTick" data-app="${app}" data-id="${r.id}" ${on ? 'checked' : ''} ${locked || st.busy ? 'disabled' : ''} aria-label="${name} access for ${r.name}"><span class="pa-tick-word">${name === 'Central Hub' ? 'CH' : 'FR'}</span></label>`;
 };
 const statusChip = r => html`<span class="chip ${r.status === STATUS.active || r.status === STATUS.admin ? 'ok' : r.status === STATUS.removed || r.status === STATUS.left ? 'muted' : 'warn'}">${r.status}</span>`;
 
 function row(r, you, local) {
-  const may = !r.admin && !local && (you.admin || !/general manager|^gm$/i.test(r.title));
+  const may = !r.admin && !local;
   return html`<tr>
     <td data-l="Name"><b>${r.name || '—'}</b></td>
     <td data-l="Email" class="pa-email">${r.email || html`${may ? html`<button type="button" class="btn small ghost" data-act="paEmail" data-id="${r.id}">Add email</button>` : html`<span class="muted">none</span>`}`}</td>
@@ -49,14 +49,14 @@ function row(r, you, local) {
     <td data-l="FR" class="c">${tick(r, 'fr', you, local)}</td>
     <td data-l="Status">${statusChip(r)}</td>
     <td data-l="Actions" class="pa-acts">${may && !r.removed && r.email ? html`<button type="button" class="btn small ghost danger" data-act="paRemove" data-id="${r.id}">Remove</button>` : ''}
-      ${you.admin && r.email && !r.admin && !local ? html`<a class="btn small ghost" href="#access" data-act="paDetail" data-email="${r.email}">Pages</a>` : ''}</td>
+      ${(you.admin || you.gm) && r.email && !r.admin && !local ? html`<a class="btn small ghost" href="#access" data-act="paDetail" data-email="${r.email}">Pages</a>` : ''}</td>
   </tr>`;
 }
 
 function addForm(d) {
   return html`<form class="card pa-add" data-form="paAdd">
     <h3>Add person</h3>
-    <p class="muted small">They go into the Manpower Directory (the one list of people) with this sign-in email. A GM is added by the Admin.</p>
+    <p class="muted small">They go into the Manpower Directory (the one list of people) with this sign-in email.</p>
     <div class="pa-add-grid">
       <label>Name <input name="name" required autocomplete="off"></label>
       <label>Email <input name="email" type="email" required autocomplete="off" placeholder="their Google account"></label>
@@ -96,7 +96,7 @@ export function render() {
   const rows = filterRows(d.rows, st.f), roles = [...new Set(d.rows.map(r => r.title).filter(Boolean))].sort();
   return html`<section class="card wide pa">
     ${head}
-    <p class="muted small">Tick to give access at once; untick takes it off (asked first). The Directory stays the one list of people: positions, projects and HR details are kept there. ${d.you.admin ? '' : 'You manage everyone but the Admin and the GM.'}</p>
+    <p class="muted small">Tick to give access at once; untick takes it off (asked first). The Directory stays the one list of people: positions, projects and HR details are kept there. ${d.you.admin ? '' : 'You manage everyone but the Admin.'}</p>
     ${d.local ? html`<p class="callout info small">Sample data: ticks change nothing here. Sign in to manage access.</p>` : ''}
     ${!d.frOk ? html`<p class="callout warn small">Field Report's access list could not be read just now: the FR ticks are locked. Press Refresh.</p>` : ''}
     ${st.err ? html`<p class="callout warn" role="alert">${st.err}</p>` : ''}${st.note ? html`<p class="callout info small" role="status">${st.note}</p>` : ''}
@@ -119,6 +119,48 @@ export function render() {
 }
 
 const rowOf = id => st.data?.rows.find(r => r.id === id);
+
+// ---- v1.50.0 (owner, 10 Nov, Option A): the Manpower Directory is the one control page. It draws these parts of the
+// access page in its own table; the #peopleaccess address now opens the Directory (core/nav.js REDIRECT).
+/** The access list (read once, from the server); null until it is in. */
+export function accessData() { if (!st.data && !st.busy && !st.err && mayManage(store.role, store.ranks)) load(); return st.data; }
+/** The access row of one Directory person. */
+export const accessRow = id => rowOf(id);
+/** The CH and FR ticks of one person, for the Directory row. */
+export function accessTicks(id) {
+  const r = rowOf(id), d = st.data;
+  return r && d ? [tick(r, 'ch', d.you, d.local), tick(r, 'fr', d.you, d.local)] : ['', ''];
+}
+/** One status from both: Admin, Active, No access, No sign-in email, Removed, Left. */
+export const accessStatus = id => { const r = rowOf(id); return r ? statusChip(r) : ''; };
+/** The person's row actions on access: Add email, Remove (both apps), Pages (the Admin). */
+export function accessActs(id) {
+  const r = rowOf(id), d = st.data;
+  if (!r || !d) return '';
+  const may = !r.admin && !d.local;
+  return html`${may && !r.email ? html`<button type="button" class="btn small ghost" data-act="paEmail" data-id="${r.id}">Add email</button>` : ''}
+    ${may && !r.removed && r.email ? html`<button type="button" class="btn small ghost danger" data-act="paRemove" data-id="${r.id}" title="Takes Central Hub and Field Report access off; reports are kept">Access off</button>` : ''}
+    ${(d.you.admin || d.you.gm) && r.email && !r.admin && !d.local ? html`<a class="btn small ghost" href="#access" data-act="paDetail" data-email="${r.email}">Pages</a>` : ''}`;
+}
+/** Does the person pass the App filter ('' any, ch, fr, both, none)? */
+export const accessMatch = (id, app) => { if (!app) return true; const r = rowOf(id); if (!r) return app === 'none'; return app === 'ch' ? r.ch : app === 'fr' ? r.fr : app === 'both' ? r.ch && r.fr : !r.ch && !r.fr; };
+/** Import and Refresh buttons, and Add person for the GM (the Admin adds in the Directory itself). */
+export function accessButtons(adminAdds) {
+  const d = st.data, off = !d || d.local;
+  return html`${adminAdds ? '' : html`<button type="button" class="btn primary" data-act="paAddOpen" ${off ? 'disabled' : ''}>+ Add a person</button>`}
+    <label class="btn ${off ? 'disabled' : ''}">Import<input type="file" data-chg="paImport" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden ${off ? 'disabled' : ''}></label>
+    <button type="button" class="btn ghost" data-act="paLoad" ${st.busy ? 'disabled' : ''}>${st.busy === 'list' ? 'Reading…' : 'Refresh access'}</button>`;
+}
+/** Notes above the table: errors, results, conflicts, the Add form and the Import preview. */
+export function accessNotes() {
+  const d = st.data;
+  if (!d) return st.err ? html`<p class="callout warn">${st.err}</p>` : html`<p class="muted small">Reading who has access…</p>`;
+  return html`${d.local ? html`<p class="callout info small">Sample data: the CH and FR ticks change nothing here. Sign in to manage access.</p>` : ''}
+    ${!d.frOk ? html`<p class="callout warn small">Field Report's access list could not be read just now: the FR ticks are locked. Press Refresh access.</p>` : ''}
+    ${st.err ? html`<p class="callout warn" role="alert">${st.err}</p>` : ''}${st.note ? html`<p class="callout info small" role="status">${st.note}</p>` : ''}
+    ${(d.conflicts || []).length ? html`<details class="callout warn small pa-conf"><summary><b>${d.conflicts.length} data conflict${d.conflicts.length === 1 ? '' : 's'} to look at</b></summary><ul>${d.conflicts.map(x => html`<li>${x.text}</li>`)}</ul></details>` : ''}
+    ${st.adding ? addForm(d) : ''}${st.preview ? previewBox() : ''}`;
+}
 export const changes = {
   paF(el) { st.f[el.dataset.k] = el.value; },
   paTick(el) {

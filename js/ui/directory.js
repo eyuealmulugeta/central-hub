@@ -27,12 +27,18 @@ import { unlinked } from '../engine/people.js';
 import * as fieldusers from './fieldusers.js';
 import * as crewforms from './crewforms.js';
 import { actions as hrActions } from './hr.js';
+// v1.50.0 (owner, 10 Nov, Option A): the Directory is the one People control page: CH and FR ticks, access status,
+// Import and data conflicts come from People & Access (ui/peopleaccess.js), for the Admin and the GM only
+import { actions as paActions, changes as paChanges, submits as paSubmits, mayManage, accessData, accessTicks, accessStatus, accessActs, accessMatch, accessButtons, accessNotes } from './peopleaccess.js';
+import { isGMRanks } from '../core/access.js';
+import { divOf, currentDivision } from '../core/division.js';
+let more = false;   // v1.50.0: Rating, pay and Added by are behind "More columns"
 
 let search = '';
 let table = 'staff';      // staff | crew | all | lists | new (v0.46.0: New crew for approval; v0.57.0: All people, Positions & trades)
-const filt = { search: '', position: '', tier: '', project: '', status: 'active' };
+const filt = { search: '', position: '', tier: '', project: '', status: 'active', app: '' };   // app: v1.50.0
 /** v0.60.0: Employee data's "Change in Manpower Directory" opens the person's row (All people, searched by name). */
-export function showInDirectory(name) { table = 'all'; Object.assign(filt, { search: name || '', position: '', tier: '', project: '', status: '' }); }
+export function showInDirectory(name) { table = 'all'; Object.assign(filt, { search: name || '', position: '', tier: '', project: '', status: '', app: '' }); }
 
 /** The active members of a project's team, as the directory shows them. Pure. */
 export const directoryOf = (team, projectName) => team.filter(m => m.active !== false && String(m.name || '').trim())
@@ -47,7 +53,7 @@ const full = () => store.role === 'owner';
 export const editedLine = m => (m.editedBy && m.editedAt ? `Changed by ${addedName(m.editedBy, store.company?.staff, store.users)} · ${String(m.editedAt).slice(0, 10)}` : '');
 
 export function render(c) {
-  return full() ? manpower(c) : teamList(c);
+  return full() || isGMRanks(store.role, store.ranks) ? manpower(c) : teamList(c);   // v1.50.0: and the GM (reads it, changes access only)
 }
 
 function teamList(c) {
@@ -83,7 +89,7 @@ function payCells(p, c) {
     <select data-chg="mpPay" data-id="${p.id}" data-f="payPer" aria-label="Wage type of ${p.name}">${options(per === 'hour' ? [...WAGE_TYPES, ['hour', 'Hourly']] : WAGE_TYPES, per)}</select>`;
 }
 
-function row(p, i, c, edit) {
+function row(p, i, c, edit, manage) {
   const tier = tierOfPerson(p), more = positionsOf(p).slice(1), pay = payOf(p), r = ratingOf(p, c.company.evaluations || []);
   const mayAll = mayAllProjects(p, tier, adminMails());
   const proj = p.allProjects ? ALL : projectOfRow(p), names = activeProjects(p).map(id => store.projects.find(x => x.id === id)?.name).filter(Boolean);
@@ -99,11 +105,12 @@ function row(p, i, c, edit) {
       ${edit && p.title ? html`<select data-chg="mpAddPos" data-id="${p.id}" aria-label="Another position for ${p.name}">${chooseGroups(positionGroups(), '', '+ Another position')}</select>` : ''}
       ${tier ? chip(TIER_WORDS[tier], tier === 4 ? '' : 'info') : chip('No tier', 'warn')}${departmentOf(p) ? html`<br><span class="muted small">${departmentOf(p)}</span>` : ''}</td>
     <td><select data-chg="mpProject" data-id="${p.id}" aria-label="Project of ${p.name}" ${dis}>${options([['', 'No project'], ...(mayAll || proj === ALL ? [[ALL, 'All projects']] : []), ...(proj === '*' ? [['*', names.join(', ')]] : []), ...store.projects.map(x => [x.id, x.name])], proj)}</select></td>
-    <td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
+    ${more ? html`<td class="nowrap">${r == null ? html`<span class="muted">Not rated</span>` : html`${r.toFixed(1)} ★`}</td>
     <td class="nowrap mp-pay">${edit ? payCells(p, c) : pay ? `${money(pay.amount, pay.currency || c.global.fx.base)} ${PER[pay.per] || ''}` : html`<span class="muted">Not set</span>`}</td>
-    <td>${addedName(p.addedBy, store.company?.staff, store.users) || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>
-    <td class="nowrap">${edit ? html`<button type="button" class="btn small" data-act="mpEdit" data-id="${p.id}">Edit</button> <button type="button" class="btn ghost small" data-act="mpRemove" data-id="${p.id}">Remove</button>` : ''}</td>
-    <td>${p.status === 'left' ? chip('Left', 'warn') : chip('Working', 'ok')}</td>
+    <td>${addedName(p.addedBy, store.company?.staff, store.users) || html`<span class="muted">—</span>`}${p.addedOn ? html`<br><span class="muted small">${p.addedOn}</span>` : ''}</td>` : ''}
+    <td>${(manage && accessStatus(p.id)) || (p.status === 'left' ? chip('Left', 'warn') : chip('Working', 'ok'))}</td>
+    ${manage ? html`<td class="c mp-tick">${accessTicks(p.id)[0]}</td><td class="c mp-tick">${accessTicks(p.id)[1]}</td>` : ''}
+    <td class="nowrap mp-acts">${edit ? html`<button type="button" class="btn small" data-act="mpEdit" data-id="${p.id}">Edit</button> <button type="button" class="btn ghost small" data-act="mpRemove" data-id="${p.id}">Remove</button>` : ''}${manage ? accessActs(p.id) : ''}</td>
     <td><button type="button" class="btn ghost small" data-act="mpData" data-id="${p.id}">Employee data</button></td>
   </tr>`;
 }
@@ -119,16 +126,18 @@ function lists(edit) {
 }
 
 function manpower(c) {
-  const staff = (c.company.staff || []).filter(p => p.division !== 'trading');
-  const edit = store.isAdmin;
-  const rows = directoryRows(staff, table, filt);
+  const staff = (c.company.staff || []).filter(p => divOf(p) === currentDivision());   // v1.50.0: each division its own people
+  const edit = store.isAdmin, manage = mayManage(store.role, store.ranks);
+  if (manage) accessData();
+  const rows = directoryRows(staff, table, filt).filter(p => !manage || accessMatch(p.id, filt.app));
   const count = t => directoryRows(staff, t, { status: filt.status }).length;
   const sel = (f, label, list) => html`<select data-chg="mpFilt" data-f="${f}" data-fk="mp-f-${f}" aria-label="${label}">${options(list, filt[f])}</select>`;
   const used = [...new Set(staff.filter(p => table === 'all' || tableOf(p) === table).map(p => normRole(p.title)).filter(Boolean))];
   const positions = [...ROLES.filter(r => used.includes(r)), ...used.filter(r => !ROLES.includes(r))];
   return html`<section class="card" id="panel-manpower">
     <div class="toolbar"><h2>Manpower Directory</h2><span class="muted">The only place a person is added. Each person has an employee-data record.</span>
-      <span class="grow"></span>${edit ? html`<button type="button" class="btn primary" data-act="mpAdd">+ Add a person</button>` : ''}</div>
+      <span class="grow"></span><div class="actions left mp-buttons">${edit ? html`<button type="button" class="btn primary" data-act="mpAdd">+ Add a person</button>` : ''}${manage ? accessButtons(edit) : ''}</div></div>
+    ${manage ? accessNotes() : ''}
     <div class="emp-tabs set-tabs" role="tablist">
       ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['all', 'All people'], ['lists', 'Positions & trades'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : k === 'lists' ? ROLES.length : count(k)}</span></button>`)}
     </div>
@@ -139,11 +148,13 @@ function manpower(c) {
       ${table === 'staff' ? sel('tier', 'Tier', [['', 'Every tier'], ['1', 'Tier 1'], ['2', 'Tier 2'], ['3', 'Tier 3'], ['5', 'Tier 5']]) : table === 'all' ? sel('tier', 'Tier', [['', 'Every tier'], ...[1, 2, 3, 4, 5].map(t => [String(t), `Tier ${t}`])]) : ''}
       ${sel('project', 'Project', [['', 'Every project'], ...store.projects.map(x => [x.id, x.name])])}
       ${sel('status', 'Status', [['active', 'Working'], ['left', 'Left'], ['all', 'All']])}
+      ${manage ? sel('app', 'App access', [['', 'Any access'], ['ch', 'Central Hub'], ['fr', 'Field Report'], ['both', 'Both apps'], ['none', 'No access']]) : ''}
+      <button type="button" class="btn ghost small" data-act="mpMore" aria-pressed="${more ? 'true' : 'false'}">${more ? 'Fewer columns' : 'More columns'}</button>
       <span class="grow"></span><span class="muted">${rows.length} shown</span>
     </div>
     ${rows.length ? html`<div class="table-wrap"><table class="table compact mp-table">
-      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th><th>Rating</th><th>${edit ? 'Rate · currency · wage type' : table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th><th>Edit / Remove</th><th>Status</th><th>Employee data</th></tr></thead>
-      <tbody>${rows.map((p, i) => row(p, i, c, edit))}</tbody>
+      <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th>${more ? html`<th>Rating</th><th>${edit ? 'Rate · currency · wage type' : table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th>` : ''}<th>Status</th>${manage ? html`<th class="c">CH</th><th class="c">FR</th>` : ''}<th>Actions</th><th>Employee data</th></tr></thead>
+      <tbody>${rows.map((p, i) => row(p, i, c, edit, manage))}</tbody>
     </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
     <p class="muted">Changing a position or a project asks first. Each person's rate, currency (ETB or USD) and wage type (Daily or Monthly) are set here and nowhere else: Payments, Payroll, the pay sheets and the labour cost all take them from here. They are never shown to Site users.</p>`}
   </section>`;
@@ -216,7 +227,9 @@ function follow(person, on, off, a) {
 }
 
 export const actions = {
+  ...paActions,   // v1.50.0: the access buttons in the rows
   mpTable(el) { table = el.dataset.t; filt.position = ''; filt.tier = ''; },
+  mpMore() { more = !more; },   // v1.50.0
   mpAdd(el, c) {
     const name = (typeof prompt === 'function' ? prompt('Full name of the new person:') : '') || '';
     if (!name.trim()) return;
@@ -251,6 +264,7 @@ export const actions = {
 };
 
 export const changes = {
+  ...paChanges,
   /** v0.59.0: a rate, currency or wage type; a change of an existing pay is kept with the date it applies from (as in Employee data). */
   mpPay(el, c) {
     const p = find(c, el.dataset.id), f = el.dataset.f;
@@ -326,6 +340,7 @@ export const changes = {
 };
 
 export const submits = {
+  ...paSubmits,
   /** v0.57.0: a new position or trade, under the tier chosen, from the Positions & trades tab. */
   mpNewPos(fd) {
     const name = String(fd.get('name') || '').trim().replace(/\s+/g, ' ');

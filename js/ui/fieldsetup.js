@@ -85,7 +85,7 @@ export function body(c) {
           <ul class="plain">
             <li>${plan.tasks} open task${plan.tasks === 1 ? '' : 's'}, ${plan.milestones} milestone${plan.milestones === 1 ? '' : 's'}, ${plan.people} ${plan.people === 1 ? 'person' : 'people'} on the team, <b>${plan.linked}</b> linked by email</li>
             ${plan.tasks ? '' : html`<li class="bad">No open task in the Schedule, so Field Report has nothing to report against. Add the tasks under Overview, Schedule first.</li>`}
-            ${plan.linked ? '' : html`<li class="bad">Nobody's email is linked to this project (Settings, People and access: switch the person on), so Field Report will not show it to anyone.</li>`}
+            ${plan.linked ? '' : html`<li class="bad">Nobody's email is linked to this project (put the person on this project in the Directory, then tick its CH box), so Field Report will not show it to anyone.</li>`}
             ${project.status && project.status !== 'active' ? html`<li class="bad">The project is not Active, so Field Report hides it from site people.</li>` : ''}
           </ul>
           <div class="actions left">
@@ -175,7 +175,7 @@ async function runWhy(project, auto = false) {
   const why = needSettings(project);
   if (why) { say('assign', project, false, why); return; }
   const people = linkedOf(project);
-  if (!people.length) { say('assign', project, false, 'Nobody is linked to this project in Central Hub (Settings, People and access: switch the person on), so nobody can see it in Field Report.', null, auto); return; }
+  if (!people.length) { say('assign', project, false, 'Nobody is linked to this project in Central Hub (put the person on this project in the Directory, then tick its CH box), so nobody can see it in Field Report.', null, auto); return; }
   assigning = true;
   said.assign = null;
   store.notify();

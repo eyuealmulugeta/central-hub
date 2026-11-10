@@ -1,5 +1,5 @@
 // v0.29.0: the access rules. Who sees (S), who does (D) and who is told (N), for every feature of Field Report (FR)
-// and Central Hub (CH). The Admin sets them under Settings, People and access, Access rules, for a whole tier, for a
+// and Central Hub (CH). The Admin sets them under Settings, Access rules, for a whole tier, for a
 // position, or for one person. The nearest one wins: person, then position, then tier, then the starting value of the
 // position (the owner's decisions of 31 Oct 2026). The Admin, who is also the General Manager, has everything.
 // The CH pages a person may open come out of these rules (users/<email>.pages, which firestore.rules enforces);

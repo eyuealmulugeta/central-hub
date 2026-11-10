@@ -122,7 +122,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // The pages of Settings, listed down the left with their icons, the way a settings screen
 // usually is: the list stays put and only the right side changes.
-const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'People and access', 'access'],
+const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'Access rules', 'access'],   // v1.49.0: one People & Access (People row); this is the page rules
   ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links'], ['bin', 'Recycle bin', 'backup']];
 const link = ([k, label, ic]) => html`
       <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
@@ -591,10 +591,10 @@ function accessPage(c) {
   const tabs = demo ? [['crew', 'Allocated Crew'], ['perms', 'Access rules']]
     : [['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];   // v1.47.0: Manpower and People are on People & Access
   return html`<div class="side settings">
-    <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
+    <div class="set-head"><h2>Access rules</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
     ${tabStrip(tabs, accTab, 'accTab')}
-    ${accTab === 'people' ? html`<p class="callout info small">Page ticks of one person. Who has access is on <a href="#peopleaccess">People &amp; Access</a>.</p>` : ''}
+    ${accTab === 'people' ? html`<p class="callout info small">Page ticks of one person. Who has access is ticked in the <a href="#directory">Manpower Directory</a>.</p>` : ''}
     ${demo ? html`<p class="muted">Nobody signs in to the demo, so People is only in the signed-in version. Access rules shows sample people.</p>` : ''}
     ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'manpower' ? directory.render(c) : accTab === 'perms' ? permsTab() : peopleTab()}
   </div>`;
@@ -698,7 +698,7 @@ function projectPage(c) {
           <li class="split">
             <span><b>${u.name || u.email}</b> <span class="muted">${ROLE_NAME[u.role] || u.role}${titleOf(u) ? `, ${titleLabel(titleOf(u))}` : ''}</span></span>
             <label class="check"><input type="checkbox" data-chg="userProject" data-id="${u.email}" data-p="${p.id}" ${(u.projects || []).includes(p.id) ? 'checked' : ''}> Linked</label>
-          </li>`)}</ul>` : html`<p class="muted">Nobody else has access yet. Add people under People and access.</p>`}`)}
+          </li>`)}</ul>` : html`<p class="muted">Nobody else has access yet. Add people in the <a href="#directory">Manpower Directory</a>.</p>`}`)}
     </div>`;
 
   return html`<div class="side settings">
@@ -739,7 +739,7 @@ function appsPage(c) {
               </button>`;
           })}</div>
         </section>`)}
-      <p class="muted">Who may open each app is set under People and access.${inTrading() ? ' Installation apps are set from Installation.' : ' Pages a single project does not need are switched off under This project.'}</p>
+      <p class="muted">Who may open each app is set under Access rules.${inTrading() ? ' Installation apps are set from Installation.' : ' Pages a single project does not need are switched off under This project.'}</p>
     </div>`;
 }
 /** v0.25.0: save the company calendar and write it on every project (each keeps its own week and days off). */

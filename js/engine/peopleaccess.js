@@ -28,7 +28,6 @@ export const isAdminEmail = (email, admins = []) => admins.map(low).includes(low
 export function mayChange(actor, target, admins = []) {
   if (!actor?.admin && !actor?.gm) return 'Only the Admin and the GM manage people and access.';
   if (target && isAdminEmail(target.email || accountOf(target), admins)) return actor.admin ? 'The Admin\'s own access is never changed here.' : 'Only the Admin changes the Admin.';
-  if (target && !actor.admin && frRoleOf(target.title) === 'exec') return 'Only the Admin changes the GM\'s access.';
   return '';
 }
 
@@ -87,7 +86,6 @@ export function chRecord(p, projects = []) {
 /** The Field Report access a tick gives: the role from the position, the project codes ('' = refused, with why). */
 export function frAccess(p, projects = [], actor = {}) {
   const role = isExecutive(p.title) ? 'viewer' : frRoleOf(p.title);
-  if (role === 'exec' && !actor.admin) return { error: 'Only the Admin gives Field Report access to a GM.' };
   const { toCode } = codeMaps(projects);
   const codes = projectIds(p, projects).map(id => toCode.get(id)).filter(Boolean).sort();
   if (role !== 'exec' && !codes.length) return { error: `${p.name || 'This person'} is on no project connected to Field Report. Put them on a project first.` };

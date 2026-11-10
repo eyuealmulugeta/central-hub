@@ -32,9 +32,11 @@ service cloud.firestore {
     // The Admin: the first person to sign in. Only the Admin writes, edits, deletes and changes settings and permissions.
     // A co-owner (config/setup.coOwners, added by the Admin) may read everything the Admin reads and change nothing.
     function isPrimary() { return signedIn() && exists(setupDoc()) && get(setupDoc()).data.owner == me(); }
-    function isOwner() { return isPrimary(); }
+    function isOwner() { return isPrimary() || gmRank(); }   // v1.51.0 (owner, 10 Nov): the GM does all the Admin does (the Admin lock: see config/setup and users)
     function isCoOwner() { return signedIn() && exists(setupDoc()) && me() in get(setupDoc()).data.get('coOwners', []); }
-    function seesAll() { return isPrimary() || isCoOwner(); }
+    function seesAll() { return isPrimary() || isCoOwner() || gmRank(); }
+    // v1.51.0 (owner: "keep the Admin lock"): the GM never changes the first Admin's entry and never makes anyone an Admin
+    function adminLockOk(email) { return isPrimary() || (email != get(setupDoc()).data.owner && (request.resource == null || request.resource.data.get('role', '') != 'owner') && (resource == null || resource.data.get('role', '') != 'owner')); }
     function hasUser() { return signedIn() && exists(userDoc()); }
     function isOffice() { return hasUser() && user().role == 'office'; }
     function canApprove() { return isOwner() || (isOffice() && user().get('approver', false) == true); }
@@ -175,8 +177,8 @@ service cloud.firestore {
     match /users/{email} {
       allow get: if signedIn() && email == me();
       allow read: if seesAll();
-      allow create, update: if isOwner() && oneProjectOk();
-      allow delete: if isOwner();
+      allow create, update: if isOwner() && oneProjectOk() && adminLockOk(email);
+      allow delete: if isOwner() && adminLockOk(email);
     }
 
     // One signed-in device per person (the Admin is never locked): a device claims sessions/<email>, and a second

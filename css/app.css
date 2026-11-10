@@ -2068,3 +2068,50 @@ body.presenting #subrow { display: none; }
 /* v1.45.0 (QA D1): the floating notifications bell never prints on a report */
 /* (QA D2): an empty box left outside the sheet (bell holder, page switch row) printed a blank page before or after */
 @media print { #notif-fab, .notif-fab, #subrow, .chat-pop, .install-box, .upd-tag { display: none !important; } }
+/* v1.47.0 (owner, P1 + P6): People & Access. Header row stays on screen while the table scrolls; on a phone each
+   person is a card; every tick and button is at least 44 px to tap; long emails wrap instead of being cut. */
+.pa .pa-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.pa-buttons { flex-wrap: wrap; }
+.pa-buttons .btn, .pa-filters select, .pa-filters .search, .pa-acts .btn, .pa-add .btn, .pa-preview .btn { min-height: 44px; }
+.pa-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.pa-filters .search { flex: 1 1 220px; min-width: 0; }
+.pa-filters select { flex: 0 1 170px; min-width: 0; }
+.pa-wrap { max-height: calc(100vh - 260px); min-height: 240px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.pa-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.pa-table thead th { position: sticky; top: 0; z-index: 2; background: var(--surface); box-shadow: 0 1px 0 var(--line); white-space: nowrap; }
+.pa-table td { vertical-align: middle; overflow-wrap: anywhere; }
+.pa-table .pa-email { word-break: break-all; min-width: 160px; }
+.pa-table .c { text-align: center; }
+.pa-tick { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 44px; min-height: 44px; cursor: pointer; }
+.pa-tick input { width: 22px; height: 22px; margin: 0; cursor: pointer; }
+.pa-tick-word { display: none; font-weight: 600; font-size: 13px; }
+.pa-acts { white-space: nowrap; }
+.pa-acts .btn { display: inline-flex; align-items: center; }
+.pa-add-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }
+.pa-add-grid input, .pa-add-grid select { min-height: 44px; width: 100%; box-sizing: border-box; }
+.pa-check { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.pa-check input { width: 22px; height: 22px; min-height: 0; }
+.pa-add, .pa-preview { margin: 12px 0; border: 1px solid var(--line); }
+.pa-preview .pa-wrap { max-height: 50vh; }
+.pa-err td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+.pa-conf ul { margin: 6px 0 0 18px; padding: 0; }
+@media (max-width: 700px) {
+  .pa-wrap { max-height: none; border: 0; }
+  .pa-table thead { display: none; }
+  .pa-table, .pa-table tbody, .pa-table tr, .pa-table td { display: block; width: 100%; box-sizing: border-box; }
+  .pa-table tr { border: 1px solid var(--line); border-radius: var(--radius); margin: 0 0 10px; padding: 6px 10px; background: var(--surface); }
+  .pa-table td { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 4px 0; border: 0; text-align: right; min-height: 32px; }
+  .pa-table td::before { content: attr(data-l); color: var(--muted); font-size: 12px; text-align: left; flex: 0 0 72px; }
+  .pa-table td.c { text-align: right; }
+  .pa-table .pa-email { min-width: 0; }
+  .pa-table tbody tr { display: flex; flex-wrap: wrap; }
+  .pa-table tbody td { flex: 1 1 100%; }
+  .pa-table td[data-l="CH"], .pa-table td[data-l="FR"] { flex: 1 1 50%; width: 50%; justify-content: flex-start; }
+  .pa-tick { flex-direction: row !important; }
+  .pa-table td[data-l="CH"]::before, .pa-table td[data-l="FR"]::before { content: none; }
+  .pa-tick-word { display: inline; }
+  .pa-acts { white-space: normal; justify-content: flex-end; flex-wrap: wrap; }
+  .pa-acts::before { content: none !important; }
+  .pa-filters .search { flex: 1 1 100%; }
+  .pa-filters select { flex: 1 1 calc(50% - 4px); }
+}

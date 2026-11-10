@@ -103,6 +103,7 @@ let lastAct = null;
 let lockedBy = null;     // the record of the device that holds this person's session, when this one was refused
 const endedSubscribers = [];
 let divisions = [];       // the divisions this person works in (empty = both); set by the Admin
+let execView = false;   // v1.47.0 (owner Q2): an Executive reads every page but pay and HR, and changes nothing
 let limited = false;      // sees only the projects linked to their email (every Site user; an Office user the Admin limited)
 let approver = false;    // may issue client reports (the Owner, or Office users the Owner ticked)
 let profile = { name: '', title: '' }; // how the signed-in person is named on documents they approve
@@ -176,11 +177,11 @@ function fail(err) {
 let toldAt = 0;
 /** A co-owner reads everything and changes nothing: every way of writing stops here, and says so (not more than once in a few seconds). */
 const viewOnly = (quiet = false) => {
-  if (!api || primary || role !== 'owner') return false;
+  if (!api || ((primary || role !== 'owner') && !execView)) return false;
   const now = Date.now();
   if (!quiet && now - toldAt > 4000 && typeof dispatchEvent === 'function') {
     toldAt = now;
-    dispatchEvent(new CustomEvent('hub-toast', { detail: '✗ Executive Partners can view everything, but cannot edit, delete or change settings and permissions.' }));
+    dispatchEvent(new CustomEvent('hub-toast', { detail: execView ? '✗ Executives can view, but cannot edit, delete or change anything.' : '✗ Executive Partners can view everything, but cannot edit, delete or change settings and permissions.' }));
   }
   return true;
 };
@@ -241,7 +242,7 @@ function install({ meta: m, global: g, workspaces, company: co }) {
  * an Office user everything but money without a money page, and pay only with Costs or Payments ticked.
  */
 export function projectSections(role, pages) {
-  const money = seesMoney(role, pages) ? MONEY_SECTIONS.filter(s => !PAY_SECTIONS.includes(s) || seesPay(role, pages)) : [];
+  const money = seesMoney(role, pages) ? MONEY_SECTIONS.filter(s => !PAY_SECTIONS.includes(s) || (seesPay(role, pages) && !execView)) : [];
   return role === 'site' ? [...SITE_SECTIONS, ...money] : SECTIONS.filter(s => !MONEY_SECTIONS.includes(s) || money.includes(s));
 }
 const readable = () => projectSections(role, pages);
@@ -320,6 +321,7 @@ export const store = {
       ranks = OWNER_RANKS;
       divisions = [];
       limited = false;
+      execView = false;
       approver = true;
       // the Owner's own entry under users/ exists only to hold their name and title
       const own = await api.get(`users/${me.email}`).catch(() => null);
@@ -331,6 +333,7 @@ export const store = {
       pages = pagesOf({ ...mine, role });
       ranks = Array.isArray(mine.ranks) ? mine.ranks : [];
       limited = isLimited({ ...mine, role });
+      execView = role === 'office' && mine.readOnly === true;   // v1.47.0: Executive
       divisions = Array.isArray(mine.divisions) ? mine.divisions : [];
       // nobody comes in before the Admin has chosen their department
       if (!divisionsOf({ role, divisions }).length) { role = null; return 'unassigned'; }
@@ -455,7 +458,8 @@ export const store = {
     if (role === 'owner') return '';
     return channel === generalChannel ? since : joined[channel] || '';
   },
-  get readOnly() { return !!api && role === 'owner' && !primary; },
+  get readOnly() { return !!api && ((role === 'owner' && !primary) || execView); },
+  get executive() { return !!api && execView; },
   get coOwners() { return coOwners; },
   /** The Admin and the co-owners. */
   get owners() { return [ownerEmail, ...coOwners].filter(Boolean); },
@@ -464,7 +468,7 @@ export const store = {
   /** Costs, invoices and billing terms are loaded only for people with a page that shows them. */
   get seesMoney() { return seesMoney(role, pages); },
   /** Day rates, trade rates and crew pay: the Admin, and Office people with Costs or Payments ticked. */
-  get seesPay() { return seesPay(role, pages); },
+  get seesPay() { return seesPay(role, pages) && !execView; },
   /** Everyone the Owner has given access to (the Owner's own entry is left out). */
   get users() { return users.filter(u => u.email !== me?.email && !coOwners.includes(u.email) && u.role !== 'owner'); },
   get profile() { return profile; },
@@ -814,7 +818,7 @@ export const store = {
     if (viewOnly(true)) return;
     const p = this.project;
     // someone who does not load the money records would work out a poorer figure than the one already saved
-    if (!api || !seesPay(role, pages) || !p || loading) return;
+    if (!api || !seesPay(role, pages) || execView || !p || loading) return;
     const alerts = (summary.alerts || []).join('\n');
     const cash = m => (m ? `${m.invoiced}|${m.received}|${m.spent}|${m.owed}|${m.currency}` : '');
     if (p.summary?.progress === summary.progress && p.summary?.slip === summary.slip && p.summary?.basis === summary.basis && cash(p.summary?.money) === cash(summary.money) && (p.summary?.alerts || []).join('\n') === alerts

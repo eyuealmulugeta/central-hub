@@ -75,6 +75,7 @@ export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'outgoing') return role === 'owner' || role === 'office';   // v1.1.0 (G4): everyone in the office; each sees their own, Tier 1 all
   if (page === 'crewforms') return role === 'owner' || ranks.includes('general_manager');   // v0.41.0: crew form links: the Admin and the GM only
   if (page === 'logsheet') return role === 'owner' || (role === 'office' && pages.includes('docs'));   // v0.51.0: Office with Invoices and documents; Site never loads it
+  if (page === 'peopleaccess') return role === 'owner' || (role === 'office' && ranks.includes('general_manager'));   // v1.47.0: People & Access, the Admin and the GM
   if (page === 'directory') return role === 'owner' || pages.includes('directory');   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory
   if (role === 'owner' || page === 'home' || page === 'quick' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
   if (ADMIN_PAGES.includes(permKey(page))) return false;
@@ -170,6 +171,7 @@ export const APPS = [
   { group: 'People pages', about: 'The pages of People', apps: [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
     { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
+    { page: 'peopleaccess', name: 'People & Access', does: 'Who may use Central Hub and Field Report: the Admin and the GM, always on', fixed: true },   // v1.47.0
     { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person: always on', fixed: true },
     { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },
   ] },

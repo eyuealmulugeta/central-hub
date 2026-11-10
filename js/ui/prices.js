@@ -86,7 +86,7 @@ export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
 // v0.25.0: the calendar went to Admin settings, Company; day rates and the pay period to Payments
 const PROJ_TABS = [['basics', 'Basics'], ['site', 'Site and deployment'], ['team', 'Team']];
 let projTab = 'basics';
-let accTab = 'manpower';
+let accTab = 'perms';   // v1.47.0: Manpower and People moved to People & Access
 let accScope = 'pos';     // v0.29.0: the Access rules tab shows a tier, a position or a person
 let accPick = '';
 let linkTab = 'field';
@@ -584,13 +584,17 @@ function accessPage(c) {
   if (store.role !== 'owner') return html`<div class="side settings"><section class="card"><p class="empty">Only the Admin manages people and access.</p></section></div>`;
   // the demo has nobody who signs in: only the crew of the directory can be allocated there
   const demo = !store.cloud;
-  if (demo && !['perms', 'manpower'].includes(accTab)) accTab = 'crew';
-  const tabs = demo ? [['manpower', 'Manpower Directory'], ['crew', 'Allocated Crew'], ['perms', 'Access rules']]
-    : [['manpower', 'Manpower Directory'], ['people', 'People', store.requests.length || 0], ['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];
+  if (demo && accTab !== 'perms') accTab = 'crew';
+  // v1.47.0: People & Access > Pages opens this person's page ticks here (the People tab is no longer in the strip)
+  const asked = globalThis.sessionStorage?.getItem('pa-person');
+  if (asked && !demo) { globalThis.sessionStorage.removeItem('pa-person'); who = asked; accTab = 'people'; }
+  const tabs = demo ? [['crew', 'Allocated Crew'], ['perms', 'Access rules']]
+    : [['crew', 'Allocated Crew'], ['perms', 'Access rules'], ['you', 'Admin'], ['problems', 'Problems reported', store.faults.length || 0]];   // v1.47.0: Manpower and People are on People & Access
   return html`<div class="side settings">
     <div class="set-head"><h2>People and access</h2><span class="muted">You and ${plural(store.users.length, 'other')} can sign in</span></div>
     ${projectBar(c, 'The switches link people to')}
     ${tabStrip(tabs, accTab, 'accTab')}
+    ${accTab === 'people' ? html`<p class="callout info small">Page ticks of one person. Who has access is on <a href="#peopleaccess">People &amp; Access</a>.</p>` : ''}
     ${demo ? html`<p class="muted">Nobody signs in to the demo, so People is only in the signed-in version. Access rules shows sample people.</p>` : ''}
     ${accTab === 'you' ? youTab() : accTab === 'problems' ? html`<section class="card">${diagBody()}</section>` : accTab === 'crew' ? crewTab(c) : accTab === 'manpower' ? directory.render(c) : accTab === 'perms' ? permsTab() : peopleTab()}
   </div>`;
@@ -609,8 +613,8 @@ const projectBar = (c, what) => html`
 function linksPage(c) {
   return html`<div class="side settings">
     ${projectBar(c, 'Field Report and import for')}
-    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['users', 'Field Report users', fieldusers.waiting().length + fieldusers.signupsWaiting().length + fieldusers.crewWaiting().length], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
-    ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : linkTab === 'users' ? fieldusers.body() : fieldsetup.body(c)}
+    ${tabStrip([['field', 'Field Report'], ['projects', 'All projects'], ['import', 'Import data', pack ? 1 : 0]], linkTab, 'linkTab')}
+    ${linkTab === 'import' ? html`<section class="card set-box" id="panel-import">${importBody(c)}</section>` : linkTab === 'projects' ? fieldprojects.body() : fieldsetup.body(c)}
   </div>`;
 }
 

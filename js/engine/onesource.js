@@ -193,6 +193,8 @@ export function syncPlan({ staff = [], frPeople = [], projects = [], users = [],
       if (more.length) out.users.push({ email, projects: [...(u.projects || []), ...more] });
     }
     if (p.noField && !cur) continue;   // v1.36.0: brought in from Central Hub access, no Field Report access made for them
+    // v1.47.0 (People & Access): Field Report unticked by the Admin or the GM: never given back here, and taken off at once
+    if (p.frOff) { if (cur && !adminSet.has(email) && !KEEP_ROLES.includes(cur.role)) out.remove.push(email); continue; }
     if (adminSet.has(email) || (cur && KEEP_ROLES.includes(cur.role))) { if (cur) out.kept.push(cur); continue; }
     const role = frRoleOf(p.title);
     if (KEEP_ROLES.includes(role)) { if (cur) out.kept.push(cur); continue; }   // a GM is set up by the Admin once, then kept

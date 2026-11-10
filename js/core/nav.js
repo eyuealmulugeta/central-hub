@@ -82,7 +82,7 @@ export const MENUS = {
     quickHub,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'requests', 'setup'] },   // v1.42.0 (R3): Requests is site work
     { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'officeatt', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['peopleaccess', 'directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.47.0: People & Access first   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'contacts', 'owners'] },   // logsheet: v0.51.0
     ...team,
@@ -91,7 +91,7 @@ export const MENUS = {
     today,
     quickHub,
     { id: 'trading', label: 'Trading', icon: 'trade', tabs: ['deals', 'trade', 'stock', 'products', 'partners'] },   // deals: v1.21.0 (G10 T3)   // products: v1.19.0 (G10 T1)
-    { id: 'crew', label: 'People', icon: 'hr', tabs: ['hr', 'employment', 'crewforms', 'payroll'] },
+    { id: 'crew', label: 'People', icon: 'hr', tabs: ['peopleaccess', 'hr', 'employment', 'crewforms', 'payroll'] },
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['tradesummary'] },
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'contacts', 'owners'] },
     ...tradingTeam,

@@ -14,6 +14,7 @@ import { seed } from './seed.js';
 import { emptyWorkspace, emptyCompany, OWNER_SECTIONS, PUBLIC_SECTIONS, DEFAULT_MARKUPS } from './schema.js';
 import { SECTIONS, COMPANY_SECTIONS, diffWorkspace, sectionFromDocs, stamp } from './sync.js';
 import { todayISO, uid, DEFAULT_WEEK } from './util.js';
+import { isGMRanks, newOfficePages } from './access.js';   // v1.48.0 (R1, R2)
 import { ROLE_PAGES, pagesOf, mayOpen, seesMoney, seesPay, companySections, MONEY_SECTIONS, PAY_SECTIONS } from './access.js';
 import { movePayOut } from '../engine/people.js';
 import { receiptWrites, keep as keepReceipt } from '../engine/receipts.js';   // v1.37.0: Sent / Delivered / Seen
@@ -103,6 +104,7 @@ let lastAct = null;
 let lockedBy = null;     // the record of the device that holds this person's session, when this one was refused
 const endedSubscribers = [];
 let divisions = [];       // the divisions this person works in (empty = both); set by the Admin
+let gmView = false;   // v1.48.0 (owner R2): the GM reads HR, salary and pay; changes only letters there
 let execView = false;   // v1.47.0 (owner Q2): an Executive reads every page but pay and HR, and changes nothing
 let limited = false;      // sees only the projects linked to their email (every Site user; an Office user the Admin limited)
 let approver = false;    // may issue client reports (the Owner, or Office users the Owner ticked)
@@ -322,6 +324,7 @@ export const store = {
       divisions = [];
       limited = false;
       execView = false;
+      gmView = false;
       approver = true;
       // the Owner's own entry under users/ exists only to hold their name and title
       const own = await api.get(`users/${me.email}`).catch(() => null);
@@ -334,6 +337,9 @@ export const store = {
       ranks = Array.isArray(mine.ranks) ? mine.ranks : [];
       limited = isLimited({ ...mine, role });
       execView = role === 'office' && mine.readOnly === true;   // v1.47.0: Executive
+      gmView = !execView && isGMRanks(role, ranks);
+      if (gmView && !pages.includes('payments')) pages = [...pages, 'payments'];   // the rules give the GM Payments too
+      if (execView && !pages.includes('master')) pages = [...pages, 'master'];   // v1.48.0 (M1–M4): the Executive reads the Master page
       divisions = Array.isArray(mine.divisions) ? mine.divisions : [];
       // nobody comes in before the Admin has chosen their department
       if (!divisionsOf({ role, divisions }).length) { role = null; return 'unassigned'; }
@@ -380,9 +386,9 @@ export const store = {
     }
     // company-wide records: what each person's ticked pages show (a Site user has only the messages until given more)
     {
-      for (const section of companySections(role, pages)) {
+      for (const section of [...companySections(role, pages), ...(gmView ? ['staff', 'letters', 'payroll'] : [])]) {
         // the rules let an Office or Site user read only their own division of a divided section, so the app asks for just that
-        const only = role !== 'owner' && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
+        const only = role !== 'owner' && !(gmView && ['staff', 'letters', 'payroll'].includes(section)) && DIVIDED.includes(section) ? ['division', '==', divisions[0] || 'installation'] : undefined;
         shared.push(api.watchCol(`${COMPANY_PATH}/${section}`, docs => { company[section] = sectionFromDocs(section, docs); emit(); if (section === 'messages') receiptsTick(); }, section === 'messages' ? () => {} : fail, only));
       }
     }
@@ -566,7 +572,14 @@ export const store = {
       // v1.14.2: never messages or chats: their records may only change text (rules), so stamping one written on a phone
       // made the whole save fail (Directory edits were refused once Field Report sent its first message)
       stamp(company, COMPANY_SECTIONS.filter(s => !PUBLIC_SECTIONS.includes(s) && s !== 'messages' && s !== 'direct'));
-      const ops = diffWorkspace(before, company, COMPANY_SECTIONS).map(o => ({ path: `${COMPANY_PATH}/${o.section}/${o.id}`, data: o.data }));
+      const diff = diffWorkspace(before, company, COMPANY_SECTIONS);
+      // v1.48.0 (owner R2): the GM reads Employee data, Salary and the owners' records but changes only letters there
+      if (gmView && diff.some(o => OWNER_SECTIONS.includes(o.section) && o.section !== 'letters')) {
+        company = before; emit();
+        if (typeof dispatchEvent === 'function') dispatchEvent(new CustomEvent('hub-toast', { detail: '✗ Only the Admin changes Employee data and salaries. You can read them and make letters.' }));
+        return;
+      }
+      const ops = diff.map(o => ({ path: `${COMPANY_PATH}/${o.section}/${o.id}`, data: o.data }));
       if (ops.length) send(api.batch(ops));
     }
     offerUndo(before, company, COMPANY_SECTIONS.filter(s => s !== 'messages' && s !== 'direct'), apply => this.updateCompany(apply));
@@ -820,12 +833,12 @@ export const store = {
     // someone who does not load the money records would work out a poorer figure than the one already saved
     if (!api || !seesPay(role, pages) || execView || !p || loading) return;
     const alerts = (summary.alerts || []).join('\n');
-    const cash = m => (m ? `${m.invoiced}|${m.received}|${m.spent}|${m.owed}|${m.currency}` : '');
+    const cash = m => (m ? `${m.invoiced}|${m.received}|${m.spent}|${m.owed}|${m.currency}|${m.month || ''}|${m.monthIn || 0}|${m.monthOut || 0}` : '');   // month figures: v1.48.0
     if (p.summary?.progress === summary.progress && p.summary?.slip === summary.slip && p.summary?.basis === summary.basis && cash(p.summary?.money) === cash(summary.money) && (p.summary?.alerts || []).join('\n') === alerts
-      && (p.summary?.waiting || 0) === (summary.waiting || 0) && (p.summary?.lastReport || '') === (summary.lastReport || '')) return;
+      && (p.summary?.waiting || 0) === (summary.waiting || 0) && (p.summary?.lastReport || '') === (summary.lastReport || '') && (p.summary?.crew || 0) === (summary.crew || 0) && (p.summary?.crewDate || '') === (summary.crewDate || '')) return;
     // Two people whose computers are on different dates work out different figures and would
     // keep overwriting each other, so the same figures are not written again straight away.
-    const key = `${summary.progress}|${summary.basis}|${summary.slip}|${cash(summary.money)}|${alerts}|${summary.waiting || 0}|${summary.lastReport || ''}`;
+    const key = `${summary.progress}|${summary.basis}|${summary.slip}|${cash(summary.money)}|${alerts}|${summary.waiting || 0}|${summary.lastReport || ''}|${summary.crew || 0}|${summary.crewDate || ''}`;
     const last = sentSummary.get(p.id);
     if (last?.key === key && Date.now() - last.at < SUMMARY_REPEAT_MS) return;
     sentSummary.set(p.id, { key, at: Date.now() });
@@ -839,6 +852,8 @@ export const store = {
     email = email.trim().toLowerCase();
     const known = users.find(u => u.email === email);
     const current = known || { email, role: 'site', projects: [] };
+    // v1.48.0 (owner R1): a new Office person starts without the money pages
+    if (!known && patch.role === 'office' && !patch.pages) Object.assign(patch, { pages: newOfficePages(patch.ranks || []), pagesV: 2 });
     send(api.set(`users/${email}`, { ...current, ...patch, ...joinDates(known, patch, new Date().toISOString()) }));
   },
   /** Owner only: their own name and title. Everyone else's are set by the Owner through setUser. */

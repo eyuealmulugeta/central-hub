@@ -5,7 +5,7 @@
 // Executive (owner, Q2): reads every page, changes nothing, no pay and no HR. Pure: used by the page and the server.
 import { accountOf, frRoleOf, codeMaps } from './onesource.js';
 import { tierOfPerson, rankPatchFor, positionsOf } from './manpower.js';
-import { GRANTABLE } from '../core/access.js';
+import { GRANTABLE, newOfficePages } from '../core/access.js';
 
 const low = s => String(s || '').trim().toLowerCase();
 const norm = s => low(s).replace(/[^a-z0-9]+/g, ' ').trim();
@@ -13,7 +13,7 @@ export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const EXECUTIVE = 'Executive';
 export const isExecutive = title => norm(title) === 'executive';
 /** Central Hub pages an Executive reads: every page but crew pay (Payments). Pay and HR stay closed in the rules. */
-export const EXEC_PAGES = GRANTABLE.map(([k]) => k).filter(k => k !== 'payments');
+export const EXEC_PAGES = [...GRANTABLE.map(([k]) => k).filter(k => k !== 'payments'), 'master'];   // master: v1.48.0
 
 /** The status words of a row. */
 export const STATUS = { admin: 'Admin', active: 'Active', none: 'No access', removed: 'Removed', left: 'Left', noEmail: 'No sign-in email' };
@@ -80,7 +80,7 @@ export function chRecord(p, projects = []) {
   return {
     email: accountOf(p), name: p.name || '', ...ranks, role: office ? 'office' : 'site',
     projects: projectIds(p, projects), divisions: exec ? ['installation', 'trading'] : [p.division === 'trading' ? 'trading' : 'installation'],
-    ...(exec ? { readOnly: true, pages: EXEC_PAGES, pagesV: 2 } : {}),
+    ...(exec ? { readOnly: true, pages: EXEC_PAGES, pagesV: 2 } : office ? { pages: newOfficePages(ranks.ranks || []), pagesV: 2 } : {}),   // v1.48.0 (R1): no money pages to start
   };
 }
 

@@ -61,7 +61,10 @@ service cloud.firestore {
     // The pages a person may open. Keep in step with pagesOf in js/core/access.js. A record the Admin has ticked since
     // v0.15.0 holds them all (pagesV 2). An older one: a Site person had the site pages; an Office person the pages
     // ticked (all until chosen) plus Meetings, Contacts and the staff directory, which came with the role.
-    function pages() {
+    // v1.48.0 (owner R2): the GM (rank general_manager, Office, not an Executive) has Payments by default
+    function gmRank() { return hasUser() && user().role == 'office' && 'general_manager' in user().get('ranks', []) && user().get('readOnly', false) != true; }
+    function pages() { return pagesTicked().concat(gmRank() ? ['payments'] : []); }
+    function pagesTicked() {
       let u = user();
       return u.get('pagesV', 0) == 2 ? u.get('pages', [])
         : u.role == 'site' ? ['dashboard', 'reports', 'schedule', 'requests', 'directory']
@@ -82,7 +85,9 @@ service cloud.firestore {
     function isMoney(section) { return section in ['ledger', 'docs', 'payStages', 'measure', 'billRates', 'payruns', 'payments', 'paycosts', 'crewRates', 'laborRates', 'bills']; }
     // pay of named people: read by Office only with Costs or Payments ticked, never by Site
     function isPay(section) { return section in ['payruns', 'payments', 'paycosts', 'crewRates', 'laborRates']; }
-    function officeSeesPay(section) { return !isPay(section) || officeWith(['ledger', 'payments']); }
+    // v1.47.0 (owner Q2): an Executive (users/<email>.readOnly) reads every page they have, never pay or HR, and writes nothing
+    function readOnlyUser() { return hasUser() && user().get('readOnly', false) == true; }
+    function officeSeesPay(section) { return !isPay(section) || (officeWith(['ledger', 'payments']) && !readOnlyUser()); }
     // billing terms and rates are settings: only the Admin changes them
     // v0.73.0: fieldSigs (site signatures) are written by the server only; the Admin may still correct them
     function isSetting(section) { return section in ['payStages', 'measure', 'billRates', 'crewRates', 'laborRates', 'fieldSigs']; }
@@ -142,17 +147,17 @@ service cloud.firestore {
     // v0.37.0: small crew photos for Field Report, made on the Admin's computer (js/core/crewphotos.js)
     match /fieldPhotos/{pid} {
       allow read: if seesAll() || fieldOn(pid);
-      allow write: if isOwner();
+      allow write: if (isOwner()) && !readOnlyUser();
     }
     // v0.72.0: urgent notices from the GM (the Admin): read by the people they were sent to; each of them adds only
     // their own answer (read, or a reply). Never deleted: they are the log.
     match /urgent/{id} {
       allow read: if seesAll() || (signedIn() && me() in resource.data.emails);
-      allow create: if seesAll() && request.resource.data.from == me() && request.resource.data.answers.size() == 0;
-      allow update: if seesAll()
+      allow create: if (seesAll() && request.resource.data.from == me() && request.resource.data.answers.size() == 0) && !readOnlyUser();
+      allow update: if (seesAll()
         || (signedIn() && me() in resource.data.emails
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answers'])
-          && request.resource.data.answers.diff(resource.data.answers).affectedKeys().hasOnly([me()]));
+          && request.resource.data.answers.diff(resource.data.answers).affectedKeys().hasOnly([me()]))) && !readOnlyUser();
       allow delete: if false;
     }
     match /prefs/{email} {
@@ -204,14 +209,14 @@ service cloud.firestore {
     // v1.1.0 (owner, G4): the outgoing register. Only the Admin and Tier 1 (GM, Owner, CEO, Board) approve or send back.
     match /outgoing/{id} {
       allow read: if seesAll() || myTier() == 1 || (signedIn() && resource.data.by == me());
-      allow create: if signedIn() && request.resource.data.id == id
-        && ((request.resource.data.by == me() && request.resource.data.status == 'waiting') || seesAll() || myTier() == 1);
-      allow update: if seesAll() || myTier() == 1
+      allow create: if (signedIn() && request.resource.data.id == id
+        && ((request.resource.data.by == me() && request.resource.data.status == 'waiting') || seesAll() || myTier() == 1)) && !readOnlyUser();
+      allow update: if (seesAll() || myTier() == 1
         || (signedIn() && resource.data.by == me() && request.resource.data.status == 'waiting' && request.resource.data.by == me()
           && request.resource.data.decidedBy == '' && request.resource.data.ref == resource.data.ref)
         || (signedIn() && resource.data.status in ['approved', 'sent'] && request.resource.data.status == 'sent'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'sentAt', 'sentBy', 'channel', 'log']));
-      allow delete: if isOwner();
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'sentAt', 'sentBy', 'channel', 'log']))) && !readOnlyUser();
+      allow delete: if (isOwner()) && !readOnlyUser();
     }
     // v1.2.0 (owner, G5): the data tracker's summary, written only by the server (functions/datafeed.js)
     match /datafeed/{id} {
@@ -231,7 +236,7 @@ service cloud.firestore {
     // v0.26.0: the recycle bin: what the Admin deleted, with who, when and from which page
     match /bin/{id} {
       allow read: if seesAll();
-      allow write: if isOwner();
+      allow write: if (isOwner()) && !readOnlyUser();
     }
     match /diagnostics/{id} {
       allow create: if signedIn() && request.resource.data.by == me()
@@ -245,9 +250,9 @@ service cloud.firestore {
     // address. Only the Admin sees the requests, and answers by adding the person (or not).
     match /requests/{email} {
       allow get: if signedIn() && email == me();
-      allow create, update: if signedIn() && email == me() && request.resource.data.email == me();
+      allow create, update: if (signedIn() && email == me() && request.resource.data.email == me()) && !readOnlyUser();
       allow read: if seesAll();
-      allow delete: if isOwner();
+      allow delete: if (isOwner()) && !readOnlyUser();
     }
 
     // Written only by the server (functions/, Admin SDK): the Field Report import status. Office and the Admin read it.
@@ -259,7 +264,7 @@ service cloud.firestore {
     // Prices, exchange rates, countries, letterhead: settings, so only the Admin changes them.
     match /global/{doc} {
       allow read: if seesAll() || hasUser();
-      allow write: if isOwner();
+      allow write: if (isOwner()) && !readOnlyUser();
     }
 
     // Company-wide records. HR (staff) is the Admin's alone. Deleting is the Admin's.
@@ -273,27 +278,27 @@ service cloud.firestore {
     match /company/main/signs/{id} {
       allow get: if true;
       allow list: if seesAll() || signStaffOf(resource.data);
-      allow create, update: if signWriter();
+      allow create, update: if (signWriter()) && !readOnlyUser();
     }
     match /company/main/signfiles/{id} {
       allow get: if true;
-      allow create, update: if signStaff();
+      allow create, update: if (signStaff()) && !readOnlyUser();
     }
     match /company/main/signkeys/{id} {
       allow read: if seesAll() || signStaffOf(resource.data);
-      allow create, update: if signWriter();
+      allow create, update: if (signWriter()) && !readOnlyUser();
     }
     // v0.77.0 Site instructions. The consultant's copy (silinks) is read by anyone with its long random id, made by
     // a Central Hub user in their own name; the consultant answers once (sisigned, same id) while it is open. The
     // server copies the answer back to the project's instruction (functions/siteinstr.js).
     match /company/main/silinks/{id} {
       allow get: if true;
-      allow create: if hasUser() && id.size() >= 40 && request.resource.data.id == id && request.resource.data.status == 'sent'
-        && request.resource.data.by == me();
+      allow create: if (hasUser() && id.size() >= 40 && request.resource.data.id == id && request.resource.data.status == 'sent'
+        && request.resource.data.by == me()) && !readOnlyUser();
     }
     match /company/main/sisigned/{id} {
       allow get: if true;
-      allow create: if id.size() >= 40
+      allow create: if (id.size() >= 40
         && request.resource.data.keys().hasOnly(['id', 'name', 'image', 'comment', 'decision', 'at', 'agent'])
         && request.resource.data.id == id
         && request.resource.data.name is string && request.resource.data.name.size() <= 120
@@ -301,18 +306,18 @@ service cloud.firestore {
         && request.resource.data.comment is string && request.resource.data.comment.size() <= 2000
         && request.resource.data.decision in ['signed', 'comment']
         && request.resource.data.at is string
-        && get(/databases/$(database)/documents/company/main/silinks/$(id)).data.status == 'sent';
+        && get(/databases/$(database)/documents/company/main/silinks/$(id)).data.status == 'sent') && !readOnlyUser();
     }
     match /company/main/signed/{key} {
       allow get: if true;
       allow list: if signStaff() || seesAll();
-      allow create: if key.size() >= 40
+      allow create: if (key.size() >= 40
         && request.resource.data.keys().hasOnly(['id', 'request', 'name', 'image', 'at', 'agent'])
         && request.resource.data.id == key
         && request.resource.data.name is string && request.resource.data.name.size() <= 120
         && request.resource.data.image is string && request.resource.data.image.size() <= 250000
         && request.resource.data.at is string
-        && get(/databases/$(database)/documents/company/main/signs/$(request.resource.data.request)).data.status == 'sent';
+        && get(/databases/$(database)/documents/company/main/signs/$(request.resource.data.request)).data.status == 'sent') && !readOnlyUser();
     }
 
     // v0.33.0 Crew forms. A link (crewlinks) is read by anyone who has its long random id; it is made by the Admin or
@@ -334,43 +339,47 @@ service cloud.firestore {
     match /company/main/crewlinks/{id} {
       allow get: if true;
       allow list: if seesAll();
-      allow create: if (isOwner() || 'general_manager' in ranks() || fieldStaff()) && id.size() >= 40 && request.resource.data.id == id && request.resource.data.by == me()
+      allow create: if ((isOwner() || 'general_manager' in ranks() || fieldStaff()) && id.size() >= 40 && request.resource.data.id == id && request.resource.data.by == me()
         && request.resource.data.kind in ['one', 'crew'] && request.resource.data.status == 'open'
-        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 8 * 86400000;
+        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 8 * 86400000) && !readOnlyUser();
       // v0.42.0: Employee data in Field Report: a 12-hour link of the device's own project, for the form filled in there
-      allow create: if request.resource.data.kind == 'site' && fieldOn(request.resource.data.projectId) && id.size() >= 40 && request.resource.data.id == id
+      allow create: if (request.resource.data.kind == 'site' && fieldOn(request.resource.data.projectId) && id.size() >= 40 && request.resource.data.id == id
         && request.resource.data.by == me() && request.resource.data.status == 'open'
-        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 13 * 3600000;
-      allow update: if (isOwner() || 'general_manager' in ranks() || fieldStaff()) && resource.data.by == me() && request.resource.data.by == me() && request.resource.data.untilMs <= resource.data.untilMs;
+        && request.resource.data.untilMs is int && request.resource.data.untilMs <= request.time.toMillis() + 13 * 3600000) && !readOnlyUser();
+      allow update: if ((isOwner() || 'general_manager' in ranks() || fieldStaff()) && resource.data.by == me() && request.resource.data.by == me() && request.resource.data.untilMs <= resource.data.untilMs) && !readOnlyUser();
     }
     match /company/main/crewforms/{id} {
-      allow create: if crewFormOk(id, request.resource.data);
+      allow create: if (crewFormOk(id, request.resource.data)) && !readOnlyUser();
     }
 
     // Meetings. The booking page is open to anyone: it reads its settings (public/booking) and which
     // times are taken (slots, which hold no names), and leaves one booking. A slot's id is its time,
     // and a slot can only be created, never overwritten: that is what stops two people taking one time.
+    // v1.38.0 (owner, 9 Nov): the people one can write to in Discuss (name, position, projects), kept by the server
+    match /directory/{doc} {
+      allow get: if hasUser() || seesAll() || (signedIn() && exists(fieldDoc()) && get(fieldDoc()).data.st == 'active');
+    }
     match /public/{doc} {
       allow get: if true;
-      allow write: if isOwner();
+      allow write: if (isOwner()) && !readOnlyUser();
     }
     match /company/main/slots/{id} {
       allow get, list: if true;
-      allow create: if id.matches('^[0-9]{8}T[0-9]{4}Z$')
+      allow create: if (id.matches('^[0-9]{8}T[0-9]{4}Z$')
         && request.resource.data.keys().hasOnly(['id', 'start', 'minutes'])
-        && request.resource.data.id == id;
-      allow delete: if isOwner() || staffWith(['meetings']);
+        && request.resource.data.id == id) && !readOnlyUser();
+      allow delete: if (isOwner() || staffWith(['meetings'])) && !readOnlyUser();
     }
     match /company/main/bookings/{id} {
-      allow create: if request.resource.data.keys().hasOnly(['id', 'start', 'minutes', 'step', 'type', 'typeName', 'where', 'name', 'company', 'email', 'phone', 'note', 'at', 'status', 'division'])
+      allow create: if (request.resource.data.keys().hasOnly(['id', 'start', 'minutes', 'step', 'type', 'typeName', 'where', 'name', 'company', 'email', 'phone', 'note', 'at', 'status', 'division'])
         && (!('division' in request.resource.data) || request.resource.data.division in ['trading', 'installation'])
         && request.resource.data.id == id
         && request.resource.data.status == 'booked'
         && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
         && request.resource.data.email is string && request.resource.data.email.size() <= 160
-        && request.resource.data.note is string && request.resource.data.note.size() <= 1000;
+        && request.resource.data.note is string && request.resource.data.note.size() <= 1000) && !readOnlyUser();
       allow read: if seesAll() || (staffWith(['meetings']) && mine(resource.data));
-      allow update: if isOwner() || (staffWith(['meetings']) && mine(resource.data) && mine(request.resource.data));
+      allow update: if (isOwner() || (staffWith(['meetings']) && mine(resource.data) && mine(request.resource.data))) && !readOnlyUser();
     }
 
     // Evaluations and feedback notes: read only by the person who wrote them and by the Admin, never by the
@@ -378,11 +387,11 @@ service cloud.firestore {
     match /company/main/evaluations/{id} {
       allow read: if seesAll() || (hasUser() && resource.data.by == me())
         || (hasUser() && 'general_manager' in ranks() && resource.data.get('salaryReview', false) == true);
-      allow create: if request.resource.data.by == me()
-        && (isOwner() || (hasUser() && mayRate(request.resource.data.level)));
-      allow update: if (resource.data.by == me() && request.resource.data.by == me())
-        || ((isOwner() || (hasUser() && 'general_manager' in ranks())) && salaryOnly());
-      allow delete: if isOwner();
+      allow create: if (request.resource.data.by == me()
+        && (isOwner() || (hasUser() && mayRate(request.resource.data.level)))) && !readOnlyUser();
+      allow update: if ((resource.data.by == me() && request.resource.data.by == me())
+        || ((isOwner() || (hasUser() && 'general_manager' in ranks())) && salaryOnly())) && !readOnlyUser();
+      allow delete: if (isOwner()) && !readOnlyUser();
     }
     // v0.49.0: Spotlight notes. About a person: written by who may rate them; a project update: by anyone signed in.
     // Read by the writer, HR and the Admin, never by the person. Changed by the writer (24 hours in the app); deleted by the Admin.
@@ -390,7 +399,7 @@ service cloud.firestore {
     function isHR() { return hasUser() && 'hr_assistant' in ranks(); }
     match /company/main/officeAttendance/{id} {
       allow read, delete: if isHR();
-      allow create, update: if isHR() && request.resource.data.id == id && request.resource.data.by == me();
+      allow create, update: if (isHR() && request.resource.data.id == id && request.resource.data.by == me()) && !readOnlyUser();
     }
     match /company/main/officeStaff/{id} {
       allow read: if isHR();
@@ -400,15 +409,15 @@ service cloud.firestore {
       allow read: if isOffice();
     }
     match /company/main/sealLog/{id} {
-      allow create: if (isOwner() || isOffice()) && request.resource.data.by == me() && request.resource.data.id == id;
+      allow create: if ((isOwner() || isOffice()) && request.resource.data.by == me() && request.resource.data.id == id) && !readOnlyUser();
     }
     match /company/main/spotlight/{id} {
       allow read: if seesAll() || (hasUser() && ('hr_assistant' in ranks() || resource.data.by == me()));
-      allow create: if hasUser() && request.resource.data.by == me() && request.resource.data.id == id
-        && (request.resource.data.kind == 'project' || isOwner() || mayRate(request.resource.data.level));
-      allow update: if hasUser() && ((resource.data.by == me() && request.resource.data.by == me())
-        || (isOwner() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenAt'])));
-      allow delete: if isOwner();
+      allow create: if (hasUser() && request.resource.data.by == me() && request.resource.data.id == id
+        && (request.resource.data.kind == 'project' || isOwner() || mayRate(request.resource.data.level))) && !readOnlyUser();
+      allow update: if (hasUser() && ((resource.data.by == me() && request.resource.data.by == me())
+        || (isOwner() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenAt'])))) && !readOnlyUser();
+      allow delete: if (isOwner()) && !readOnlyUser();
     }
 
     // Discuss messages: everyone with access reads them and writes their own. The sender may correct the text within
@@ -432,35 +441,56 @@ service cloud.firestore {
     // v0.65.0: one-to-one messages. Only the two people in it read them (the Admin too only when one of the two); the
     // sender writes their own, may correct it within a minute and take it back at any time, like the channels.
     function directPair(d) { return d.members is list && d.members.size() == 2 && me() in d.members && d.members[0] != d.members[1]; }
+    // v1.44.0 (owner, 9 Nov): Discuss switched off in Settings, Apps (either half): no one sends a new message, from either app
+    function chatOn() {
+      let g = /databases/$(database)/documents/global/main;
+      return !exists(g) || !get(g).data.get('appsOff', []).hasAny(['discuss', 'fr_chat']);
+    }
     match /company/main/direct/{record} {
       allow read: if signedIn() && me() in resource.data.members;
       // v1.13.0 (owner, R4): and an active Field Report account (Discuss on the phone)
-      allow create: if (hasUser() || isOwner() || (exists(fieldDoc()) && get(fieldDoc()).data.st == 'active')) && request.resource.data.by == me() && directPair(request.resource.data)
-        && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
-      allow update: if signedIn() && resource.data.by == me() && messageKept() && (messageTakeBackOk() || messageCorrected() || messageHidden());
+      allow create: if ((hasUser() || isOwner() || (exists(fieldDoc()) && get(fieldDoc()).data.st == 'active')) && request.resource.data.by == me() && directPair(request.resource.data) && chatOn()
+        && request.resource.data.text is string && request.resource.data.text.size() <= 2000) && !readOnlyUser();
+      allow update: if (signedIn() && resource.data.by == me() && messageKept() && (messageTakeBackOk() || messageCorrected() || messageHidden())) && !readOnlyUser();
+    }
+    // v1.37.0 (owner, 9 Nov): Discuss receipts (js/engine/receipts.js). Each person writes only their own record of a
+    // conversation: when their app received its newest message (got) and when they had it open (seen).
+    function receiptOk(d) { return d.keys().hasOnly(['chat', 'who', 'name', 'got', 'seen', 'members']) && d.who == me() && d.got is string && d.seen is string && d.name is string && d.name.size() <= 120; }
+    match /company/main/chatSeen/{record} {
+      allow read: if hasUser() || seesAll() || fieldOn(resource.data.chat);
+      allow create, update: if receiptOk(request.resource.data) && !('members' in request.resource.data) && record == request.resource.data.chat + '~' + me()
+        && (hasUser() || seesAll() || fieldOn(request.resource.data.chat));
+    }
+    match /company/main/dmSeen/{record} {
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create, update: if receiptOk(request.resource.data) && directPair(request.resource.data)
+        && record == request.resource.data.members[0] + '|' + request.resource.data.members[1] + '~' + me();
     }
     match /company/main/messages/{record} {
-      allow update: if messageKept() && ((resource.data.by == me() && (messageTakeBackOk() || messageCorrected() || messageHidden()))
-        || (isOwner() && messageTakenBack()));
+      allow update: if (messageKept() && ((resource.data.by == me() && (messageTakeBackOk() || messageCorrected() || messageHidden()))
+        || (isOwner() && messageTakenBack()))) && !readOnlyUser();
     }
 
     match /company/main/{section}/{record} {
-      allow read: if (seesAll() && section != 'direct')
+      allow read: if (seesAll() && section != 'direct' && section != 'dmSeen')
+        // v1.48.0 (owner R2): the GM reads Employee data, Salary (payroll) and Letters
+        || (section in ['staff', 'letters', 'payroll'] && gmRank())
         || (section == 'messages' && hasUser())
         || (section == 'messages' && fieldOn(resource.data.channel))   // v1.13.0 (owner, R4): the project's channel on Field Report
         || (section in ['shipments', 'sales', 'products', 'partners', 'deals'] && staffWith(['trade', 'finance']) && mine(resource.data))
         || (section == 'contracts' && staffWith(['contracts']) && mine(resource.data))
         || (section == 'contacts' && staffWith(['contacts']) && mine(resource.data))
         || (section == 'meetings' && staffWith(['meetings']) && mine(resource.data));
-      allow create: if section == 'messages' && (isOwner() || hasUser() || fieldOn(request.resource.data.channel)) && request.resource.data.by == me()
-        && request.resource.data.get('text', '') is string && request.resource.data.get('text', '').size() <= 2000;
-      allow create, update: if (isOwner() && !(section in ['messages', 'direct']))
+      allow create: if (section == 'messages' && (isOwner() || hasUser() || fieldOn(request.resource.data.channel)) && request.resource.data.by == me() && chatOn()
+        && request.resource.data.get('text', '') is string && request.resource.data.get('text', '').size() <= 2000) && !readOnlyUser();
+      allow create, update: if ((isOwner() && !(section in ['messages', 'direct', 'chatSeen', 'dmSeen']))
+        || (section == 'letters' && gmRank())   // v1.48.0 (owner R2): the GM makes letters
         || (section in ['shipments', 'sales', 'products', 'partners', 'deals'] && staffWith(['trade']) && keptMine())
         || (section == 'contracts' && staffWith(['contracts']) && keptMine())
         || (section == 'contacts' && staffWith(['contacts']) && keptMine())
         // meetings with colleagues: anyone of the division with Meetings ticked schedules one; only its organiser changes it
-        || (section == 'meetings' && staffWith(['meetings']) && keptMine() && request.resource.data.by == me() && (resource == null || resource.data.by == me()));
-      allow delete: if isOwner() && section != 'direct';
+        || (section == 'meetings' && staffWith(['meetings']) && keptMine() && request.resource.data.by == me() && (resource == null || resource.data.by == me()))) && !readOnlyUser();
+      allow delete: if (isOwner() && section != 'direct') && !readOnlyUser();
     }
 
     match /projects/{pid} {
@@ -468,9 +498,9 @@ service cloud.firestore {
       allow list: if seesAll();
       // project settings are the Admin's; an Office user may only refresh the sidebar figures
       // and confirm which Field Report project a code belongs to
-      allow create, delete: if isOwner();
-      allow update: if isOwner()
-        || (officeOn(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['summary', 'fieldLabel']));
+      allow create, delete: if (isOwner()) && !readOnlyUser();
+      allow update: if (isOwner()
+        || (officeOn(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['summary', 'fieldLabel']))) && !readOnlyUser();
 
       match /{section}/{record} {
         allow read: if seesAll() || officeReadsIn(pid, section)
@@ -478,7 +508,7 @@ service cloud.firestore {
           || (isSiteOn(pid) && section in ['tasks', 'reports', 'items', 'team', 'assemblies', 'procurement', 'requests', 'attendance', 'siteInstr'])
           // a Site person with a money page ticked reads the money records of their projects, never pay
           || (isSiteOn(pid) && isMoney(section) && !isPay(section) && staffWith(moneyPages()));
-        allow create: if isOwner()
+        allow create: if (isOwner()
           // v0.97.0 (owner, R3): a penalty is given on a Field Report phone, waiting, in its giver's own name (never by a viewer)
           || (section == 'penalties' && fieldOn(pid) && get(fieldDoc()).data.role in ['engineer', 'coordinator', 'admin', 'exec']
             && request.resource.data.status == 'waiting' && request.resource.data.by == me() && request.resource.data.get('site', false) == true
@@ -508,8 +538,8 @@ service cloud.firestore {
           // v0.42.0: a Field Report device sends an attendance correction for the office to review, in its own name
           || (section == 'attendance' && fieldOn(pid) && record.matches('sr_.+') && request.resource.data.get('site', false) == true && request.resource.data.review == 'waiting' && request.resource.data.byEmail == me())
           // v0.38.0: a Field Report phone writes a request of its project as a draft, in its own name
-          || (section == 'requests' && fieldOn(pid) && request.resource.data.get('site', false) == true && request.resource.data.status == 'draft' && request.resource.data.by == me());
-        allow update: if isOwner()
+          || (section == 'requests' && fieldOn(pid) && request.resource.data.get('site', false) == true && request.resource.data.status == 'draft' && request.resource.data.by == me())) && !readOnlyUser();
+        allow update: if (isOwner()
           // v0.97.0 (owner, R3): a waiting penalty is approved or rejected by the PE (coordinator), the GM (exec) or the Admin on a phone,
           // never by its giver, or by an approver here; its giver may cancel it while it waits
           || (section == 'penalties' && resource.data.status == 'waiting'
@@ -570,9 +600,9 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'editedBy', 'editedAt', 'crewSync']))
           // (v0.75.0, owner: not in Central Hub: the SE and PE correct the crew in Field Report)
           || (section == 'team' && fieldOn(pid) && resource.data.get('fromSite', null) != null
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'active', 'editedBy', 'editedAt']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'role', 'contact', 'active', 'editedBy', 'editedAt']))) && !readOnlyUser();
         // nobody but the Admin deletes a record
-        allow delete: if isOwner();
+        allow delete: if (isOwner()) && !readOnlyUser();
       }
     }
   }

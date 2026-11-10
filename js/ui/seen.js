@@ -45,12 +45,22 @@ export function headline(d) {
 export const moneyOf = d => ({
   invoiced: Math.round(d.bill.invoiced), received: Math.round(d.led.income), spent: Math.round(d.led.spent),
   owed: Math.round(d.bill.outstanding), currency: d.project.currency,
+  // v1.48.0 (M2): cash in and out this month, totals only (no one's pay is shown on the Master page)
+  month: String(d.today || '').slice(0, 7),
+  monthIn: Math.round((d.led.rows || []).filter(r => r.type === 'income' && String(r.date || '').startsWith(String(d.today || '').slice(0, 7))).reduce((a, r) => a + (r.base || 0), 0)),
+  monthOut: Math.round((d.led.rows || []).filter(r => r.type === 'expense' && !r.estimate && String(r.date || '').startsWith(String(d.today || '').slice(0, 7))).reduce((a, r) => a + (r.base || 0), 0)),
 });
 /** Daily reports waiting for approval, and the date of the newest one: the line under a project on Today (v0.22.0). */
 export const reportsOf = ws => ({
   waiting: (ws?.reports || []).filter(r => r.review === 'pending').length,
   lastReport: (ws?.reports || []).map(r => r.date).sort().at(-1) || '',
+  // v1.48.0 (M1): crew present in the newest report with attendance, and its date
+  ...crewOf(ws),
 });
+const crewOf = ws => {
+  const r = [...(ws?.reports || [])].filter(x => (x.field?.attendance || []).length).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  return r ? { crew: r.field.attendance.filter(a => (a.state || 'present') === 'present').length, crewDate: r.date } : { crew: 0, crewDate: '' };
+};
 export const summaryOf = d => {
   const h = headline(d);
   return { progress: Math.round(h.progress), basis: h.basis, slip: d.sched.slip, alerts: alertKeys(d.flags), money: moneyOf(d), ...reportsOf(d.ws) };

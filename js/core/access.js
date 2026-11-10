@@ -27,6 +27,9 @@ export const GRANTABLE = GRANT_GROUPS.flatMap(([, list]) => list);
 const ALL = GRANTABLE.map(([k]) => k);
 /** What a role opens until the Admin ticks pages for the person. Must match pages() in firestore.rules. */
 // Payments (pay of the crew) is never there by default: the Admin ticks it for the people who handle it.
+/** v1.48.0 (owner R2): the GM (Office, rank general_manager) opens Payments, Employee data, Salary and Letters by default. */
+export const GM_PAGES = ['payments', 'hr', 'payroll', 'letters'];
+export const isGMRanks = (role, ranks = []) => role === 'office' && ranks.includes('general_manager');
 export const ROLE_PAGES = { office: ALL.filter(k => k !== 'evaluation' && k !== 'payments'), site: ['dashboard', 'reports', 'schedule', 'requests', 'directory'] };
 // Pages that came with the role, not with a tick, before every role had ticks (v0.15.0): an older record keeps them.
 const CAME_WITH_OFFICE = ['meetings', 'contacts', 'directory'];
@@ -35,6 +38,9 @@ const CAME_WITH_OFFICE = ['meetings', 'contacts', 'directory'];
 const inInstallation = user => user?.role !== 'owner' && (user?.divisions || [])[0] === 'installation';
 /** The pages the Admin can tick for this person. */
 export const grantableFor = user => GRANTABLE.filter(([k]) => !(inInstallation(user) && TRADING_PAGES.includes(k)) && !(user?.role === 'site' && k === 'payments'));
+
+/** v1.48.0 (owner R1): a NEW Office person starts without the money pages; the Admin ticks them. People already in keep theirs. */
+export const newOfficePages = (ranks = []) => [...ROLE_PAGES.office.filter(k => !['ledger', 'cashflow', 'docs', 'finance', 'payments'].includes(k)), ...(ranks.length ? ['evaluation'] : [])];
 
 /** What a person starts with: the pages of their role, and Evaluation when their title rates someone. */
 export const defaultPages = user => [...ROLE_PAGES[user?.role === 'office' ? 'office' : 'site'], ...(user?.ranks?.length ? ['evaluation'] : [])];
@@ -75,6 +81,8 @@ export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'outgoing') return role === 'owner' || role === 'office';   // v1.1.0 (G4): everyone in the office; each sees their own, Tier 1 all
   if (page === 'crewforms') return role === 'owner' || ranks.includes('general_manager');   // v0.41.0: crew form links: the Admin and the GM only
   if (page === 'logsheet') return role === 'owner' || (role === 'office' && pages.includes('docs'));   // v0.51.0: Office with Invoices and documents; Site never loads it
+  if (page === 'master') return role === 'owner' || isGMRanks(role, ranks) || (role === 'office' && pages.includes('master'));   // v1.48.0 (M1–M4): Admin, GM, Executive (never ticked for others)
+  if (isGMRanks(role, ranks) && GM_PAGES.includes(permKey(page))) return true;   // v1.48.0 (owner R2)
   if (page === 'peopleaccess') return role === 'owner' || (role === 'office' && ranks.includes('general_manager'));   // v1.47.0: People & Access, the Admin and the GM
   if (page === 'directory') return role === 'owner' || pages.includes('directory');   // v0.45.0: the Admin sees the Manpower Directory there, the others the staff directory
   if (role === 'owner' || page === 'home' || page === 'quick' || page === 'discuss' || MY_SETTINGS.includes(page)) return true;   // Home and Discuss show each person only their own sections
@@ -171,6 +179,7 @@ export const APPS = [
   { group: 'People pages', about: 'The pages of People', apps: [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
     { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
+    { page: 'master', name: 'Master', does: 'The whole company on one read-only page: the Admin, the GM and the Executive', fixed: true },   // v1.48.0
     { page: 'peopleaccess', name: 'People & Access', does: 'Who may use Central Hub and Field Report: the Admin and the GM, always on', fixed: true },   // v1.47.0
     { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person: always on', fixed: true },
     { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },

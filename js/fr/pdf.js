@@ -64,6 +64,7 @@ const FOOT = 30;   // the footer's height above the page edge
  * doc.photoFit = { now, next }: the photos still needed to fill the last photo page, and that page and one more.
  */
 /** 2.94.0 (owner R5): photos in a row on the PDF: 3 (the usual) or 2 bigger ones, chosen by the Site Engineer. */
+export const PHOTO_RATIO = 3 / 4;   // 3.0.2: height / width of a photo frame (slightly landscape)
 export const photoCols = r => (Number((r || {}).photoCols) === 2 ? 2 : 3);
 
 /** 2.94.0: DRAFT until the PE or the GM approves, then APPROVED; top right of every page of the in-app view. */
@@ -87,7 +88,13 @@ export function buildPdf(JsPDF, d) {
   const color = (c, kind = 'text') => (kind === 'text' ? doc.setTextColor(...c) : kind === 'fill' ? doc.setFillColor(...c) : doc.setDrawColor(...c));
   const font = (size, style = 'normal', c = INK) => { doc.setFont('helvetica', style); doc.setFontSize(size); color(c); };
   const newPage = () => { doc.addPage(); y = M; };
-  const bottom = H - FOOT - 14;   // 2.11.0: the footer sits lower
+  const BOTTOM = H - FOOT - 14;   // 2.11.0: the footer sits lower
+  // 3.0.2 (owner, 12 Nov: "the 1st page data should always adjust to fill the page and second page is for the photos"):
+  // when the data runs past page 1, page 1 is drawn a little smaller (d.scale, down to 70%, kept centred) so it
+  // all fits; the room on the page grows by the same share. Below 70% (d.noFit) it carries on to page 2 as before.
+  const s = d.noFit ? 1 : Number(d.scale) || 1;
+  let bottom = s === 1 ? BOTTOM : M + (BOTTOM - M) / s;
+  if (s !== 1) doc.internal.write(`q ${s} 0 0 ${s} ${((W * (1 - s)) / 2).toFixed(2)} ${((H - M) * (1 - s)).toFixed(2)} cm`);
   const room = h => { if (y + h > bottom) newPage(); };
   const lines = (text, width) => doc.splitTextToSize(String(text ?? ''), width);
 
@@ -366,20 +373,31 @@ export function buildPdf(JsPDF, d) {
   if (!d.client) { font(7, 'normal', MUTED); doc.text(`${dayLabel(r.date)} ${d.signedAt || ''}`.trim(), lx2 - 2, ry + 46, { align: 'right' }); }
   y = ry + 50;
 
-  // page 1 full: lay out once more with the space left shared between the sections (only when the data fits on page 1)
-  if (!d.pad && doc.getNumberOfPages() === 1 && gaps && bottom - y > 16) return buildPdf(JsPDF, { ...d, pad: Math.min(30, (bottom - y - 6) / gaps) });
+  // page 1 full: lay out once more with the space left shared between the sections (only when the data fits on page 1);
+  // 3.0.2: no upper limit on the share, and data too long for page 1 is drawn smaller until it fits
+  const one = doc.getNumberOfPages() === 1;
+  if (!one && !d.noFit) return buildPdf(JsPDF, { ...d, pad: 0, ...(s > 0.72 ? { scale: Math.round((s - 0.05) * 100) / 100 } : { scale: 1, noFit: true }) });
+  if (s !== 1) doc.internal.write('Q');
+  if (!d.pad && one && gaps && bottom - y > 16) return buildPdf(JsPDF, { ...d, pad: (bottom - y - 6) / gaps });
+  bottom = BOTTOM;   // the photo pages are full size
 
   /* 2.96.0 (owner R7): the photos start on page 2 and fill each page: 3 across and 4 down (2 across and 3 down when the
      Site Engineer chose bigger photos), one even gap, the caption under each; page 3 and on carry on the same way */
   const pics = d.photos || [];
+  // 3.0.2 (owner, 12 Nov: "Make it a slightly landscape rather than a square"): every photo frame is 4:3 landscape;
+  // the rows share the page's spare height (at most 28 pt between rows), the rest stays white at the bottom
   const COLS = photoCols(r), ROWS = COLS === 2 ? 3 : 4, per = COLS * ROWS, gap = 8, capH = 12;
-  let gtop = 0, cw = 0, ch = 0;
+  let gtop = 0, cw = 0, ph = 0, rgap = gap;
   pics.forEach((p, i) => {
     const k = i % per;
-    if (k === 0) { newPage(); y += 12; heading('Photos'); y += 12; gtop = y; cw = (CW - (COLS - 1) * gap) / COLS; ch = (bottom - gtop - (ROWS - 1) * gap) / ROWS; }
-    const x = M + (k % COLS) * (cw + gap), top = gtop + Math.floor(k / COLS) * (ch + gap);
-    photo(doc, p, { x, y: top, w: cw, h: ch - capH });
-    font(8, 'normal', MUTED); doc.text(lines([d.client ? '' : p.at, d.client || !p.gal ? '' : 'From Gallery', p.cap].filter(Boolean).join(' · '), cw)[0] || '', x, top + ch - 3);   // 2.93.0: office copy only
+    if (k === 0) {
+      newPage(); y += 12; heading('Photos'); y += 12; gtop = y; cw = (CW - (COLS - 1) * gap) / COLS;
+      ph = Math.min(cw * PHOTO_RATIO, (bottom - gtop - (ROWS - 1) * gap) / ROWS - capH);
+      rgap = Math.min(28, Math.max(gap, (bottom - gtop - ROWS * (ph + capH)) / (ROWS - 1)));
+    }
+    const x = M + (k % COLS) * (cw + gap), top = gtop + Math.floor(k / COLS) * (ph + capH + rgap);
+    photo(doc, p, { x, y: top, w: cw, h: ph });
+    font(8, 'normal', MUTED); doc.text(lines([d.client ? '' : p.at, d.client || !p.gal ? '' : 'From Gallery', p.cap].filter(Boolean).join(' · '), cw)[0] || '', x, top + ph + capH - 3);   // 2.93.0: office copy only
   });
   const over = pics.length ? (per - (pics.length % per)) % per : 0;
   doc.photoFit = { now: over, next: over + per };

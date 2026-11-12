@@ -89,10 +89,28 @@ export function spreadIds(ids, n = CLIENT_PHOTOS) {
 }
 export function clientIds(photos = [], pick = null) {
   const ids = photos.map(p => p.id);
-  if (ids.length <= CLIENT_PHOTOS) return ids;
+  // 3.0.2: a report from before the exact-12 rule with 12 or fewer photos and nothing ticked keeps them all
+  if (ids.length <= CLIENT_PHOTOS && !photos.some(p => p.client) && !Array.isArray(pick)) return ids;
   const chosen = Array.isArray(pick) ? pick : photos.filter(p => p.client).map(p => p.id);
   const keep = ids.filter(id => chosen.includes(id));
   return keep.length ? keep.slice(0, CLIENT_PHOTOS) : spreadIds(ids);
 }
-/** How many more the Site Engineer must tick (0 when 12 or fewer were taken, or 12 are ticked). */
-export const clientLeft = (photos = []) => (photos.length > CLIENT_PHOTOS ? Math.max(0, CLIENT_PHOTOS - photos.filter(p => p.client).length) : 0);
+/**
+ * 3.0.2 (owner, 12 Nov: "Only 12 photos should be selected in the pdf for the client for the pdf to finalize. Reject any
+ * amount more or less than 12"): what still stops the report. { take: photos still to take, tick: still to tick,
+ * untick: too many ticked }; all 0 = exactly 12 chosen.
+ */
+export function clientNeed(photos = []) {
+  const n = photos.filter(p => p.client).length;
+  return { take: Math.max(0, CLIENT_PHOTOS - photos.length), tick: Math.max(0, CLIENT_PHOTOS - n), untick: Math.max(0, n - CLIENT_PHOTOS) };
+}
+/** The line that stops the report ('' = exactly 12 chosen). */
+export function clientProblem(photos = []) {
+  const x = clientNeed(photos), s = k => (k > 1 ? 's' : '');
+  if (x.take) return `Take ${x.take} more photo${s(x.take)}: the client's report needs exactly ${CLIENT_PHOTOS}`;
+  if (x.untick) return `Untick ${x.untick} photo${s(x.untick)}: exactly ${CLIENT_PHOTOS} go to the client`;
+  if (x.tick) return `Choose ${x.tick} more photo${s(x.tick)} for the client (exactly ${CLIENT_PHOTOS})`;
+  return '';
+}
+/** How many more to tick (kept for older callers). */
+export const clientLeft = (photos = []) => clientNeed(photos).tick;

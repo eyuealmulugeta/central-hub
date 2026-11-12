@@ -67,7 +67,8 @@ export function photoGrid(r, c, { perPage = 0, cls = '', pick = false } = {}) {
   const list = photoList(r), proj = c.project?.fieldCode || '', pdf = r?.field?.pdf || '';
   if (!list.length || !proj || !pdf) return '';
   // v1.59.0 (owner, 12 Nov): with more than 12 photos, the 12 for the client are marked; the PE or GM changes them until approval
-  const many = list.length > CLIENT_PHOTOS, forClient = many ? clientIds(list, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : [];
+  const many = list.length > 0,   // v1.60.0: always (exactly 12)
+  forClient = many ? clientIds(list, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : [];
   const tag = p => !many ? '' : pick ? html`<button type="button" class="btn small ${forClient.includes(p.id) ? 'primary' : ''}" data-act="clientPick" data-id="${r.id}" data-v="${p.id}">${forClient.includes(p.id) ? '✓ For client' : '+ For client'}</button>`
     : forClient.includes(p.id) ? html`<span class="chip ok">For client</span>` : '';
   const fig = p => html`<figure class="ph"><img src="data:," alt="${p.caption || 'Site photo'}" data-fphoto="${proj}|${pdf}|${p.id}"><figcaption>${label(p)} ${tag(p)}</figcaption></figure>`;

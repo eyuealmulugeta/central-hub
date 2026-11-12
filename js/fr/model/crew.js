@@ -26,6 +26,20 @@ export function mergeStaff(rows, staff, gone = []) {
   return out;
 }
 
+/**
+ * 3.0.1 (owner, 12 Nov: "Add site engineer (Eyob) in attendance" -> "Always count the SE"): the Site Engineer who
+ * prepares the report is always on the day's attendance, present. Their row is kept if the office list has them
+ * (marked present when not marked yet); otherwise a row of their own is added.
+ */
+export const isSE = (role, position) => role === 'engineer' || /site\s*eng/i.test(String(position || ''));
+export function withPreparer(rows, profile = {}, role = '') {
+  const name = String(profile.name || '').trim();
+  if (!name || !isSE(role, profile.position)) return rows || [];
+  const list = [...(rows || [])], i = list.findIndex(r => String(r.name || '').trim().toLowerCase() === name.toLowerCase());
+  if (i >= 0) { if (!list[i].state) list[i] = { ...list[i], state: 'present', self: true }; return list; }
+  return [...list, { id: '', name, trade: String(profile.position || '').trim() || 'Site engineer', state: 'present', ot: 0, added: true, self: true }];
+}
+
 /** Head count, absentees, man-hours and manpower by trade for the day's working hours. */
 export const DAY_HOURS = 8;   // 2.47.0 (owner, 4 Nov): a day counts at most 8 normal hours, as Central Hub pays; overtime is added on top
 export function totals(crew, start, end) {

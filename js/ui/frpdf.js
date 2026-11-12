@@ -3,7 +3,7 @@
 // So Central Hub and Field Report give exactly the same PDF. The client copy is the same builder's client mode: no
 // photo times and no time under the signatures. Photos come from Drive through the server, like the report page.
 
-import { clientIds } from '../fr/model/pdfplan.js';   // v1.59.0
+import { clientIds, CLIENT_PHOTOS } from '../fr/model/pdfplan.js';   // v1.59.0; v1.60.0 exactly 12
 import { buildPdf, loadPdfLib, photoCaption, weatherFile } from '../fr/pdf.js';
 import { weatherTerm } from '../fr/model/report.js';
 import { fieldPhoto } from '../sync/fieldreport.js';
@@ -45,6 +45,7 @@ export async function frPdf(c, r, client = false, v = 0) {
     const photos = [];
     // v1.59.0 (owner, 12 Nov): the client copy has only the 12 photos for the client (the PE or GM may have changed them)
     const all = rec.full.r.photos || [], ids = client ? clientIds(all, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : all.map(p => p.id);
+    if (client && ids.length !== CLIENT_PHOTOS) { tell(`The client copy needs exactly ${CLIENT_PHOTOS} photos for the client (${ids.length} now). Choose them on the report page.`); return; }   // v1.60.0
     for (const ph of all.filter(p => ids.includes(p.id))) {
       const b64 = await fieldPhoto(code, rec.pdf, ph.id).catch(() => '');
       if (!b64) continue;

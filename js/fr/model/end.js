@@ -8,7 +8,7 @@ import { openPlanned } from './report.js';
 import { itemLine, itemReady, workMeta } from './items.js';
 import { manpowerMeta, attendanceRows, totals } from './crew.js';
 import { dayMeta, photoNeedsCaption } from './day.js';
-import { clientLeft } from './pdfplan.js';
+import { clientProblem } from './pdfplan.js';
 
 export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Expense', 'Other'];
 // 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PE
@@ -87,8 +87,8 @@ export function checks(r, profile = {}) {
   const caps = r.photos.filter(photoNeedsCaption).length;
   if (caps) w('photos', `${plural(caps, 'photo')} without a caption`);
   if (!r.photos.length) w('photos', 'No photos today');
-  const left = clientLeft(r.photos);   // 2.99.0 (owner): 12 photos for the client
-  if (left) out.push({ step: 'photos', level: 'need', text: `Choose ${left} more photo${left > 1 ? 's' : ''} for the client (12 in all)` });
+  const pick = clientProblem(r.photos);   // 2.99.0; 3.0.2 (owner): exactly 12 photos for the client, no more, no less
+  if (pick) out.push({ step: 'photos', level: 'need', text: pick });
   if (!(r.plan || []).filter(planReady).length) w('end', 'No plan for tomorrow');
   if (!String(profile.name || '').trim()) out.push({ step: 'me', level: 'need', text: 'Your name is missing' });
   if (!profile.sig || !r.signed) out.push({ step: 'sign', level: 'need', text: profile.sig ? 'Tap your signature below' : 'Sign the report below' });

@@ -237,7 +237,7 @@ function sheet(r, c, { reviewing: inReview = false } = {}) {
     ${sec('Safety', html`<p>${f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : 'Not stated'}${f.toolbox == null ? '' : f.toolbox ? '. Toolbox talk held.' : '. No toolbox talk.'}</p>${f.safetyNotes?.length ? ul(f.safetyNotes) : ''}`, '', 'safety')}
     ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
     ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
-    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, html`${photoList(r).length > CLIENT_PHOTOS ? html`<p class="muted">${clientIds(photoList(r), Array.isArray(f.clientPick) ? f.clientPick : null).length} of ${CLIENT_PHOTOS} photos go in the client copy; all go to the office and the Dashboard.${pickOk(r) ? ' Change them until the report is approved.' : ''}</p>` : ''}${photoGrid(r, c, { pick: pickOk(r) })}`, '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
+    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, html`${photoList(r).length ? html`<p class="muted">${clientIds(photoList(r), Array.isArray(f.clientPick) ? f.clientPick : null).length} of ${CLIENT_PHOTOS} chosen for the client copy (exactly ${CLIENT_PHOTOS} needed); all go to the office and the Dashboard.${pickOk(r) ? ' Change them until the report is approved.' : ''}</p>` : ''}${photoGrid(r, c, { pick: pickOk(r) })}`, '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
     ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
   </div>`;
 }

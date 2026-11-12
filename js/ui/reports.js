@@ -62,12 +62,25 @@ let tab = '';           // 'list' (the reports) or 'enter' (the Daily report for
 const spot = { list: null, code: '', busy: false, err: '', tone: '', about: '' };
 const TONE = { pos: ['Positive', 'ok'], neg: ['Negative', 'bad'] };
 /** v0.49.0: Field Report's Spotlight notes once loaded, in Central Hub's shape (for the evaluation facts). */
-export const spotNotes = projectName => fromField(spot.list, projectName);
+export const spotNotes = projectName => fromField(spotsOf(spot.code), projectName);
 export function spotRows(list, { tone = '', about = '' } = {}) {
   return (list || []).filter(x => (!tone || (tone === 'visit' ? !!x.visit : x.tone === tone)) && (!about || x.about === about));
 }
 /** v0.93.0 (R3): the visitors logged on site (Field Report 2.49.0), once the site notes are loaded. */
-export const siteVisits = () => (spot.list || []).filter(x => x.visit);
+export const siteVisits = () => (spotsOf(spot.code) || []).filter(x => x.visit);
+/**
+ * v1.53.0 (owner, 12 Nov: "sync spotlight photos and notes ... at the moment they are logged and posted"): the notes the
+ * script keeps, with the live copies the phones write to siteSpots (FR 2.92.0) on top, newest first, each note once.
+ * null until either has something.
+ */
+export function mergeSpots(list, live, code) {
+  const mine = (live || []).filter(x => x && String(x.proj || '').toUpperCase() === code);
+  if (!list && !mine.length) return null;
+  const byId = new Map((list || []).map(x => [x.id, x]));
+  for (const x of mine) { const had = byId.get(x.id); byId.set(x.id, had ? { ...had, ...x, media: (x.media || []).length ? x.media : had.media } : x); }
+  return [...byId.values()].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+}
+export const spotsOf = code => mergeSpots(spot.list, store.siteSpots, String(code || '').toUpperCase());
 /** v0.93.0: Today asks for the site notes of the open project too (the Admin and HR only, as the Spotlight page). */
 export function loadSiteNotes(c) {
   const code = String(c.project.fieldCode || '').toUpperCase();
@@ -78,14 +91,15 @@ function spotCard(c) {
   const code = String(c.project.fieldCode || '').toUpperCase();
   if (spot.code !== code) Object.assign(spot, { list: null, code, err: '', tone: '', about: '' });
   if (code && !spot.list && !spot.busy && !spot.err) queueMicrotask(() => actions.spotLoad());   // v0.30.1: loads by itself, no extra click
-  const rows = spotRows(spot.list, spot), abouts = [...new Set((spot.list || []).map(x => x.about))].sort();
-  const pos = (spot.list || []).filter(x => x.tone === 'pos').length, neg = (spot.list || []).filter(x => x.tone === 'neg').length, visits = (spot.list || []).filter(x => x.visit).length;
+  const L = spotsOf(code);   // v1.53.0: with the live notes
+  const rows = spotRows(L, spot), abouts = [...new Set((L || []).map(x => x.about))].sort();
+  const pos = (L || []).filter(x => x.tone === 'pos').length, neg = (L || []).filter(x => x.tone === 'neg').length, visits = (L || []).filter(x => x.visit).length;
   // v0.31.1: on the page: a photo as a picture, a video in Drive's player (it plays here); a tap on a photo opens it large
   const media = x => html`<div class="spot-media">${(x.media || []).map(m => /^video/.test(m.type)
     ? html`<iframe src="https://drive.google.com/file/d/${m.fileId}/preview" title="Video from the site" allow="autoplay; fullscreen" allowfullscreen loading="lazy"></iframe>`
     : html`<a href="https://drive.google.com/file/d/${m.fileId}/view" target="_blank" rel="noopener"><img src="https://drive.google.com/thumbnail?id=${m.fileId}&sz=w800" alt="Photo from the site" loading="lazy"></a>`)}</div>`;
   // v0.34.0: a modern page: figures on top, filter chips, the notes as cards grouped by day
-  const people = new Set((spot.list || []).filter(x => !x.visit).map(x => x.about).filter(a => a && !/project/i.test(a))).size;
+  const people = new Set((L || []).filter(x => !x.visit).map(x => x.about).filter(a => a && !/project/i.test(a))).size;
   const initials = n => String(n || '?').split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const days = [...new Set(rows.map(x => String(x.at).slice(0, 10)))];
   // v0.93.0: a visitor card: who, from where, when, why, the summary, photos and the signature
@@ -105,14 +119,14 @@ function spotCard(c) {
       <div class="spot-tags"><span>${x.cat}</span><span>${x.about}</span></div>
       ${x.note ? html`<p class="spot-note">${x.note}</p>` : ''}${x.media?.length ? media(x) : ''}</article>`;
   const chipBtn = (v, label, n) => html`<button type="button" class="spot-chip ${spot.tone === v ? 'on' : ''} ${v}" data-act="spotToneSet" data-v="${v}" aria-pressed="${spot.tone === v}">${label}<span>${n}</span></button>`;
-  return html`${hubNotes(c)}<section class="card spot-page"><div class="card-head"><h2>Spotlight from Field Report</h2><span class="muted">Notes from the site, for Central Hub only. Not in the report.</span><span class="grow"></span>
+  return html`${hubNotes(c)}<section class="card spot-page"><div class="card-head"><h2>Spotlight from Field Report</h2><span class="muted">Notes from the site, for Central Hub only. Not in the report. New notes appear here live.</span><span class="grow"></span>
       ${code ? html`<button type="button" class="btn small" data-act="spotLoad" ${spot.busy ? 'disabled' : ''}>${spot.busy ? 'Asking Field Report…' : spot.list ? '↻ Check again' : 'Show the notes'}</button>` : ''}</div>
     ${!code ? html`<p class="muted">This project has no Field Report code.</p>` : html`
     ${spot.err ? html`<p class="notice warn">${spot.err}</p>` : ''}
-    ${spot.list ? html`<div class="spot-kpis">
-        <div><b>${spot.list.length}</b><span>Notes</span></div><div class="pos"><b>${pos}</b><span>Positive</span></div>
+    ${L ? html`<div class="spot-kpis">
+        <div><b>${L.length}</b><span>Notes</span></div><div class="pos"><b>${pos}</b><span>Positive</span></div>
         <div class="neg"><b>${neg}</b><span>Negative</span></div><div><b>${people}</b><span>People named</span></div><div class="visit"><b>${visits}</b><span>Visitors</span></div></div>
-      <div class="spot-filter">${chipBtn('', 'All', spot.list.length)}${chipBtn('pos', 'Positive', pos)}${chipBtn('neg', 'Negative', neg)}${chipBtn('visit', 'Visitors', visits)}
+      <div class="spot-filter">${chipBtn('', 'All', L.length)}${chipBtn('pos', 'Positive', pos)}${chipBtn('neg', 'Negative', neg)}${chipBtn('visit', 'Visitors', visits)}
         <select data-chg="spotAbout" aria-label="About"><option value="">Everyone and the project</option>${options(abouts.map(a => [a, a]), spot.about)}</select></div>
       ${rows.length ? days.map(d => html`<h4 class="spot-day">${fmtDate(d)}</h4><div class="spot-grid">${rows.filter(x => String(x.at).startsWith(d)).map(card)}</div>`)
         : html`<p class="empty">No note here.</p>`}` : spot.busy ? html`<p class="muted">Asking Field Report…</p>` : ''}`}</section>`;

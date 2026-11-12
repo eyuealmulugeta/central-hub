@@ -13,7 +13,7 @@ export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const EXECUTIVE = 'Executive';
 export const isExecutive = title => norm(title) === 'executive';
 /** Central Hub pages an Executive reads: every page but crew pay (Payments). Pay and HR stay closed in the rules. */
-export const EXEC_PAGES = [...GRANTABLE.map(([k]) => k).filter(k => k !== 'payments'), 'master'];   // master: v1.48.0
+export const EXEC_PAGES = [...GRANTABLE.map(([k]) => k).filter(k => k !== 'payments'), 'master', 'discovery'];   // discovery: v1.52.0   // master: v1.48.0
 
 /** The status words of a row. */
 export const STATUS = { admin: 'Admin', active: 'Active', none: 'No access', removed: 'Removed', left: 'Left', noEmail: 'No sign-in email' };

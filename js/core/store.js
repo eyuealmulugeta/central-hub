@@ -54,6 +54,7 @@ const pingFns = new Set();         // v0.37.0: listeners of fieldPing (Field Rep
 let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Report phones read their data
 let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
 let feed = null;   // v1.2.0 (G5): datafeed/latest
+let siteSpots = [];   // v1.53.0 (FR 2.92.0): Spotlight notes and visitors, live from the phones (the Admin and the GM)
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
 let rcpt = { ch: [], dm: [], c: false, d: false };
 let people = null;   // v1.38.0: directory/people (Discuss names, positions, projects)   // v1.37.0: Discuss receipts (engine/receipts.js)
@@ -146,6 +147,8 @@ function startPresence() {
   document.addEventListener('visibilitychange', vis);
   shared.push(() => { clearInterval(t); document.removeEventListener('visibilitychange', vis); });
   // v1.2.0 (G5): the data tracker's summary, made by the server
+  // v1.53.0 (owner, 12 Nov): Spotlight from Field Report the moment a phone sends it; the rules give it to the Admin and the GM
+  if (role === 'owner') shared.push(api.watchCol('siteSpots', docs => { siteSpots = docs; emit(); }, () => {}, ['at', '>=', new Date(Date.now() - 62 * 864e5).toISOString()]));
   if (role === 'owner' || role === 'office') shared.push(api.watchDoc('datafeed/latest', d => { feed = d; emit(); }, () => {}));
   // v1.1.0 (G4): the outgoing register
   if (seesSignins(role, ranks)) shared.push(api.watchCol('outgoing', docs => { outs = docs; emit(); }, () => {}));
@@ -342,7 +345,8 @@ export const store = {
       execView = role === 'office' && mine.readOnly === true;   // v1.47.0: Executive
       gmView = !execView && isGMRanks(role, ranks);
       if (gmView && !pages.includes('payments')) pages = [...pages, 'payments'];   // the rules give the GM Payments too
-      if (execView && !pages.includes('master')) pages = [...pages, 'master'];   // v1.48.0 (M1–M4): the Executive reads the Master page
+      if (execView && !pages.includes('master')) pages = [...pages, 'master'];
+      if (execView && !pages.includes('discovery')) pages = [...pages, 'discovery'];   // v1.52.0 (Discovery)   // v1.48.0 (M1–M4): the Executive reads the Master page
       divisions = Array.isArray(mine.divisions) ? mine.divisions : [];
       // nobody comes in before the Admin has chosen their department
       if (!divisionsOf({ role, divisions }).length) { role = null; return 'unassigned'; }
@@ -446,6 +450,7 @@ export const store = {
   /** v0.33.0: one record written straight to the database (a crew form link made by someone who does not load the list). */
   cloudPut(path, data) { if (!api?.set) throw new Error('Not signed in to the cloud.'); return api.set(path, data); },
   /** v1.46.0 (QA B1): the server's weekly copy: its status (system/backup) and the file, for the Admin. */
+  async discoveryStatus() { return api ? api.get('system/discovery').catch(() => null) : null; },   // v1.52.0
   async serverBackup() { return api ? api.get('system/backup').catch(() => null) : null; },
   async serverBackupFile() {
     if (!api?.idToken) throw new Error('Not signed in to the cloud.');
@@ -924,6 +929,7 @@ export const store = {
   get activity() { return acts; },   // v0.99.0
   get outgoing() { return outs; },   // v1.1.0 (G4)
   get datafeed() { return feed; },   // v1.2.0 (G5)
+  get siteSpots() { return siteSpots; },   // v1.53.0
   /** v1.1.0 (G4): one record of the outgoing register (engine/outgoing.js), shown at once and saved. */
   putOutgoing(rec) {
     outs = [...outs.filter(x => x.id !== rec.id), rec]; emit();

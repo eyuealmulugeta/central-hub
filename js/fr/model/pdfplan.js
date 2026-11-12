@@ -56,3 +56,22 @@ export function sectionsOf(r, { progress = [], plan = [], requests = [] } = {}) 
     instructions: !!String(r.instructions || '').trim(),
   };
 }
+
+/**
+ * 2.96.0 (owner R7, layout A): the PDF's progress chart. Each task of Central Hub's schedule (setup.tasks, still open,
+ * and setup.finished, done) against its total amount of work: done before today and done today (this report's work
+ * items against the task). A task kept in percent has a total of 100 and the unit '%'.
+ */
+export function progressRows(setup = {}, items = []) {
+  const today = new Map();
+  for (const i of items || []) if (i && i.taskId && Number(i.qty) > 0) today.set(i.taskId, (today.get(i.taskId) || 0) + Number(i.qty));
+  const row = (t, done) => {
+    const pct = !(Number(t.total) > 0), total = pct ? 100 : Number(t.total);
+    const before = Math.min(total, Math.max(0, Number(done) || 0));
+    return { name: String(t.name || ''), unit: pct ? '%' : String(t.unit || ''), total, before, now: Math.min(total - before, today.get(t.id) || 0) };
+  };
+  return [
+    ...((setup || {}).finished || []).filter(t => t && t.name).map(t => row(t, Number(t.total) > 0 ? t.total : 100)),
+    ...((setup || {}).tasks || []).filter(t => t && t.name).map(t => row(t, t.done)),
+  ];
+}

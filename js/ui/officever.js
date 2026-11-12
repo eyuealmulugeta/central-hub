@@ -58,7 +58,7 @@ export function officeFull(full, { weather, draft, at }) {
   if (weather && FR_WEATHER.includes(weather)) r.start = { ...(r.start || {}), cond: weather };
   r.photos = [
     ...(r.photos || []).filter(p => !draft.gone.includes(p.id)).map(p => (draft.cap[p.id] != null ? { ...p, caption: draft.cap[p.id] } : p)),
-    ...draft.added.map(p => ({ id: p.id, at, caption: galleryCap(p.cap), gallery: true })),
+    ...draft.added.map(p => ({ id: p.id, at, caption: p.cap || '', gallery: true })),   // v1.55.0: the flag only; the PDF labels the office copy
   ];
   return { ...full, r };
 }

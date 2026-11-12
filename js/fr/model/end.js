@@ -139,7 +139,7 @@ export function reportMeta(r, project, profile = {}) {
     photos: r.photos.length,
     photoTags: r.photos.map(p => ({ caption: p.caption || p.captionKind || '', time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '' })),
     // 2.1.0: the photos sent to Drive with this report (the script fills in fileId)
-    photoFiles: r.photos.map(p => ({ id: p.id, caption: `${p.gallery ? 'From gallery: ' : ''}${p.caption || p.captionKind || ''}`,   // 2.32.0: a GM's gallery photo says so
+    photoFiles: r.photos.map(p => ({ id: p.id, caption: p.caption || p.captionKind || '', ...(p.gallery ? { gallery: true } : {}),   // 2.93.0: a gallery photo is flagged; only the office copy says so
       time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '',
       ...(p.crew ? { crew: { st: p.crew.st, tags: p.crew.tags || [], geo: p.crew.geo || null } } : {}) })),   // 2.22.0: the crew photo's tag and place, for Central Hub's attendance sheet
   };

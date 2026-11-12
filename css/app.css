@@ -2146,3 +2146,28 @@ body.presenting #subrow { display: none; }
   .ms-table td::before { content: attr(data-l); color: var(--muted); font-weight: 400; }
   .ms-table td:first-child::before { content: none; }
 }
+
+/* v1.52.0 (Discovery): headline cards, phone first; every tap at least 44 px */
+.dv-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.dv-tab { min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 22px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.dv-tab.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.dv-tab small { opacity: .75; margin-left: 4px; }
+.dv-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-top: 10px; }
+.dv-item { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dv-title { font-weight: 600; color: var(--primary); text-decoration: none; overflow-wrap: anywhere; }
+.dv-title:hover { text-decoration: underline; }
+.dv-meta { font-size: .85em; }
+.dv-sum { margin: 0; overflow-wrap: anywhere; }
+.dv-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+.dv-acts .btn, .dv-links .btn { min-height: 44px; display: inline-flex; align-items: center; }
+.dv-ref { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+.dv-ref summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; flex-wrap: wrap; gap: 4px; }
+.dv-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.dv-cols h4 { margin: 6px 0 2px; }
+.dv-cols ul { margin: 0; padding-left: 18px; }
+.dv-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.dv-foot { margin-top: 12px; }
+@media (max-width: 700px) { .dv-list { grid-template-columns: 1fr; } .dv .actions input[type=search] { flex: 1 1 100%; } }
+
+/* v1.53.0: the site's Spotlight photo on the Dashboard */
+.xspot-pic { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; flex: none; }

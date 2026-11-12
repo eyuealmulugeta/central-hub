@@ -333,8 +333,20 @@ export function onSite(member, staff = []) {
   return !OFFICE_ROLE.test(String(member.role || ''));
 }
 
+/**
+ * v1.54.0 (owner, 12 Nov, R3: "include SE and PE in report attendance"): the Site Engineer and the Project Engineer (or
+ * Project Manager) are on the site's attendance roll in Field Report even when their HR department is an office one, so
+ * the report counts them (by trade in the copy for the client, by name on the office's attendance page). Crew pay is
+ * not changed: Payments and the pay link still use onSite, and their labour cost needs a day rate set for that trade.
+ */
+const ENGINEER = /\b(site engineer|project engineer|project manager)\b/i;
+export function onRoll(member, staff = []) {
+  const person = member.personId ? staff.find(p => p.id === member.personId) : null;
+  return onSite(member, staff) || ENGINEER.test(String(member.role || '')) || ENGINEER.test(String(person?.title || ''));
+}
+
 export function buildSetup({ project, ws, sched, bill, people = [], company = {} }, today) {
-  const site = ws.team.filter(m => onSite(m, company.staff || []));
+  const site = ws.team.filter(m => onRoll(m, company.staff || []));   // v1.54.0: with the SE and PE
   const triggers = new Set((bill?.stages || []).map(s => s.taskId).filter(Boolean));
   const open = sched.rows.filter(r => r.progress < 100);
   return {
@@ -344,6 +356,8 @@ export function buildSetup({ project, ws, sched, bill, people = [], company = {}
       // who the schedule gives the task to, so the site can see whose it is
       assigneeId: r.assigneeId || '', assignee: ws.team.find(m => m.id === r.assigneeId)?.name || '',
     })),
+    // v1.57.0 (owner R7): the finished tasks too, so the report's progress chart shows the whole job
+    finished: sched.rows.filter(r => r.progress >= 100 && !r.milestone).map(r => ({ id: r.id, name: r.name, unit: r.qtyTotal ? r.unit || '' : '%', total: r.qtyTotal || 0 })),
     // a milestone the site can report as reached; the ones that release a payment are marked
     milestones: open.filter(r => r.milestone).map(r => ({ id: r.id, name: r.name, payment: triggers.has(r.id) })),
     crew: site.map(m => ({ id: m.id, name: m.name, role: normRole(m.role) })),   // v0.39.0: merged positions as the one they became (Foreman)

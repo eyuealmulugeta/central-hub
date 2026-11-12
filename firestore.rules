@@ -257,6 +257,20 @@ service cloud.firestore {
     }
 
     // Written only by the server (functions/, Admin SDK): the Field Report import status. Office and the Admin read it.
+    // v1.53.0 (owner, 12 Nov; FR 2.92.0): Spotlight notes and visitors, live. The phone writes its own note after the script
+    // keeps it; only the Admin and the GM read them (a note about a person is never shown to that person or the office).
+    match /siteSpots/{id} {
+      allow read: if seesAll();
+      allow create: if request.resource.data.id == id && request.resource.data.by == me() && fieldOn(request.resource.data.pid)
+        && request.resource.data.keys().hasOnly(['id', 'pid', 'proj', 'at', 'madeAt', 'by', 'byName', 'about', 'tone', 'cat', 'note', 'media', 'visit']);
+      allow update: if resource.data.by == me() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visit']);
+      allow delete: if isOwner() && !readOnlyUser();
+    }
+    // v1.52.0 (Discovery): news headlines, written only by the server (functions/discovery.js)
+    match /discovery/{id} {
+      allow read: if seesAll() || isOffice();
+      allow write: if false;
+    }
     match /system/{doc} {
       allow read: if seesAll() || isOffice();
       allow write: if false;

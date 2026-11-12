@@ -81,6 +81,7 @@ export function mayOpen(role, pages, page, ranks = []) {
   if (page === 'outgoing') return role === 'owner' || role === 'office';   // v1.1.0 (G4): everyone in the office; each sees their own, Tier 1 all
   if (page === 'crewforms') return role === 'owner' || ranks.includes('general_manager');   // v0.41.0: crew form links: the Admin and the GM only
   if (page === 'logsheet') return role === 'owner' || (role === 'office' && pages.includes('docs'));   // v0.51.0: Office with Invoices and documents; Site never loads it
+  if (page === 'discovery') return role === 'owner' || isGMRanks(role, ranks) || (role === 'office' && pages.includes('discovery'));   // v1.52.0: Admin, GM, Executive
   if (page === 'master') return role === 'owner' || isGMRanks(role, ranks) || (role === 'office' && pages.includes('master'));   // v1.48.0 (M1–M4): Admin, GM, Executive (never ticked for others)
   if (isGMRanks(role, ranks) && GM_PAGES.includes(permKey(page))) return true;   // v1.48.0 (owner R2)
   if (page === 'peopleaccess') return role === 'owner' || (role === 'office' && ranks.includes('general_manager'));   // v1.47.0: People & Access, the Admin and the GM
@@ -179,6 +180,7 @@ export const APPS = [
   { group: 'People pages', about: 'The pages of People', apps: [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
     { page: 'employment', name: 'Agreement', does: 'Employment agreements' },
+    { page: 'discovery', name: 'Discovery', does: 'News: the K-HOME partner, installation and new technology; trading markets and leads. The Admin, the GM and the Executive', fixed: true },   // v1.52.0
     { page: 'master', name: 'Master', does: 'The whole company on one read-only page: the Admin, the GM and the Executive', fixed: true },   // v1.48.0
     { page: 'directory', name: 'Manpower Directory', does: 'The one source of every person, with their Central Hub and Field Report ticks (the Admin and the GM): always on', fixed: true },
     { page: 'officeatt', name: 'Office attendance', does: 'Attendance of the office staff' },

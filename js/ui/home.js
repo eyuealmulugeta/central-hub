@@ -25,7 +25,7 @@ import { topicLabel } from '../engine/spotlight.js';
 import { prefs } from '../core/prefs.js';
 import { orderOf } from '../core/nav.js';
 import { openArrange } from './quick.js';
-import { siteVisits, loadSiteNotes } from './reports.js';
+import { siteVisits, loadSiteNotes, spotsOf } from './reports.js';
 
 // v0.95.1 (owner, 5 Nov): the all-projects choice is gone; the Dashboard is about the project open in the chooser
 
@@ -324,7 +324,7 @@ export function render(c) {
   const summaries = c.summaries || [];
   const meetings = [...(c.company.meetings || []).filter(m => !me() || m.by === me() || (m.invitees || []).some(i => i.email === me())), ...(c.company.bookings || [])];
   const others = summaries.filter(s => s.project.id !== c.project.id);
-  const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
+  const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), autoDrafts: store.canApprove ? (c.ws.docs || []).filter(d => d.type === 'report' && d.auto && d.status === 'draft') : [], bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
     .filter(n => n.projectId === c.project.id);
   // v1.28.0 (owner, 8 Nov): a notice taken away with × (or all with Clear) stays away for this person
   const gone = new Set(prefs.get(NEEDS_GONE) || []);
@@ -343,7 +343,10 @@ export function render(c) {
   // v0.93.0 (R3): with the visitors logged on site (Field Report Spotlight > Visitors)
   if (may('spotlight') && (store.isAdmin || (store.ranks || []).includes('hr_assistant'))) loadSiteNotes(c);
   const visits = may('spotlight') ? siteVisits().filter(x => String(x.at).slice(0, 10) >= since).map(x => ({ visit: x.visit, at: x.at, date: String(x.at).slice(0, 10), byName: x.byName || x.by, note: x.note })) : [];
-  const spot = may('spotlight') ? [...(c.company.spotlight || []).filter(n => n.kind === 'project' && n.projectId === c.project.id && n.date >= since), ...visits]
+  // v1.53.0 (owner, 12 Nov): the site's Spotlight notes too, live, with their first photo (the Admin and the GM)
+  const siteNotes = may('spotlight') && store.role === 'owner' ? (spotsOf(c.project.fieldCode) || []).filter(x => !x.visit && String(x.at).slice(0, 10) >= since)
+    .map(x => ({ fr: true, tone: x.tone, at: x.at, date: String(x.at).slice(0, 10), byName: x.byName || x.by, note: `${x.cat} · ${x.about}${x.note ? `: ${x.note}` : ''}`, pic: (x.media || []).find(m => !/^video/.test(m.type))?.fileId || '' })) : [];
+  const spot = may('spotlight') ? [...(c.company.spotlight || []).filter(n => n.kind === 'project' && n.projectId === c.project.id && n.date >= since), ...visits, ...siteNotes]
     .sort((a, b) => String(b.at || b.date).localeCompare(String(a.at || a.date))) : [];
   // v1.27.0 (owner, 8 Nov): Spotlight by the days of this week, like the photos; a day opens its notes and visitors
   const sDay = wk.includes(spotDay) && spotDay <= c.today ? spotDay : c.today, spotOn = spot.filter(n => n.date === sDay);
@@ -377,6 +380,7 @@ export function render(c) {
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
           <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`])), { n: String(needs.length), link: ['notifications', 'All'] }),
     spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><a class="xrowlink" href="#spotlight"><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></a></li>`
+      : n.fr ? html`<li><a class="xrowlink" href="#spotlight"><span class="tag ${n.tone === 'neg' ? 'bad' : 'ok'}">${n.tone === 'neg' ? 'Negative' : 'Positive'}</span>${n.pic ? html`<img class="xspot-pic" src="https://drive.google.com/thumbnail?id=${n.pic}&sz=w160" alt="" loading="lazy">` : ''}<span class="xt"><b>${n.note}</b><br><small>Site · ${n.byName} · ${fmtDate(n.date)}</small></span></a></li>`
       : html`<li><a class="xrowlink" href="#spotlight"><span class="tag info">${topicLabel(n.topic)}</span><span class="xt"><b>${n.note}</b><br><small>${n.byName || n.by} · ${fmtDate(n.date)}</small></span></a></li>`)}</ul>`, { n: `${spot.filter(x => x.date >= wk[0]).length} this week`, link: ['spotlight', 'All'] }),
     requests: () => requestsBox(reqs),
     book: () => bookBox(book),

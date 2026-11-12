@@ -49,7 +49,7 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, bills = [], level = 0, me = '', settings = null }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, autoDrafts = [], bills = [], level = 0, me = '', settings = null }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
   if (approver) {
@@ -69,6 +69,8 @@ export function needsYou({ project, flags, requests = [], others = [], approver 
   if (dueBills.length) out.push({ sev: 'warn', kind: 'Supplier bills', title: `${dueBills.length} supplier bill${dueBills.length > 1 ? 's' : ''} due within 7 days`, detail: dueBills.map(b => b.supplier).join(', '), link: 'ledger', projectId: project.id, project: project.name });
   // v0.66.0 (owner): every Sunday, the week's client report
   if (weekly) out.push({ sev: 'warn', kind: 'Weekly report', title: `Weekly report ready to send: ${project.name}`, detail: 'Made from this week\'s approved daily reports. Choose 6 to 12 photos, approve and email it.', link: 'docs', projectId: project.id, project: project.name });
+  // v1.58.0 (owner R8): a weekly or monthly client report the server drafted, waiting for the owner's approval
+  for (const d of autoDrafts) out.push({ sev: 'warn', kind: 'Client report', title: `${d.kind === 'monthly' ? 'Monthly' : 'Weekly'} report ready for your approval: ${project.name}`, detail: `${d.number}, ${d.period?.from || ''} to ${d.period?.to || ''}. Made by itself with the photos chosen; check it and approve in Documents.`, link: 'docs', projectId: project.id, project: project.name });
   // v0.64.0: this person's meetings later today
   for (const m of meetings) {
     const t = Date.parse(m.start);

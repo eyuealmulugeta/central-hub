@@ -6,7 +6,8 @@
 import { store } from '../core/store.js';
 import { isOut, poPublic } from '../engine/purchases.js';   // v1.4.0 (R6)
 import { METHODS, invoiceLines, makeDoc, nextNumber, docTotals } from '../engine/billing.js';
-import { reportSnapshot, weekOf, photoPool, PHOTOS_MIN, PHOTOS_MAX } from '../engine/report.js';
+import { reportSnapshot, weekOf, monthOf, photoPool, PHOTOS_MIN, PHOTOS_MAX } from '../engine/report.js';
+import { periodPdf } from './periodpdf.js';   // v1.58.0 (owner R8): layout A
 import { performanceReport } from '../engine/performance.js';
 import { paySheet, delayRecord } from '../engine/site.js';
 import { uid, money, num, fmtDate, fmtFull, fmtDay, toDay, fromDay, sum, clamp } from '../core/util.js';
@@ -28,6 +29,7 @@ let sel = null;       // { kind: 'doc', id } | { kind: 'report' } | { kind: 'sch
 let notice = '';
 let period = 'weekly';
 let endDate = '';
+let startDate = '';   // v1.58.0 (owner R8): the first day of a custom range
 
 /** Open a saved document from outside this screen (search, quick links). */
 export const focusOn = id => { tab = 'docs'; sel = { kind: 'doc', id }; notice = ''; };
@@ -43,7 +45,7 @@ const NEXT = {
 };
 const STATUS_CLS = { draft: '', sent: 'info', paid: 'ok', accepted: 'ok', delivered: 'ok', issued: 'ok' };
 const STATUS_LABEL = { done: 'Done', late: 'Overdue', active: 'In progress', pending: 'Not started' };
-const PERIODS = { daily: ['Daily', 1], weekly: ['Weekly', 7], monthly: ['Monthly', 30] };
+const PERIODS = { daily: ['Daily', 1], weekly: ['Weekly', 7], monthly: ['Monthly', 30], custom: ['Custom', 0] };   // v1.58.0: Custom
 const QUOTE_VALID_DAYS = 30;
 // v0.53.0: the sign-off boxes a person may sign with the stamp tick box (ui/seal.js); the client's box is never theirs
 const HOUSE_SIGN = ['Prepared by', 'Approved by'];
@@ -61,6 +63,9 @@ const liveRange = c => {
   const to = endDate || c.today;
   // v0.66.0: a week is Monday to Sunday
   if (period === 'weekly') return weekOf(to);
+  // v1.58.0 (owner R8): a month is the calendar month (up to the chosen day); Custom is any range
+  if (period === 'monthly') { const [f, l] = monthOf(to); return [f, l < to ? l : to]; }
+  if (period === 'custom') { const f = startDate && startDate <= to ? startDate : fromDay(toDay(to) - 13); return [f, to]; }
   return [fromDay(toDay(to) - PERIODS[period][1] + 1), to];
 };
 
@@ -75,7 +80,7 @@ const chosenPhotos = (c, doc) => {
 function photoPicker(c, doc) {
   const pool = photoPool(c.ws, doc.period.from, doc.period.to), proj = c.project.fieldCode || '';
   const on = new Set((doc.photos || []).map(p => `${p.pdf}|${p.id}`));
-  if (!pool.length || !proj) return html`<p class="muted no-print">No site photos in this week's approved reports.</p>`;
+  if (!pool.length || !proj) return html`<p class="muted no-print">No site photos in the approved reports of this period.</p>`;
   return html`<details class="card no-print wk-pick" open><summary>Photos for the client: ${on.size} chosen (choose ${PHOTOS_MIN} to ${PHOTOS_MAX})</summary>
     <div class="ph-grid">${pool.map(p => html`<button type="button" class="ph pick ${on.has(p.key) ? 'on' : ''}" data-act="pickPhoto" data-k="${p.key}" aria-pressed="${on.has(p.key)}" title="${on.has(p.key) ? 'Leave out' : 'Add to the report'}">
       <img src="data:," alt="" data-fphoto="${proj}|${p.pdf}|${p.id}"><span>${on.has(p.key) ? '✓ ' : ''}${fmtDate(p.date)}${p.caption ? ` · ${p.caption}` : ''}</span></button>`)}</div></details>`;
@@ -604,9 +609,11 @@ export function render(c) {
           : 'Waiting for the Admin or an assigned approver.'}</span>
         <span class="grow"></span>
         ${draft ? html`<button class="btn" data-act="refreshReport" title="Rebuild the figures from the latest data, keeping your remarks">Refresh figures</button>` : html`${sealBar(`doc:${doc.id}`, REPORT_SIGN, { ref: doc.number, type: 'report', projectId: c.project.id })}${EMAIL_BUTTON}`}
+        <button class="btn" data-act="periodPdf" title="The report as a PDF in the daily report's layout: page 1 the data, then the photos">PDF</button>
         ${draft && store.canApprove ? html`<button class="btn primary" data-act="advance">Approve and issue</button>` : ''}
         ${draft || store.canApprove ? html`<button class="btn danger" data-act="remove">Delete</button>` : ''}
       </div>
+      ${doc.auto && draft ? html`<p class="muted no-print">Made by itself when the ${doc.kind === 'monthly' ? 'month' : 'week'} ended, with ${(doc.photos || []).length} photos spread over the ${doc.kind === 'monthly' ? 'month' : 'week'}. Check it, change the photos if you want, then approve.</p>` : ''}
       ${outBar('report', doc)}
       ${emailed(doc)}
       ${draft ? html`<label class="no-print">Remarks to the client
@@ -649,12 +656,13 @@ export function render(c) {
     preview = html`
       <div class="toolbar no-print">
         <div class="seg">${Object.entries(PERIODS).map(([k, [label]]) => html`<button class="${period === k ? 'on' : ''}" data-act="period" data-k="${k}">${label}</button>`)}</div>
-        <label class="inline">Up to <input type="date" data-chg="endDate" data-fk="r-end" value="${endDate || c.today}" max="${c.today}"></label>
-        <span class="muted">${period === 'weekly' ? `Live preview, Monday to Sunday, approved reports only. Save it to choose ${PHOTOS_MIN} to ${PHOTOS_MAX} photos.` : 'Live preview'}</span>
+        ${period === 'custom' ? html`<label class="inline">From <input type="date" data-chg="startDate" data-fk="r-start" value="${liveRange(c)[0]}" max="${endDate || c.today}"></label>` : ''}
+        <label class="inline">${period === 'custom' ? 'To' : 'Up to'} <input type="date" data-chg="endDate" data-fk="r-end" value="${endDate || c.today}" max="${c.today}"></label>
+        <span class="muted">${period !== 'daily' ? `Live preview, ${period === 'weekly' ? 'Monday to Sunday' : period === 'monthly' ? 'the calendar month' : 'the chosen days'}, approved reports only. Save it to choose ${PHOTOS_MIN} to ${PHOTOS_MAX} photos.` : 'Live preview'}</span>
         <span class="grow"></span>
         <button class="btn primary" data-act="createReport">Create client report</button>
       </div>
-      ${reportPaper(c, period, reportSnapshot(c, ...liveRange(c), { weekly: period === 'weekly' }))}`;
+      ${reportPaper(c, period, reportSnapshot(c, ...liveRange(c), { weekly: period !== 'daily' }))}`;
   } else if (sel?.kind === 'pay' || sel?.kind === 'claim') {
     preview = html`
       <div class="toolbar no-print">
@@ -718,7 +726,7 @@ export const actions = {
     const doc = {
       id: uid('d'), type: 'report', kind: period, number: nextNumber(c.ws.docs, 'report', c.project), date: c.today, due: '',
       status: 'draft', party: { name: '', address: '', contact: '', taxId: '', ...c.project.client },
-      period: { from, to }, remarks: '', data: reportSnapshot(c, from, to, { weekly: period === 'weekly' }), lines: [], subtotal: 0, amountDue: 0, photos: [],
+      period: { from, to }, remarks: '', data: reportSnapshot(c, from, to, { weekly: period !== 'daily' }), lines: [], subtotal: 0, amountDue: 0, photos: [],
     };
     store.update(ws => ws.docs.push(doc));
     sel = { kind: 'doc', id: doc.id };
@@ -733,6 +741,8 @@ export const actions = {
     store.update(ws => { const doc = current(ws); if (doc?.status === 'draft') doc.data[el.dataset.k].splice(+el.dataset.i, 1); });
   },
   period(el) { period = el.dataset.k; },
+  /** v1.58.0 (owner R8): the saved client report as a PDF in layout A (js/ui/periodpdf.js). */
+  periodPdf(el, c) { const d = current(c.ws); if (d) periodPdf(c, d); },
   /** v0.66.0: add a photo to the weekly report, or take it out; at most 12. */
   pickPhoto(el, c) {
     const d = current(c.ws);
@@ -903,6 +913,7 @@ ${body}`).catch(() => {});
 
 export const changes = {
   endDate(el) { endDate = el.value; },
+  startDate(el) { startDate = el.value; },   // v1.58.0 (owner R8)
   qLine(el) {
     store.update(ws => {
       const d = current(ws), l = d?.lines[+el.dataset.i];

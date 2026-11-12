@@ -62,7 +62,7 @@ export const resolve = page => REDIRECT[page] || page;
 
 // v0.22.0 (Hub 2, docs/plan-hub-makeover.md): the menu by job, not by department. Today first, then the open
 // project's work, and the Team pages (Discuss, Meetings, Settings) at the foot of the menu (`team: true`).
-const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'master', 'notifications', 'activity', 'signins', 'outgoing', 'datafeed'] };   // v1.43.0: Activity first of its group   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
+const today = { id: 'home', label: 'Dashboard', icon: 'home', tabs: ['home', 'master', 'discovery', 'notifications', 'activity', 'signins', 'outgoing', 'datafeed'] };   // v1.43.0: Activity first of its group   // signins: v0.98.0; engagement: v1.7.0; activity: v0.99.0; outgoing: v1.1.0
 // v0.92.0 (owner, 5 Nov, R2): Quick moved out of Today's tabs into the main menu
 const quickHub = { id: 'quick', label: 'Quick', icon: 'apps', tabs: ['quick'] };   // quick: v0.35.0, the + tab   // v0.23.0: Notifications, the Admin's
 const team = [

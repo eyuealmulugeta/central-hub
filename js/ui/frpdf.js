@@ -3,6 +3,7 @@
 // So Central Hub and Field Report give exactly the same PDF. The client copy is the same builder's client mode: no
 // photo times and no time under the signatures. Photos come from Drive through the server, like the report page.
 
+import { clientIds } from '../fr/model/pdfplan.js';   // v1.59.0
 import { buildPdf, loadPdfLib, photoCaption, weatherFile } from '../fr/pdf.js';
 import { weatherTerm } from '../fr/model/report.js';
 import { fieldPhoto } from '../sync/fieldreport.js';
@@ -42,7 +43,9 @@ export async function frPdf(c, r, client = false, v = 0) {
     const JsPDF = await loadPdfLib();
     const code = rec.full.project?.code || c.project.fieldCode || '';
     const photos = [];
-    for (const ph of rec.full.r.photos || []) {
+    // v1.59.0 (owner, 12 Nov): the client copy has only the 12 photos for the client (the PE or GM may have changed them)
+    const all = rec.full.r.photos || [], ids = client ? clientIds(all, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : all.map(p => p.id);
+    for (const ph of all.filter(p => ids.includes(p.id))) {
       const b64 = await fieldPhoto(code, rec.pdf, ph.id).catch(() => '');
       if (!b64) continue;
       const data = `data:image/jpeg;base64,${b64}`;
@@ -52,7 +55,7 @@ export async function frPdf(c, r, client = false, v = 0) {
     const [logo, weather] = await Promise.all([asDataUrl('assets/fr/icon-192.png'), w ? asDataUrl(`assets/fr/weather/${w}.png`) : '']);
     const doc = buildPdf(JsPDF, pdfInput(rec, { logo, weather, photos }, client));
     downloadFile(new File([doc.output('blob')], pdfFileName(rec, client), { type: 'application/pdf' }));
-    const missing = (rec.full.r.photos || []).length - photos.length;
+    const missing = ids.length - photos.length;
     tell(`✓ ${pdfFileName(rec, client)} downloaded.${missing > 0 ? ` ${missing} photo${missing > 1 ? 's' : ''} could not be read from Drive.` : ''}`);
   } catch (err) { tell(`The PDF could not be made: ${err?.message || err}`); }
 }

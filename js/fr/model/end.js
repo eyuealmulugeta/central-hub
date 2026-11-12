@@ -8,6 +8,7 @@ import { openPlanned } from './report.js';
 import { itemLine, itemReady, workMeta } from './items.js';
 import { manpowerMeta, attendanceRows, totals } from './crew.js';
 import { dayMeta, photoNeedsCaption } from './day.js';
+import { clientLeft } from './pdfplan.js';
 
 export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Expense', 'Other'];
 // 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PE
@@ -86,6 +87,8 @@ export function checks(r, profile = {}) {
   const caps = r.photos.filter(photoNeedsCaption).length;
   if (caps) w('photos', `${plural(caps, 'photo')} without a caption`);
   if (!r.photos.length) w('photos', 'No photos today');
+  const left = clientLeft(r.photos);   // 2.99.0 (owner): 12 photos for the client
+  if (left) out.push({ step: 'photos', level: 'need', text: `Choose ${left} more photo${left > 1 ? 's' : ''} for the client (12 in all)` });
   if (!(r.plan || []).filter(planReady).length) w('end', 'No plan for tomorrow');
   if (!String(profile.name || '').trim()) out.push({ step: 'me', level: 'need', text: 'Your name is missing' });
   if (!profile.sig || !r.signed) out.push({ step: 'sign', level: 'need', text: profile.sig ? 'Tap your signature below' : 'Sign the report below' });
@@ -139,7 +142,7 @@ export function reportMeta(r, project, profile = {}) {
     photos: r.photos.length,
     photoTags: r.photos.map(p => ({ caption: p.caption || p.captionKind || '', time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '' })),
     // 2.1.0: the photos sent to Drive with this report (the script fills in fileId)
-    photoFiles: r.photos.map(p => ({ id: p.id, caption: p.caption || p.captionKind || '', ...(p.gallery ? { gallery: true } : {}),   // 2.93.0: a gallery photo is flagged; only the office copy says so
+    photoFiles: r.photos.map(p => ({ id: p.id, caption: p.caption || p.captionKind || '', ...(p.gallery ? { gallery: true } : {}), ...(p.client ? { client: true } : {}),   // 2.99.0: for the client   // 2.93.0: a gallery photo is flagged; only the office copy says so
       time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '',
       ...(p.crew ? { crew: { st: p.crew.st, tags: p.crew.tags || [], geo: p.crew.geo || null } } : {}) })),   // 2.22.0: the crew photo's tag and place, for Central Hub's attendance sheet
   };

@@ -2,6 +2,7 @@
 // script 7.31.0). They are read through the server (fieldAction photoGet, office people only), once per session, and
 // filled in after the page is drawn. In the local demo a drawn sample stands in for each photo.
 
+import { clientIds, CLIENT_PHOTOS } from '../fr/model/pdfplan.js';   // v1.59.0
 import { html } from './dom.js';
 import { fieldPhoto, fieldVideo, fieldReady } from '../sync/fieldreport.js';
 import { store } from '../core/store.js';
@@ -62,10 +63,14 @@ export const photoList = r => (r?.field?.photoFiles || []).filter(p => p && p.id
 const label = p => [p.time, p.zone, p.task, p.caption, p.gallery ? 'From gallery' : ''].filter(Boolean).join(' · ');   // v0.55.0: a photo the office added
 
 /** The photos, perPage to a block (a printed page); each picture is filled in by fillPhotos(). '' when there are none. */
-export function photoGrid(r, c, { perPage = 0, cls = '' } = {}) {
+export function photoGrid(r, c, { perPage = 0, cls = '', pick = false } = {}) {
   const list = photoList(r), proj = c.project?.fieldCode || '', pdf = r?.field?.pdf || '';
   if (!list.length || !proj || !pdf) return '';
-  const fig = p => html`<figure class="ph"><img src="data:," alt="${p.caption || 'Site photo'}" data-fphoto="${proj}|${pdf}|${p.id}"><figcaption>${label(p)}</figcaption></figure>`;
+  // v1.59.0 (owner, 12 Nov): with more than 12 photos, the 12 for the client are marked; the PE or GM changes them until approval
+  const many = list.length > CLIENT_PHOTOS, forClient = many ? clientIds(list, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : [];
+  const tag = p => !many ? '' : pick ? html`<button type="button" class="btn small ${forClient.includes(p.id) ? 'primary' : ''}" data-act="clientPick" data-id="${r.id}" data-v="${p.id}">${forClient.includes(p.id) ? '✓ For client' : '+ For client'}</button>`
+    : forClient.includes(p.id) ? html`<span class="chip ok">For client</span>` : '';
+  const fig = p => html`<figure class="ph"><img src="data:," alt="${p.caption || 'Site photo'}" data-fphoto="${proj}|${pdf}|${p.id}"><figcaption>${label(p)} ${tag(p)}</figcaption></figure>`;
   const pages = [];
   for (let i = 0; i < list.length; i += perPage || list.length) pages.push(list.slice(i, i + (perPage || list.length)));
   return html`${pages.map(pg => html`<div class="ph-grid ${cls}">${pg.map(fig)}</div>`)}`;

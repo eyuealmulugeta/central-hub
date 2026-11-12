@@ -75,3 +75,24 @@ export function progressRows(setup = {}, items = []) {
     ...((setup || {}).tasks || []).filter(t => t && t.name).map(t => row(t, t.done)),
   ];
 }
+
+/**
+ * 2.99.0 (owner, 12 Nov: "add option to select the pictures to send to the client. the total picture should be 12. all
+ * the rest pictures taken should be shared to office and in dashboard"): with 12 photos or fewer, all go to the client;
+ * with more, the 12 ticked "For client". `pick` is the list the PE or GM set in Central Hub before approval; it wins.
+ * With nothing ticked (an older report) 12 are spread over the day.
+ */
+export const CLIENT_PHOTOS = 12;
+export function spreadIds(ids, n = CLIENT_PHOTOS) {
+  if (ids.length <= n) return [...ids];
+  return Array.from({ length: n }, (_, i) => ids[Math.round((i * (ids.length - 1)) / (n - 1))]);
+}
+export function clientIds(photos = [], pick = null) {
+  const ids = photos.map(p => p.id);
+  if (ids.length <= CLIENT_PHOTOS) return ids;
+  const chosen = Array.isArray(pick) ? pick : photos.filter(p => p.client).map(p => p.id);
+  const keep = ids.filter(id => chosen.includes(id));
+  return keep.length ? keep.slice(0, CLIENT_PHOTOS) : spreadIds(ids);
+}
+/** How many more the Site Engineer must tick (0 when 12 or fewer were taken, or 12 are ticked). */
+export const clientLeft = (photos = []) => (photos.length > CLIENT_PHOTOS ? Math.max(0, CLIENT_PHOTOS - photos.filter(p => p.client).length) : 0);

@@ -23,7 +23,8 @@ import { tell } from '../core/image.js';
 import { randomKey } from '../engine/sign.js';
 import { siLink, fromSigned } from '../engine/siteinstr.js';
 import { consultantOf, maySendDiary, diaryLink, diaryPage, contactUrl, DIARY_STATUS, DIARY_TONE } from '../engine/diary.js';
-import { photoGrid } from './photos.js';
+import { photoGrid, photoList } from './photos.js';
+import { clientIds, CLIENT_PHOTOS } from '../fr/model/pdfplan.js';   // v1.59.0
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
@@ -236,7 +237,7 @@ function sheet(r, c, { reviewing: inReview = false } = {}) {
     ${sec('Safety', html`<p>${f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : 'Not stated'}${f.toolbox == null ? '' : f.toolbox ? '. Toolbox talk held.' : '. No toolbox talk.'}</p>${f.safetyNotes?.length ? ul(f.safetyNotes) : ''}`, '', 'safety')}
     ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
     ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
-    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, photoGrid(r, c), '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
+    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, html`${photoList(r).length > CLIENT_PHOTOS ? html`<p class="muted">${clientIds(photoList(r), Array.isArray(f.clientPick) ? f.clientPick : null).length} of ${CLIENT_PHOTOS} photos go in the client copy; all go to the office and the Dashboard.${pickOk(r) ? ' Change them until the report is approved.' : ''}</p>` : ''}${photoGrid(r, c, { pick: pickOk(r) })}`, '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
     ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
   </div>`;
 }
@@ -589,6 +590,9 @@ function docView(r, c) {
     <section class="card sheet dsr-sheet">${dailyDoc(r, c, { office: office && withAtt })}</section>`;   // v0.32.0: no client brief
 }
 
+/** v1.59.0 (owner, 12 Nov): the PE or GM (an approver) changes the 12 client photos until the report is approved. */
+const pickOk = r => store.canApprove && r.source === 'field' && r.review !== 'done';
+
 /** The report's own PDF, shown from Google Drive. */
 function pdfCard(r, c) {
   const f = r.field || {};
@@ -833,6 +837,18 @@ export const actions = {
     try { await navigator.clipboard.writeText(url); } catch { /* the link is in the message */ }
     const to = contactUrl(con.contact, text);
     if (to) window.open(to, '_blank', 'noopener'); else prompt('Copy this link for the consultant:', url);
+  },
+  clientPick(el) {
+    const id = el.dataset.id, ph = el.dataset.v;
+    let full = false;
+    store.update(ws => {
+      const x = ws.reports.find(y => y.id === id);
+      if (!x || !pickOk(x)) return;
+      const list = photoList(x), now = clientIds(list, Array.isArray(x.field.clientPick) ? x.field.clientPick : null);
+      if (!now.includes(ph) && now.length >= CLIENT_PHOTOS) { full = true; return; }
+      x.field = { ...x.field, clientPick: now.includes(ph) ? now.filter(v => v !== ph) : list.map(p => p.id).filter(v => v === ph || now.includes(v)) };
+    });
+    if (full) tell(`${CLIENT_PHOTOS} photos are chosen for the client. Untick one first.`);
   },
   frPdf(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, false, +el.dataset.v || 0); },
   frClient(el, c) { const r = c.ws.reports.find(x => x.id === el.dataset.id); if (r && !isSiteUser(c)) frPdf(c, r, true, +el.dataset.v || 0); },

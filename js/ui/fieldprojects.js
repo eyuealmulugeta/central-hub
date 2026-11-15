@@ -6,6 +6,9 @@
 import { store } from '../core/store.js';
 import { fieldReady, syncProjects, removeProject, linkCheck, explainLink, renumberField, driveMoveField } from '../sync/fieldreport.js';
 import { planRenumber, numbersOf, applyRenumber } from '../engine/renumber.js';
+import { folderLabel } from '../engine/logsheet.js';
+import { projectCode } from '../engine/docref.js';
+import { tidyDrive } from '../sync/drive.js';
 import { fieldProjectOf, fingerprint, countryOf } from '../engine/fieldproject.js';
 import { tell } from '../core/image.js';
 import { todayISO } from '../core/util.js';
@@ -23,6 +26,7 @@ let said = null;       // { ok, text }
 let timer = null;
 let failedAt = 0;
 let who = { email: '', rows: null, error: '' };
+let chMove = null;     // v1.66.0: the same for Central Hub's own Drive folder (documents, backups)
 let move = null;       // v1.65.0: { dry, steps, left, more, done }
 let renum = null;      // v1.63.0: { plans: [{ id, name, code, plan, files }], done }   // the email being checked on this tab, and Field Report's answer
 
@@ -151,6 +155,14 @@ export function body() {
       ${move ? html`<p>${move.dry ? (move.steps.length ? `${move.steps.length} step${move.steps.length === 1 ? '' : 's'} to do:` : 'Nothing to move: the folders are already tidy.') : html`<span class="ok">Moved.</span>${move.more ? ' Some is left: press Show what moves again, then Move now.' : ''}`}</p>
         ${move.steps.length ? html`<ul>${move.steps.map(s => html`<li>${s}</li>`)}</ul>` : ''}
         ${move.left?.length ? html`<p class="muted">Left as they are: ${move.left.join(', ')}</p>` : ''}` : ''}
+      <p class="muted">Then Central Hub's own folder (letters, invoices, other documents and backups) moves into the same main folder: documents to their project (code and name) / type / year / month, backups to _system/Backups. Done on this computer's Google Drive set-up (Backup).</p>
+      <div class="actions left">
+        <button class="btn" type="button" data-act="chPlan" ${busy ? 'disabled' : ''}>Show what moves (Central Hub)</button>
+        ${chMove && chMove.dry && chMove.steps.length ? html`<button class="btn primary" type="button" data-act="chGo" ${busy ? 'disabled' : ''}>Move Central Hub files</button>` : ''}
+      </div>
+      ${chMove ? html`<p>${chMove.dry ? (chMove.steps.length ? `${chMove.steps.length} step${chMove.steps.length === 1 ? '' : 's'} to do:` : 'Nothing to move.') : html`<span class="ok">Moved.</span>${chMove.more ? ' Some is left: press both buttons again.' : ''}`}</p>
+        ${chMove.steps.length ? html`<ul>${chMove.steps.map(x => html`<li>${x}</li>`)}</ul>` : ''}
+        ${chMove.left?.length ? html`<p class="muted">Left as they are: ${chMove.left.join(', ')}</p>` : ''}` : ''}
     </section>`;
 }
 
@@ -166,6 +178,16 @@ export const submits = {
     return false;
   },
 };
+
+/** v1.66.0: each old folder code of a project -> its folder in the main folder ("<CODE> <name>", the Field Report code first). */
+export function folderNames(projects = store.projects) {
+  const out = {};
+  for (const p of projects || []) {
+    const label = folderLabel(p.fieldCode || projectCode(p), p.name);
+    for (const k of [p.fieldCode, p.code, projectCode(p)]) if (k) out[String(k).toUpperCase()] = label;
+  }
+  return out;
+}
 
 /** v1.63.0: the renumbering plan of every project with a Field Report code. */
 async function renumPlans() {
@@ -221,6 +243,24 @@ export const actions = {
 Links keep working. This is meant to be done once.`)) return;
     busy = true; store.notify();
     try { move = await driveMoveField(false); say(true, move.more ? 'Part moved; press again for the rest.' : 'Drive folders tidied.'); }
+    catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
+  async chPlan() {
+    if (busy) return;
+    busy = true; store.notify();
+    try { chMove = await tidyDrive(true, folderNames()); said = null; }
+    catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
+  async chGo() {
+    if (busy || !chMove?.dry) return;
+    if (store.readOnly) { say(false, 'An Executive Partner cannot change anything.'); return; }
+    if (!confirm(`Move Central Hub's Drive files now (${chMove.steps.length} steps)?
+
+Links keep working. This is meant to be done once.`)) return;
+    busy = true; store.notify();
+    try { chMove = await tidyDrive(false, folderNames()); say(true, chMove.more ? 'Part moved; press again for the rest.' : 'Central Hub files moved.'); }
     catch (err) { say(false, err.message); }
     busy = false; store.notify();
   },

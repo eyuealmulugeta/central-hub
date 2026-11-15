@@ -30,7 +30,7 @@ export async function fileCopy(paper, pdf = null) {
   if (done.has(key)) return false;
   done.add(key);
   const date = new Date().toISOString().slice(0, 10);
-  const folder = archiveFolder(date, store.project ? projectCode(store.project) : '', docCategory(paper));
+  const folder = archiveFolder(date, store.project ? store.project.fieldCode || projectCode(store.project) : 'Company', docCategory(paper), store.project?.name || '');
   try {
     const made = pdf && typeof Blob !== 'undefined' && pdf instanceof Blob ? await readPdf(pdf) : pdf;
     if (made?.dataBase64) await saveBase64(made.name || `${name}.pdf`, made.dataBase64, 'application/pdf', { folder });

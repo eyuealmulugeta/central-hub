@@ -31,3 +31,13 @@ export async function saveBase64(name, dataBase64, mimeType, { folder = '', pdf 
   if (!out.ok) throw new Error(out.error || 'Drive upload failed');
   return out;
 }
+
+/** v1.66.0 (owner, 15 Nov, R6b): move Central Hub's old Drive folder into the main folder once. names: { old code: '<CODE> <name>' }. */
+export async function tidyDrive(dry, names) {
+  const { endpoint, token } = driveConfig.get();
+  if (!endpoint || !token) throw new Error('Google Drive is not set up on this computer (Backup).');
+  const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token, action: 'tidy', dry: !!dry, names }) });
+  const out = await res.json();
+  if (!out.ok) throw new Error(out.id ? 'The Central Hub Drive script is older than v1.66.0: deploy apps-script/Code.gs.' : String(out.error || 'Drive refused.').replace(/^Error:\s*/, ''));
+  return { dry: !!out.dry, steps: out.steps || [], left: out.left || [], more: !!out.more };
+}

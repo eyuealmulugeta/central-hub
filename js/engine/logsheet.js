@@ -12,10 +12,16 @@ export const typeName = id => DOC_TYPES.find(([k]) => k === id)?.[1] || 'Other';
 
 const clean = s => String(s ?? '').replace(/[\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** v0.79.0: the Drive folder of a document, Project / Category / Month: "MJO/Invoice/2026-11" ("Company/..." without a project). */
-export const archiveFolder = (date, code, category = 'Other') => {
+/** v1.66.0 (owner, 15 Nov, R6): a project's folder in the main Drive folder: "<CODE> <name>", the same rule as Field Report's. */
+export const folderLabel = (code, name = '') => {
+  const c = clean(code).replace(/[^\w \-]/g, '').trim().toUpperCase(), n = String(name || '').replace(/[^\w \-]/g, ' ').replace(/\s+/g, ' ').trim();
+  return c ? (n && n.toUpperCase() !== c ? `${c} ${n}` : c).slice(0, 60) : '';
+};
+/** v0.79.0, v1.66.0: the Drive folder of a document, Project / Category / Year / Month: "MJO CHB Modjo/Invoice/2026/11" ("Company/..." without a project). */
+export const archiveFolder = (date, code, category = 'Other', name = '') => {
   const [y, m] = String(date || '').split('-');
-  return [clean(code).replace(/[^\w \-]/g, '').trim() || 'Company', clean(category) || 'Other', `${y || '0000'}-${m || '00'}`].join('/');
+  const who = /^company$/i.test(String(code || '').trim()) ? 'Company' : folderLabel(code, name) || 'Company';
+  return [who, clean(category).replace(/[^\w \-]/g, '').trim() || 'Other', y || '0000', m || '00'].join('/');
 };
 
 /** The standard file name, without ".pdf": "2026-11-02 MJO Invoice INV-012 Steel works". At most 120 letters. */

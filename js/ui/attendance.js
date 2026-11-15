@@ -197,11 +197,11 @@ export function render(c) {
     return html`<td class="${cls}${pens.length ? ' att-pen' : ''}" title="${tip}" ${edit && d <= c.today ? html`data-act="pick" data-d="${d}" data-k="${row.key}"` : ''}>${cell?.mark || ''}${cell?.ot ? html`<sup>${cell.ot}</sup>` : ''}${pens.length ? html`<i class="att-pen-dot" aria-label="Penalty">!</i>` : ''}</td>`;
   };
   const penT = row => penaltyOf(c.ws.penalties, row, p.from, p.to).total;   // v0.97.0
-  // v0.33.0: the photo and the Fayda ID (or passport) of each person, from Employee data, the main record
+  // v0.33.0: the photo of each person, from Employee data, the main record (v1.70.0, owner: the ID card is not shown here)
   const staff = c.company.staff || [];
   const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
   const personOf = row => { const m = (c.ws.team || []).find(x => x.id === row.id); return staff.find(p => m?.personId && p.id === m.personId) || staff.find(p => same(p.name, row.name)) || null; };
-  const pics = row => { const p = personOf(row), id = p && (p.idImage || p.passportImage); return p && (p.photo || id) ? html`<span class="att-pics">${p.photo ? html`<img class="att-face" src="${p.photo}" alt="">` : ''}${id ? html`<img class="att-id" src="${id}" alt="ID">` : ''}</span>` : ''; };
+  const pics = row => { const p = personOf(row); return p?.photo ? html`<span class="att-pics"><img class="att-face" src="${p.photo}" alt=""></span>` : ''; };
   return html`
     <div class="toolbar no-print">
       <h2>Attendance sheet</h2><span class="muted">${c.project.name}. ${notice}</span><span class="grow"></span>

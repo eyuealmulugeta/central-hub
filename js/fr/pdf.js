@@ -17,8 +17,15 @@ export const JSPDF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jsp
 /** 2.94.0 (owner R5): the PDF drawn inside the app (view only: no file, no share, no download). pdf.js, version 3.11.174;
  *  its worker runs on the page (loaded first), so no cross-site worker is needed. */
 export const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+/** 3.5.0 (S2): each library from cdnjs is checked against its hash; a changed file is refused. */
+export const SRI = {
+  [JSPDF_URL]: 'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+  [PDFJS_URL]: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+  [PDFJS_URL.replace('pdf.min.js', 'pdf.worker.min.js')]: 'sha384-SnzOobpRMLXZ52iJvZm/C0fYw0OQemTXzTjIsdsfMcrCtCEe9qgzxTd3RSklO5x2',
+};
 const addScript = src => new Promise((ok, fail) => {
   const s = document.createElement('script'); s.src = src; s.onload = ok;
+  if (SRI[src]) { s.integrity = SRI[src]; s.crossOrigin = 'anonymous'; }
   s.onerror = () => { s.remove(); fail(new Error('No connection to show the report')); }; document.head.appendChild(s);
 });
 export async function loadPdfView() {
@@ -34,7 +41,7 @@ export function loadPdfLib() {
   if (globalThis.jspdf) return Promise.resolve(globalThis.jspdf.jsPDF);
   return new Promise((ok, fail) => {
     const s = document.createElement('script');
-    s.src = JSPDF_URL;
+    s.src = JSPDF_URL; s.integrity = SRI[JSPDF_URL]; s.crossOrigin = 'anonymous';   // 3.5.0 (S2)
     s.onload = () => (globalThis.jspdf ? ok(globalThis.jspdf.jsPDF) : fail(new Error('PDF library missing')));
     s.onerror = () => { s.remove(); fail(new Error('No connection to make the PDF')); };
     document.head.appendChild(s);
@@ -353,10 +360,12 @@ export function buildPdf(JsPDF, d) {
        PREPARED BY:
        Abebe Kebede
        Site Engineer   ____________      the signature sits on the line; the client copy leaves the date blank */
-  const ow = (CW - 16) / 3, ox = M + CW - ow;
+  // 3.2.0 (owner, 15 Nov: one report for everyone): "Prepared by" on the left, "Approved by" on the right
+  const ow = (CW - 16) / 3, ox = M;
   room(64);
   y += 12 + pad; gaps++;
   const ry = y;
+  signBox(doc, { x: M + CW - ow, y: ry, w: ow, label: 'APPROVED BY:', name: (d.approver || {}).name || '', position: (d.approver || {}).position || '', sig: (d.approver || {}).sig || '', when: (d.approver || {}).at || '' }, { font, lines, INK, MUTED, color });
   font(8, 'bold', MUTED); doc.text('PREPARED BY:', ox, ry);
   font(10, 'bold', INK); doc.text(lines(profile.name || '', ow)[0] || '', ox, ry + 15);
   // 2.89.0 (QA D4): the whole job title: a smaller font first, then two lines (it was cut: "Senior Site")
@@ -370,7 +379,7 @@ export function buildPdf(JsPDF, d) {
   // 2.26.0: the signature sits under the name (it covered the name's last letters)
   if (d.sig) { try { doc.addImage(d.sig, 'PNG', px, ry + 19, Math.min(lx2 - px, 66), 19); } catch { /* a bad signature image leaves the line blank */ } }
   color(INK, 'draw'); doc.setLineWidth(0.6); doc.line(px, ry + 38, lx2, ry + 38);
-  if (!d.client) { font(7, 'normal', MUTED); doc.text(`${dayLabel(r.date)} ${d.signedAt || ''}`.trim(), lx2 - 2, ry + 46, { align: 'right' }); }
+  font(7, 'normal', MUTED); doc.text(`${dayLabel(r.date)} ${d.signedAt || ''}`.trim(), lx2 - 2, ry + 46, { align: 'right' });
   y = ry + 50;
 
   // page 1 full: lay out once more with the space left shared between the sections (only when the data fits on page 1);
@@ -386,7 +395,8 @@ export function buildPdf(JsPDF, d) {
   const pics = d.photos || [];
   // 3.0.2 (owner, 12 Nov: "Make it a slightly landscape rather than a square"): every photo frame is 4:3 landscape;
   // the rows share the page's spare height (at most 28 pt between rows), the rest stays white at the bottom
-  const COLS = photoCols(r), ROWS = COLS === 2 ? 3 : 4, per = COLS * ROWS, gap = 8, capH = 12;
+  // 3.2.0 (owner, 15 Nov): page 2 is 12 photos, 3 across and 4 down, each with a 0.5 pt #D0D0D0 border
+  const COLS = 3, ROWS = 4, per = COLS * ROWS, gap = 8, capH = 12;
   let gtop = 0, cw = 0, ph = 0, rgap = gap;
   pics.forEach((p, i) => {
     const k = i % per;
@@ -397,7 +407,8 @@ export function buildPdf(JsPDF, d) {
     }
     const x = M + (k % COLS) * (cw + gap), top = gtop + Math.floor(k / COLS) * (ph + capH + rgap);
     photo(doc, p, { x, y: top, w: cw, h: ph });
-    font(8, 'normal', MUTED); doc.text(lines([d.client ? '' : p.at, d.client || !p.gal ? '' : 'From Gallery', p.cap].filter(Boolean).join(' · '), cw)[0] || '', x, top + ph + capH - 3);   // 2.93.0: office copy only
+    doc.setDrawColor(208, 208, 208); doc.setLineWidth(0.5); doc.rect(x, top, cw, ph, 'S');
+    font(8, 'normal', MUTED); doc.text(lines([p.at, p.cap].filter(Boolean).join(' · '), cw)[0] || '', x, top + ph + capH - 3);
   });
   const over = pics.length ? (per - (pics.length % per)) % per : 0;
   doc.photoFit = { now: over, next: over + per };
@@ -418,13 +429,24 @@ export function buildPdf(JsPDF, d) {
   return doc;
 }
 
-/** A photo filling its tile (cut to fit, centred), with rounded corners. */
+/** 3.2.0: one sign-off box: label, name, position, the signature on its line, the date under it. */
+function signBox(doc, b, k) {
+  k.font(8, 'bold', k.MUTED); doc.text(b.label, b.x, b.y);
+  k.font(10, 'bold', k.INK); doc.text(k.lines(b.name || '', b.w)[0] || '', b.x, b.y + 15);
+  k.font(8, 'normal', k.MUTED); const pos = k.lines(b.position || '', b.w * 0.45).slice(0, 2); pos.forEach((t, j) => doc.text(t, b.x, b.y + 37 - (pos.length - 1 - j) * 9));
+  const px = b.x + b.w * 0.45 + 8, lx2 = b.x + b.w;
+  if (b.sig) { try { doc.addImage(b.sig, 'PNG', px, b.y + 19, Math.min(lx2 - px, 66), 19); } catch { /* left blank */ } }
+  k.color(k.INK, 'draw'); doc.setLineWidth(0.6); doc.line(px, b.y + 38, lx2, b.y + 38);
+  if (b.when) { k.font(7, 'normal', k.MUTED); doc.text(String(b.when), lx2 - 2, b.y + 46, { align: 'right' }); }
+}
+
+/** A photo filling its tile (cut to fit, centred). */
 function photo(doc, p, f) {
   const pw = Number(p.w) || 4, ph = Number(p.h) || 3, s = Math.max(f.w / pw, f.h / ph), iw = pw * s, ih = ph * s;
-  doc.setFillColor(240, 243, 245); doc.roundedRect(f.x, f.y, f.w, f.h, 6, 6, 'F');
+  doc.setFillColor(240, 243, 245); doc.rect(f.x, f.y, f.w, f.h, 'F');   // 3.2.0: square, inside its grey border
   try {
     doc.saveGraphicsState();
-    doc.roundedRect(f.x, f.y, f.w, f.h, 6, 6, null); doc.clip(); doc.discardPath();
+    doc.rect(f.x, f.y, f.w, f.h, null); doc.clip(); doc.discardPath();
     doc.addImage(p.data, 'JPEG', f.x + (f.w - iw) / 2, f.y + (f.h - ih) / 2, iw, ih);
   } catch { /* unreadable photo: the tile stays empty */ } finally { doc.restoreGraphicsState(); }
 }

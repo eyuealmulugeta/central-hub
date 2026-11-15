@@ -61,13 +61,16 @@ export function engageChecks(r, nowMs = Date.now()) {
   const crewAt = r.stamps && r.stamps.crew && r.stamps.crew.first;
   const startM = mins(r.start && r.start.start) ?? 480;
   const crewM = crewAt ? mins(addis(crewAt)) : null;
-  const sentM = mins(addis(r.sentAt || nowMs));
+  // 3.1.0 (owner, 15 Nov: "Not sent yet" for a report sent at 22:54): the first send counts, also when sent from another phone
+  const sentAt = r.firstSentAt || r.sentAt || 0;
+  const sentM = mins(addis(sentAt || nowMs));
+  const due = String(Math.floor((startM + 60) / 60)).padStart(2, '0') + ':' + String((startM + 60) % 60).padStart(2, '0');
   const items = r.items || [], withQty = items.filter(i => Number(i.qty) > 0).length;
   return [
-    { k: 'photos', label: 'Photos spread over morning, midday and afternoon', v: thirds.length / 3, why: thirds.length ? thirds.join(', ') : 'No photos' },
+    { k: 'photos', label: 'Photos spread over the day', v: thirds.length / 3, why: thirds.length ? `${thirds.length} of 3 parts: ${thirds.join(', ')}` : 'No photos' },   // 3.1.0: each part named once
     { k: 'filled', label: 'Most sections filled in', v: filled >= 6 ? 1 : filled / 6, why: `${filled} of 8` },
-    { k: 'att', label: 'Attendance marked on time', v: crewM == null ? 0 : crewM <= startM + 60 ? 1 : 0, why: crewM == null ? 'Not marked' : `at ${addis(crewAt)}` },
-    { k: 'sent', label: 'Report sent before 17:30', v: r.sentAt && sentM != null && sentM < SENT_BY ? 1 : 0, why: r.sentAt ? `at ${addis(r.sentAt)}` : sentM < SENT_BY ? 'Not sent yet' : 'Not sent by 17:30' },
+    { k: 'att', label: `Attendance marked by ${due}`, v: crewM == null ? 0 : crewM <= startM + 60 ? 1 : 0, why: crewM == null ? 'Not marked' : `at ${addis(crewAt)}` },   // 3.1.0: the cutoff shown
+    { k: 'sent', label: 'Report sent before 17:30', v: sentAt && sentM != null && sentM < SENT_BY ? 1 : 0, why: sentAt ? `at ${addis(sentAt)}` : r._sent ? 'Sent' : sentM < SENT_BY ? 'Not sent yet' : 'Not sent by 17:30' },
     { k: 'progress', label: 'Progress entered', v: items.length ? withQty / items.length : 0, why: items.length ? `${withQty} of ${items.length} work items with a quantity or %` : 'No work items' },
   ];
 }

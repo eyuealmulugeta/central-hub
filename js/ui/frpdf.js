@@ -44,8 +44,9 @@ export async function frPdf(c, r, client = false, v = 0) {
     const code = rec.full.project?.code || c.project.fieldCode || '';
     const photos = [];
     // v1.59.0 (owner, 12 Nov): the client copy has only the 12 photos for the client (the PE or GM may have changed them)
-    const all = rec.full.r.photos || [], ids = client ? clientIds(all, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null) : all.map(p => p.id);
-    if (client && ids.length !== CLIENT_PHOTOS) { tell(`The client copy needs exactly ${CLIENT_PHOTOS} photos for the client (${ids.length} now). Choose them on the report page.`); return; }   // v1.60.0
+    // v1.62.0 (owner, 15 Nov): one report for everyone: always the 12 chosen photos; the rest on the Dashboard and in Drive
+    const all = rec.full.r.photos || [], ids = clientIds(all, Array.isArray(r.field?.clientPick) ? r.field.clientPick : null);
+    if (ids.length !== CLIENT_PHOTOS && all.length >= CLIENT_PHOTOS) { tell(`The client copy needs exactly ${CLIENT_PHOTOS} photos for the client (${ids.length} now). Choose them on the report page.`); return; }   // v1.60.0
     for (const ph of all.filter(p => ids.includes(p.id))) {
       const b64 = await fieldPhoto(code, rec.pdf, ph.id).catch(() => '');
       if (!b64) continue;
@@ -54,7 +55,8 @@ export async function frPdf(c, r, client = false, v = 0) {
     }
     const w = weatherFile(weatherTerm(rec.full.r.start?.cond));
     const [logo, weather] = await Promise.all([asDataUrl('assets/fr/icon-192.png'), w ? asDataUrl(`assets/fr/weather/${w}.png`) : '']);
-    const doc = buildPdf(JsPDF, pdfInput(rec, { logo, weather, photos }, client));
+    const ap = r.approval || {}, approver = (ap.by || r.approvedBy) ? { name: ap.by || r.approvedBy, position: ap.title || '', sig: ap.sig || '', at: String(ap.at || r.approvedAt || '').slice(0, 10) } : null;   // v1.62.0: Approved by, on the right
+    const doc = buildPdf(JsPDF, { ...pdfInput(rec, { logo, weather, photos }, false), ...(approver ? { approver } : {}) });
     downloadFile(new File([doc.output('blob')], pdfFileName(rec, client), { type: 'application/pdf' }));
     const missing = ids.length - photos.length;
     tell(`✓ ${pdfFileName(rec, client)} downloaded.${missing > 0 ? ` ${missing} photo${missing > 1 ? 's' : ''} could not be read from Drive.` : ''}`);

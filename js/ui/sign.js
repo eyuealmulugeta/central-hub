@@ -182,6 +182,7 @@ const loadScript = src => new Promise((resolve, reject) => {
   if (window.PDFLib) { resolve(); return; }
   const s = document.createElement('script');
   s.src = src;
+  if (src === PDF_LIB) { s.integrity = 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI'; s.crossOrigin = 'anonymous'; }   // v1.64.0 (S2)
   s.onload = resolve;
   s.onerror = () => reject(new Error('The PDF tool could not be loaded. Check the internet connection and try again.'));
   document.head.append(s);

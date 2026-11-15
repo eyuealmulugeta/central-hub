@@ -4,7 +4,8 @@
 // and "keep in step" does it by itself a few seconds after something changes.
 
 import { store } from '../core/store.js';
-import { fieldReady, syncProjects, removeProject, linkCheck, explainLink } from '../sync/fieldreport.js';
+import { fieldReady, syncProjects, removeProject, linkCheck, explainLink, renumberField } from '../sync/fieldreport.js';
+import { planRenumber, numbersOf, applyRenumber } from '../engine/renumber.js';
 import { fieldProjectOf, fingerprint, countryOf } from '../engine/fieldproject.js';
 import { tell } from '../core/image.js';
 import { todayISO } from '../core/util.js';
@@ -21,7 +22,8 @@ let table = null;      // the last comparison or sync: { at, rows, extra, missin
 let said = null;       // { ok, text }
 let timer = null;
 let failedAt = 0;
-let who = { email: '', rows: null, error: '' };   // the email being checked on this tab, and Field Report's answer
+let who = { email: '', rows: null, error: '' };
+let renum = null;      // v1.63.0: { plans: [{ id, name, code, plan, files }], done }   // the email being checked on this tab, and Field Report's answer
 
 const say = (ok, text) => { said = { ok, text }; tell(`${ok ? '✓' : '✗'} ${text}`); store.notify(); };
 const configured = () => fieldReady();
@@ -130,6 +132,15 @@ export function body() {
           <td><span class="chip ${r.visible ? (e.tone === 'warn' ? 'warn' : 'ok') : ''}">${r.visible ? 'Yes' : 'No'}</span></td><td class="${e.tone === 'warn' ? 'bad' : 'muted'}">${e.text}</td></tr>`; })}</tbody>
       </table>` : ''}
       <p class="muted">Removing a project from Field Report takes it off the shared list only. Its Drive folders and reports stay. The last project cannot be removed.</p>
+      <h3>Renumber past reports <span class="muted">once, by working days</span></h3>
+      <p class="muted">Report numbers now count every working day, with or without a report; only the project's days off (working week and non-working dates) are skipped. This gives past reports the same numbers: the first report keeps its number. Their PDFs and photo folders in Drive are renamed and phones show the new numbers. The text inside an old PDF keeps its old number; the PDF button on Reports makes it with the new one.</p>
+      <div class="actions left">
+        <button class="btn" type="button" data-act="renumPlan" ${busy ? 'disabled' : ''}>Show the new numbers</button>
+        ${renum?.plans?.some(p => p.plan.some(x => x.from !== x.to)) && !renum.done ? html`<button class="btn primary" type="button" data-act="renumGo" ${busy ? 'disabled' : ''}>Renumber now</button>` : ''}
+      </div>
+      ${(renum?.plans || []).map(p => html`<p><b>${p.code}</b> ${p.name}: ${p.plan.filter(x => x.from !== x.to).length} of ${p.plan.length} change${p.files != null ? html` · <span class="ok">${p.files} file${p.files === 1 ? '' : 's'} renamed in Drive</span>` : ''}</p>
+        <table class="table compact"><thead><tr><th>Date</th><th class="r">Now</th><th class="r">New</th></tr></thead>
+        <tbody>${p.plan.map(x => html`<tr><td>${x.date}</td><td class="r">${x.from}</td><td class="r">${x.from === x.to ? x.to : html`<b>${x.to}</b>`}</td></tr>`)}</tbody></table>`)}
     </section>`;
 }
 
@@ -146,7 +157,44 @@ export const submits = {
   },
 };
 
+/** v1.63.0: the renumbering plan of every project with a Field Report code. */
+async function renumPlans() {
+  const plans = [];
+  for (const p of store.projects.filter(x => x.fieldCode)) {
+    const ws = await store.readOther(p.id);
+    const plan = planRenumber(ws.reports, p);
+    if (plan.length) plans.push({ id: p.id, name: p.name, code: p.fieldCode, plan, files: null });
+  }
+  return plans;
+}
+
 export const actions = {
+  async renumPlan() {
+    if (busy) return;
+    busy = true; store.notify();
+    try { renum = { plans: await renumPlans(), done: false }; said = null; }
+    catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
+  async renumGo() {
+    if (busy || !renum) return;
+    if (!configured()) { say(false, 'Fill in the Field Report web app URL and manager key first (Field Report tab, step 1).'); return; }
+    if (store.readOnly) { say(false, 'An Executive Partner cannot change anything.'); return; }
+    const n = renum.plans.reduce((a, p) => a + p.plan.filter(x => x.from !== x.to).length, 0);
+    if (!confirm(`Renumber ${n} past reports?\n\nTheir PDFs in Drive get the new numbers and the reports here and on phones show them. This is meant to be done once.`)) return;
+    busy = true; store.notify();
+    try {
+      for (const p of renum.plans) {
+        if (!p.plan.some(x => x.from !== x.to)) { p.files = 0; continue; }
+        const out = await renumberField(p.code, numbersOf(p.plan), false);
+        p.files = (out.files || []).length;
+        await store.updateOther(p.id, ws => applyRenumber(ws, p.plan));
+      }
+      renum.done = true;
+      say(true, 'Past reports renumbered.');
+    } catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
   compareProjects() { return run(true); },
   syncProjects() { return run(false); },
   async removeFromField(el) {

@@ -38,7 +38,7 @@ const answered = rec => `<div class="card"><h2>${rec.decision === 'comment' ? 'C
   <p class="ok">${esc(rec.name)} ${rec.decision === 'comment' ? 'commented on' : 'signed'} this ${WHAT} on ${esc(when(rec.at))}.</p>
   ${rec.comment ? `<p>${esc(rec.comment)}</p>` : ''}<img class="sig" src="${esc(rec.image)}" alt="Signature">
   <p class="muted" style="margin-top:10px">You can close this page. Amistad Prefab has your answer.</p>
-  <div class="row no-print"><button type="button" onclick="print()">Print this page</button></div></div>`;
+  <div class="row no-print"><button type="button" data-print>Print this page</button></div></div>`;
 
 async function start() {
   if (key.length < 40) { show('This link is not complete', 'Open the link exactly as it was sent to you.', 'bad'); return; }
@@ -96,3 +96,12 @@ async function start() {
 }
 
 start();
+
+// v1.64.0 (S1): no inline handlers (the page security rules refuse them)
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-reload],[data-print],[data-select]');
+  if (!t) return;
+  if (t.hasAttribute('data-reload')) location.reload();
+  else if (t.hasAttribute('data-print')) print();
+  else if (t.select) t.select();
+});

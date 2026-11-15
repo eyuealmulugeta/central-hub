@@ -48,9 +48,12 @@ async function openData() {
 
 // ---- the document ----
 
+// v1.64.0 (S2): checked against the published hash
+const SRI = { [PDF_JS]: 'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e' };
 const loadScript = src => new Promise((resolve, reject) => {
   const s = document.createElement('script');
   s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('load'));
+  if (SRI[src]) { s.integrity = SRI[src]; s.crossOrigin = 'anonymous'; }
   document.head.append(s);
 });
 
@@ -93,7 +96,7 @@ function signedCard(rec) {
   return `<div class="card"><h2>Signed</h2><p class="ok">${esc(rec.name)} signed this document on ${esc(when(rec.at))}.</p>
     <img class="sig" src="${esc(rec.image)}" alt="Signature">
     <p class="muted" style="margin-top:10px">You can close this page. The sender has your signature and will send you the signed copy.</p>
-    <div class="row no-print"><button type="button" onclick="print()">Print this page</button></div></div>`;
+    <div class="row no-print"><button type="button" data-print>Print this page</button></div></div>`;
 }
 
 async function start() {
@@ -170,3 +173,12 @@ async function start() {
 }
 
 start();
+
+// v1.64.0 (S1): no inline handlers (the page security rules refuse them)
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-reload],[data-print],[data-select]');
+  if (!t) return;
+  if (t.hasAttribute('data-reload')) location.reload();
+  else if (t.hasAttribute('data-print')) print();
+  else if (t.select) t.select();
+});

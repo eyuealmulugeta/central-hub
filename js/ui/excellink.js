@@ -25,7 +25,7 @@ function payCard(p) {
   return html`<div class="box pad"><b>Pay link (attendance, salary, progress)</b>
     <p class="muted small">Names, wages and pay of this project for Excel: attendance by day, the crew pay sheets (as in Payments), the monthly staff (Payroll), day rates and progress, this month and the two before. Only the Admin and the GM make it; it stops by itself after ${LINK_DAYS} days.</p>
     ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
-    ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<p><input readonly value="${url}" aria-label="Excel pay link" style="width:100%" onclick="this.select()"></p>
+    ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<p><input readonly value="${url}" aria-label="Excel pay link" style="width:100%" data-select></p>
         <p class="muted small">Made ${when(l.at)} by ${l.byName}. Works ${left} more day${left === 1 ? '' : 's'} (until ${when(l.until)}). Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
         <div class="actions left"><button type="button" class="btn primary" data-act="plCopy">Copy the pay link</button>
           <button type="button" class="btn" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make a new pay link</button>
@@ -91,7 +91,7 @@ export function render(c) {
     <div class="toolbar"><h2>Excel link</h2><span class="muted">${p.name || ''}: money and planning tables for Excel, read only. No pay or salaries.</span></div>
     ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
     ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<div class="box pad"><b>The link</b>
-        <p><input readonly value="${url}" aria-label="Excel link" style="width:100%" onclick="this.select()"></p>
+        <p><input readonly value="${url}" aria-label="Excel link" style="width:100%" data-select></p>
         <p class="muted small">Made ${when(l.at)} by ${l.byName}. Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
         <div class="actions left"><button type="button" class="btn primary" data-act="xlCopy">Copy the link</button>
           <button type="button" class="btn" data-act="xlMake" ${s.busy ? 'disabled' : ''}>Make a new link</button>

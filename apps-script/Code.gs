@@ -142,6 +142,11 @@ function sendEmail_(props, body) {
     const name = String(f.name || 'attachment.pdf').replace(/[\\/:*?"<>|]/g, '_');
     attachments.push(Utilities.newBlob(bytes, 'application/pdf', /\.pdf$/i.test(name) ? name : name + '.pdf'));
   });
+  // v0.64.0 (Central Hub): a meeting invitation as a calendar file { name, text }; calendars add, update or remove the meeting
+  if (body.ics && body.ics.text) {
+    const method = (String(body.ics.text).match(/METHOD:(\w+)/) || [])[1] || 'REQUEST';
+    attachments.push(Utilities.newBlob(String(body.ics.text), 'text/calendar; charset=utf-8; method=' + method, String(body.ics.name || 'invite.ics').replace(/[\\/:*?"<>|]/g, '_')));
+  }
   if (attachments.length) options.attachments = attachments;
   // With the Script property FROM_ADDRESS (an address added in Gmail under Settings, Accounts, Send mail as, and verified) the email is sent
   // from that address instead of the Gmail address. It needs Google's permission to use Gmail once, when the script is deployed again.

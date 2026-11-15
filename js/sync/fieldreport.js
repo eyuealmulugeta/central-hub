@@ -695,6 +695,13 @@ export async function putProject(project) {
 }
 
 /** Remove a project from Field Report's shared list. Drive folders and reports stay; the last project cannot be removed. */
+/** v1.63.0: renumber a project's past reports in Field Report (Drive file names and its number list). */
+export async function renumberField(code, nos, dry) {
+  const out = await post({ action: 'renumber', code: String(code || '').toUpperCase(), nos, dry: !!dry });
+  if (!out.ok) throw new Error(/file name|PDF/i.test(out.error || '') ? 'The Field Report script does not know renumber: it is older than 7.64.0.' : out.error || 'Field Report refused to renumber.');
+  return out;
+}
+
 export async function removeProject(code) {
   const out = await post({ action: 'projectDelete', code: String(code || '').toUpperCase() });
   if (!out.ok) {

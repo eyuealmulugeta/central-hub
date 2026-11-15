@@ -237,7 +237,7 @@ function sheet(r, c, { reviewing: inReview = false } = {}) {
     ${sec('Safety', html`<p>${f.safety ? (f.safety === 'None' ? 'No incidents or near misses' : f.safety) : 'Not stated'}${f.toolbox == null ? '' : f.toolbox ? '. Toolbox talk held.' : '. No toolbox talk.'}</p>${f.safetyNotes?.length ? ul(f.safetyNotes) : ''}`, '', 'safety')}
     ${f.notes?.length ? sec('Notes', ul(f.notes)) : ''}
     ${sec('Next day schedule', f.plan?.length ? ul(f.plan) : none(), '', 'plan')}
-    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, html`${photoList(r).length ? html`<p class="muted">${clientIds(photoList(r), Array.isArray(f.clientPick) ? f.clientPick : null).length} of ${CLIENT_PHOTOS} chosen for the client copy (exactly ${CLIENT_PHOTOS} needed); all go to the office and the Dashboard.${pickOk(r) ? ' Change them until the report is approved.' : ''}</p>` : ''}${photoGrid(r, c, { pick: pickOk(r) })}`, '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
+    ${f.photos ? (photoGrid(r, c) ? sec(`Photos, ${f.photos}`, html`${photoList(r).length ? html`<p class="muted">${clientIds(photoList(r), Array.isArray(f.clientPick) ? f.clientPick : null).length} of ${CLIENT_PHOTOS} chosen for the report (exactly ${CLIENT_PHOTOS}, 3 by 4 on page 2); every photo stays on the Dashboard and in Drive.${pickOk(r) ? ' Change them until the report is approved.' : ''}</p>` : ''}${photoGrid(r, c, { pick: pickOk(r) })}`, '', 'photos') : html`<p class="muted" id="sec-photos">${f.photos} photo${f.photos === 1 ? '' : 's'} in the PDF.</p>`) : ''}
     ${r.source === 'field' && !inReview ? replyBox(r, c) : ''}
   </div>`;
 }
@@ -600,8 +600,7 @@ function pdfCard(r, c) {
   if (isSiteUser(c)) return '';
   const x = fileOf(c.ws, r);
   // v0.54.0 (20b): the same PDF as Field Report, drawn here by its own builder (ui/frpdf.js), and the client copy
-  const same = r.source === 'field' ? html`<button class="btn small" data-act="frPdf" data-id="${r.id}" title="Field Report's PDF, made here from the report Field Report 2.23.0 keeps in the database">Same PDF here</button>
-    <button class="btn small" data-act="frClient" data-id="${r.id}" title="The client copy: no photo times and no time under the signatures">Client copy</button>` : '';
+  const same = r.source === 'field' ? html`<button class="btn small" data-act="frPdf" data-id="${r.id}" title="The report PDF (one for everyone, v1.62.0), made here from the report Field Report keeps in the database">PDF</button>` : '';
   if (!x.pdfId) {
     return html`<section class="card"><div class="toolbar"><h3>Report PDF</h3><span class="grow"></span>${same}</div><p class="muted">${r.source === 'field' ? 'No PDF came with this report.' : 'This report was typed in Central Hub, so there is no Field Report PDF.'}</p></section>`;
   }
@@ -621,7 +620,7 @@ function versionList(r) {
   return html`<div class="older-reports"><h4>Versions</h4>
     ${o ? html`<p class="muted">Newest: version ${o.v || '?'}, corrected by the office (${o.by}${o.at ? `, ${at(o.at)}` : ''}): ${(o.changes || []).join('; ')}</p>` : ''}
     <ul>${list.map(v => html`<li>Version ${v.v} · ${v.office ? `corrected by the office (${v.by})` : `from the site (${v.by})`}${v.at ? ` · ${at(v.at)}` : ''}
-      <button class="btn small" data-act="frPdf" data-id="${r.id}" data-v="${v.v}">PDF</button> <button class="btn small" data-act="frClient" data-id="${r.id}" data-v="${v.v}">Client copy</button></li>`)}</ul></div>`;
+      <button class="btn small" data-act="frPdf" data-id="${r.id}" data-v="${v.v}">PDF</button></li>`)}</ul></div>`;
 }
 
 /** v0.24.0: the other reports of the same day, older than the one shown: never discarded, each can be opened. */
@@ -1183,4 +1182,13 @@ Import its ${count} report(s) into the Central Hub project "${project.name}"?`))
     const el = document.getElementById('fr-checked');
     if (el) el.textContent = autoLine(store.project, fieldConfig.get());
   }
+}
+
+/** v1.61.0: open one report by its id from another page (Notifications, the Dashboard). */
+export function openById(ws, id) {
+  const r = (ws.reports || []).find(x => x.id === id);
+  if (!r) return false;
+  sentBack = null; notice = ""; replyNotice = "";
+  if (r.review === "pending") { reviewing = r.id; viewing = null; } else { reviewing = null; viewing = r.id; }
+  return true;
 }

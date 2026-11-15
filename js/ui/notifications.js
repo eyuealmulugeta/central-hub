@@ -8,6 +8,7 @@ import * as fieldusers from './fieldusers.js';
 import { urgentBox, urgentActions, urgentChanges, urgentSubmits } from './urgent.js';
 import { html } from './dom.js';
 import { fmtDate } from '../core/util.js';
+import { openById } from './reports.js';
 
 const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['done', 'Done']];
 const DONE_DAYS = 14;   // decided or closed lines stay this long under Done
@@ -89,7 +90,7 @@ const requestLine = (i, done) => html`
 
 const reportLine = (r, done) => html`
   <span class="tt"><b>No. ${r.field?.no || '–'} · ${fmtDate(r.date)}</b><span class="muted">${r.by || 'Site'}${done ? ` · ${r.approvedBy ? `approved by ${r.approvedBy}` : 'reviewed'}` : ''}</span></span>
-  ${done ? doneTag(done) : html`<span class="actions"><a class="btn small primary" href="#reports">Review</a></span>`}`;
+  ${done ? doneTag(done) : html`<span class="actions"><button type="button" class="btn small primary" data-act="notifReport" data-id="${r.id}">Review</button></span>`}`;   // v1.61.0 (owner, 15 Nov): opens this report, not the first one waiting
 
 const alertLine = x => html`
   <span class="tt"><b>${x.h}</b><span class="muted" title="${x.m}">${x.m} · ${x.f || 'Field Report'} · ${when(x.t)}</span></span>`;
@@ -125,6 +126,8 @@ export const actions = {
   ...fieldusers.actions,
   ...urgentActions,
   notifFilter(el) { filter = el.dataset.v; },
+  /** v1.61.0: Review opens the report of that row (bound to its id). */
+  notifReport(el, c) { openById(c.ws, el.dataset.id); location.hash = "#reports"; },
   /** Approve or reject a request from site. A rejected one is closed; an approved one stays open until it is delivered. */
   reqDecide(el, c) {
     const v = el.dataset.v;

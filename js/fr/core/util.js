@@ -51,3 +51,6 @@ export function hoursBetween(a, b) {
 }
 
 export const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
+
+/** 3.1.0: the calendar day of a moment in this phone's time zone (Addis), YYYY-MM-DD. */
+export const localDay = d => { const x = d instanceof Date ? d : new Date(d); return Number.isNaN(+x) ? '' : new Date(x.getTime() - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };

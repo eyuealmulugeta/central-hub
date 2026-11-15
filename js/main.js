@@ -495,7 +495,7 @@ function render() {
     diagnostics.record(err, `render ${name}`);
     root.innerHTML = String(html`<section class="card"><h2>This page could not be shown</h2>
       <p class="muted">The problem was saved quietly and the Admin will see it. The rest of Central Hub still works.</p>
-      <div class="actions left"><a class="btn primary" href="#home">Go to Today</a><button class="btn" type="button" onclick="location.reload()">Reload</button></div></section>`);
+      <div class="actions left"><a class="btn primary" href="#home">Go to Today</a><button class="btn" type="button" data-reload>Reload</button></div></section>`);
   }
   if (kept && restoreFields(kept)) typing = wasTyping;
   if (key === lastKey) {
@@ -1179,3 +1179,12 @@ if (firebaseConfig && !new URLSearchParams(location.search).has('local')) {
 }
 if (!location.search.includes('local')) offerInstall('Central Hub');
 watchUrgent();   // v0.72.0: urgent notices from the GM pop up over every page   // v0.70.0 (owner): offer to install the app
+
+// v1.64.0 (S1): no inline handlers (the page security rules refuse them)
+document.addEventListener('click', e => {
+  const t = e.target.closest && e.target.closest('[data-reload],[data-print],[data-select]');
+  if (!t) return;
+  if (t.hasAttribute('data-reload')) location.reload();
+  else if (t.hasAttribute('data-print')) print();
+  else if (t.select) t.select();
+});

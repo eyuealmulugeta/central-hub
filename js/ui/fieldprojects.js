@@ -4,7 +4,7 @@
 // and "keep in step" does it by itself a few seconds after something changes.
 
 import { store } from '../core/store.js';
-import { fieldReady, syncProjects, removeProject, linkCheck, explainLink, renumberField } from '../sync/fieldreport.js';
+import { fieldReady, syncProjects, removeProject, linkCheck, explainLink, renumberField, driveMoveField } from '../sync/fieldreport.js';
 import { planRenumber, numbersOf, applyRenumber } from '../engine/renumber.js';
 import { fieldProjectOf, fingerprint, countryOf } from '../engine/fieldproject.js';
 import { tell } from '../core/image.js';
@@ -23,6 +23,7 @@ let said = null;       // { ok, text }
 let timer = null;
 let failedAt = 0;
 let who = { email: '', rows: null, error: '' };
+let move = null;       // v1.65.0: { dry, steps, left, more, done }
 let renum = null;      // v1.63.0: { plans: [{ id, name, code, plan, files }], done }   // the email being checked on this tab, and Field Report's answer
 
 const say = (ok, text) => { said = { ok, text }; tell(`${ok ? '✓' : '✗'} ${text}`); store.notify(); };
@@ -141,6 +142,15 @@ export function body() {
       ${(renum?.plans || []).map(p => html`<p><b>${p.code}</b> ${p.name}: ${p.plan.filter(x => x.from !== x.to).length} of ${p.plan.length} change${p.files != null ? html` · <span class="ok">${p.files} file${p.files === 1 ? '' : 's'} renamed in Drive</span>` : ''}</p>
         <table class="table compact"><thead><tr><th>Date</th><th class="r">Now</th><th class="r">New</th></tr></thead>
         <tbody>${p.plan.map(x => html`<tr><td>${x.date}</td><td class="r">${x.from}</td><td class="r">${x.from === x.to ? x.to : html`<b>${x.to}</b>`}</td></tr>`)}</tbody></table>`)}
+      <h3>Tidy the Drive folders <span class="muted">once</span></h3>
+      <p class="muted">One main folder "Amistad Prefab": a folder per project (code and name) with Daily reports by year and month, Photos, Videos and Spotlight; the apps' own files go to _system. Moving keeps every file's link. First show the list, check it, then move.</p>
+      <div class="actions left">
+        <button class="btn" type="button" data-act="movePlan" ${busy ? 'disabled' : ''}>Show what moves</button>
+        ${move && move.dry && move.steps.length ? html`<button class="btn primary" type="button" data-act="moveGo" ${busy ? 'disabled' : ''}>Move now</button>` : ''}
+      </div>
+      ${move ? html`<p>${move.dry ? (move.steps.length ? `${move.steps.length} step${move.steps.length === 1 ? '' : 's'} to do:` : 'Nothing to move: the folders are already tidy.') : html`<span class="ok">Moved.</span>${move.more ? ' Some is left: press Show what moves again, then Move now.' : ''}`}</p>
+        ${move.steps.length ? html`<ul>${move.steps.map(s => html`<li>${s}</li>`)}</ul>` : ''}
+        ${move.left?.length ? html`<p class="muted">Left as they are: ${move.left.join(', ')}</p>` : ''}` : ''}
     </section>`;
 }
 
@@ -193,6 +203,25 @@ export const actions = {
       renum.done = true;
       say(true, 'Past reports renumbered.');
     } catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
+  async movePlan() {
+    if (busy) return;
+    if (!configured()) { say(false, 'Fill in the Field Report web app URL and manager key first (Field Report tab, step 1).'); return; }
+    busy = true; store.notify();
+    try { move = await driveMoveField(true); said = null; }
+    catch (err) { say(false, err.message); }
+    busy = false; store.notify();
+  },
+  async moveGo() {
+    if (busy || !move?.dry) return;
+    if (store.readOnly) { say(false, 'An Executive Partner cannot change anything.'); return; }
+    if (!confirm(`Move the files in Drive now (${move.steps.length} steps)?
+
+Links keep working. This is meant to be done once.`)) return;
+    busy = true; store.notify();
+    try { move = await driveMoveField(false); say(true, move.more ? 'Part moved; press again for the rest.' : 'Drive folders tidied.'); }
+    catch (err) { say(false, err.message); }
     busy = false; store.notify();
   },
   compareProjects() { return run(true); },

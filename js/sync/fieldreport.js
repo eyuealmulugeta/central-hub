@@ -702,6 +702,13 @@ export async function renumberField(code, nos, dry) {
   return out;
 }
 
+/** v1.65.0 (owner, 15 Nov): move the Drive files into the new folders once (script 7.65.0). dry = only list. */
+export async function driveMoveField(dry) {
+  const out = await post({ action: 'driveMove', dry: !!dry });
+  if (!out.ok) throw new Error(/file name|PDF/i.test(out.error || '') ? 'The Field Report script does not know driveMove: it is older than 7.65.0.' : out.error || 'Field Report refused to move the files.');
+  return { dry: !!out.dry, steps: out.steps || [], left: out.left || [], more: !!out.more };
+}
+
 export async function removeProject(code) {
   const out = await post({ action: 'projectDelete', code: String(code || '').toUpperCase() });
   if (!out.ok) {

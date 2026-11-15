@@ -80,6 +80,7 @@ export async function indexPages(env, push) {
     const settingsPage = SETTINGS.includes(page);
     const key = settingsPage ? page : env.baseOf(page);
     if (!view?.render || seen.has(key)) continue;
+    if (view.load) { try { await view.load(); } catch { continue; } }   // v1.68.0 (P2): a page that loads when first opened
     seen.add(key);
     await new Promise(resolve => setTimeout(resolve, 0));   // let the screen breathe between pages
     if (env.cancelled?.()) return;

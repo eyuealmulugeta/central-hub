@@ -10,10 +10,15 @@ import { linkOf as payLinkOf, LINK_DAYS } from '../engine/payfeed.js';   // v1.1
 
 // v1.17.0 (owner, G8): the pay link: attendance, crew pay, monthly staff and progress, names and pay included; 30 days
 const pay = {};   // pid -> { busy, link, err }
-async function callPay(pid, act) {
+// v1.69.0 (owner, 15 Nov, S3): each link ends after 30, 90 or 180 days, or never; the Admin is told 7 days before
+const DAYS = [[30, '30 days'], [90, '90 days'], [180, '180 days'], [0, 'Never ends']];
+const daysPick = (kind, def) => html`<label class="small">Ends after <select data-days="${kind}">${DAYS.map(([v, t]) => html`<option value="${v}" ${v === def ? 'selected' : ''}>${t}</option>`)}</select></label>`;
+const daysOf = (kind, def) => { const v = document.querySelector(`[data-days="${kind}"]`)?.value; return v == null || v === '' ? def : +v; };
+export const endText = (l, now = Date.now()) => { if (!l?.until) return 'Never ends.'; const d = Math.max(0, Math.ceil((l.until - now) / 864e5)); return `Ends ${when(l.until)} (${d} day${d === 1 ? '' : 's'} left).`; };
+async function callPay(pid, act, days) {
   const s = pay[pid] ||= {};
   s.busy = true; s.err = ''; store.notify();
-  try { s.link = await store.callServer('payLink', { pid, act }); }
+  try { s.link = await store.callServer('payLink', { pid, act, ...(days == null ? {} : { days }) }); }
   catch (e) { s.err = String(e?.message || e).replace(/^.*?: /, ''); }
   s.busy = false; store.notify();
 }
@@ -21,17 +26,16 @@ function payCard(p) {
   const s = pay[p.id] || {};
   if (p.id && !s.link && !s.busy && !s.err) callPay(p.id, 'get');
   const l = s.link || {}, url = payLinkOf(l.key);
-  const left = l.until ? Math.max(0, Math.ceil((l.until - Date.now()) / 864e5)) : 0;
   return html`<div class="box pad"><b>Pay link (attendance, salary, progress)</b>
-    <p class="muted small">Names, wages and pay of this project for Excel: attendance by day, the crew pay sheets (as in Payments), the monthly staff (Payroll), day rates and progress, this month and the two before. Only the Admin and the GM make it; it stops by itself after ${LINK_DAYS} days.</p>
+    <p class="muted small">Names, wages and pay of this project for Excel: attendance by day, the crew pay sheets (as in Payments), the monthly staff (Payroll), day rates and progress, this month and the two before. Only the Admin and the GM make it; it stops by itself after the days you choose (30 at first).</p>
     ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
     ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<p><input readonly value="${url}" aria-label="Excel pay link" style="width:100%" data-select></p>
-        <p class="muted small">Made ${when(l.at)} by ${l.byName}. Works ${left} more day${left === 1 ? '' : 's'} (until ${when(l.until)}). Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
+        <p class="muted small">Made ${when(l.at)} by ${l.byName}. ${endText(l)} Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
         <div class="actions left"><button type="button" class="btn primary" data-act="plCopy">Copy the pay link</button>
-          <button type="button" class="btn" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make a new pay link</button>
+          ${daysPick('pl', 30)} <button type="button" class="btn" data-act="plMake" ${s.busy ? 'disabled' : ''}>New key</button>
           <button type="button" class="btn danger" data-act="plOff" ${s.busy ? 'disabled' : ''}>Turn off</button></div>
         <p class="callout warn small">Anyone with this link sees everyone's pay on this project. Give it only to the person who keeps the pay file.</p>`
-      : html`<p>${l.ran ? 'The last pay link ran out.' : 'No pay link for this project.'}</p><button type="button" class="btn primary" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make the pay link</button>`}
+      : html`<p>${l.ran ? 'The last pay link ran out.' : 'No pay link for this project.'}</p>${daysPick('pl', 30)} <button type="button" class="btn primary" data-act="plMake" ${s.busy ? 'disabled' : ''}>Make the pay link</button>`}
     <p class="muted small">In Excel: the same steps as below (Data, From Web, paste, Anonymous). Tables: Summary, Pay periods, Salary, Attendance, Monthly staff, Rates, Progress.</p>
   </div>`;
 }
@@ -39,10 +43,10 @@ function payCard(p) {
 const got = {};   // pid -> { busy, link, err }
 const when = t => (t ? new Date(t).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
-async function call(pid, act) {
+async function call(pid, act, days) {
   const s = got[pid] ||= {};
   s.busy = true; s.err = ''; store.notify();
-  try { s.link = await store.callServer('excelLink', { pid, act }); }
+  try { s.link = await store.callServer('excelLink', { pid, act, ...(days == null ? {} : { days }) }); }
   catch (e) { s.err = String(e?.message || e).replace(/^.*?: /, ''); }
   s.busy = false; store.notify();
 }
@@ -92,12 +96,12 @@ export function render(c) {
     ${s.err ? html`<p class="callout warn">${s.err}</p>` : ''}
     ${s.busy && !s.link ? html`<p class="muted">Loading…</p>` : url ? html`<div class="box pad"><b>The link</b>
         <p><input readonly value="${url}" aria-label="Excel link" style="width:100%" data-select></p>
-        <p class="muted small">Made ${when(l.at)} by ${l.byName}. Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last ${when(l.last)}` : ''}.</p>
+        <p class="muted small">Made ${when(l.at)} by ${l.byName}. ${endText(l)} Opened by Excel ${l.uses} time${l.uses === 1 ? '' : 's'}${l.last ? `, last used ${when(l.last)}` : ', not used yet'}.</p>
         <div class="actions left"><button type="button" class="btn primary" data-act="xlCopy">Copy the link</button>
-          <button type="button" class="btn" data-act="xlMake" ${s.busy ? 'disabled' : ''}>Make a new link</button>
+          ${daysPick('xl', 90)} <button type="button" class="btn" data-act="xlMake" ${s.busy ? 'disabled' : ''}>New key</button>
           <button type="button" class="btn danger" data-act="xlOff" ${s.busy ? 'disabled' : ''}>Turn off</button></div>
         <p class="muted small">Anyone with the link can read these tables, so share it only with the people who need them. A new link stops the old one at once.</p></div>`
-      : html`<div class="box pad"><p>No Excel link for this project.</p><button type="button" class="btn primary" data-act="xlMake" ${s.busy ? 'disabled' : ''}>Make the link</button></div>`}
+      : html`<div class="box pad"><p>${l.ran ? 'The last Excel link ended.' : 'No Excel link for this project.'}</p>${daysPick('xl', 90)} <button type="button" class="btn primary" data-act="xlMake" ${s.busy ? 'disabled' : ''}>Make the link</button></div>`}
     <div class="box pad"><b>In Excel (once)</b>
       <ol class="small"><li>Copy the link.</li><li>Excel: <b>Data</b>, <b>Get Data</b>, <b>From Web</b> (or <b>From Web</b> on the Data tab).</li><li>Paste the link, <b>OK</b>. If asked how to connect, choose <b>Anonymous</b>, <b>Connect</b>.</li>
         <li>In the list, tick <b>Select multiple items</b>, tick every table (Summary, Costs, Bills, Invoices, Cash flow, Tasks, Progress), then <b>Load</b>.</li>
@@ -110,7 +114,7 @@ export const submits = { xiSet(fd, c) { const link = String(fd.get('link') || ''
 
 export const actions = {
   plCopy(el, c) { const l = (pay[(c.project || store.project || {}).id] || {}).link; if (l?.key) navigator.clipboard?.writeText(payLinkOf(l.key)).then(() => store.toast?.('Pay link copied.')).catch(() => {}); },
-  plMake(el, c) { const p = c.project || store.project || {}, l = (pay[p.id] || {}).link; if (!confirm(l?.key ? 'Make a new pay link? The old one stops at once, also in Excel files that use it.' : `Make a pay link for ${p.name || 'this project'}? Anyone with it sees the names and pay of this project for ${LINK_DAYS} days.`)) return; callPay(p.id, 'make'); },
+  plMake(el, c) { const p = c.project || store.project || {}, l = (pay[p.id] || {}).link; if (!confirm(l?.key ? 'New key? The old pay link stops at once, also in Excel files that use it.' : `Make a pay link for ${p.name || 'this project'}? Anyone with it sees the names and pay of this project until it ends.`)) return; callPay(p.id, 'make', daysOf('pl', LINK_DAYS)); },
   plOff(el, c) { const p = c.project || store.project || {}; if (confirm(`Turn off the pay link of ${p.name || 'this project'}? Excel files that use it stop refreshing.`)) callPay(p.id, 'off'); },
   xiSync(el, c) { callIn((c.project || store.project || {}).id, { act: 'sync' }); },
   xiOff(el, c) { const p = c.project || store.project || {}; if (confirm(`Disconnect the Excel file of ${p.name || 'this project'}? What was approved stays in Central Hub.`)) callIn(p.id, { act: 'off' }); },
@@ -126,6 +130,6 @@ export const actions = {
     a.download = `${String(p.name || 'Project').replace(/[^w .-]/g, '')} - Central Hub Excel template.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   },
   xlCopy(el, c) { const l = (got[(c.project || store.project || {}).id] || {}).link; if (l?.key) navigator.clipboard?.writeText(linkOf(l.key)).then(() => store.toast?.('Link copied.')).catch(() => {}); },
-  xlMake(el, c) { const p = c.project || store.project || {}, l = (got[p.id] || {}).link; if (l?.key && !confirm('Make a new link? The old link stops working at once, also in Excel files that use it.')) return; call(p.id, 'make'); },
+  xlMake(el, c) { const p = c.project || store.project || {}, l = (got[p.id] || {}).link; if (l?.key && !confirm('New key? The old link stops working at once, also in Excel files that use it.')) return; call(p.id, 'make', daysOf('xl', 90)); },
   xlOff(el, c) { const p = c.project || store.project || {}; if (!confirm(`Turn off the Excel link of ${p.name || 'this project'}? Excel files that use it stop refreshing.`)) return; call(p.id, 'off'); },
 };

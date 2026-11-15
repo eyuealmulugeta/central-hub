@@ -8,6 +8,14 @@ import { isOut, poPublic } from '../engine/purchases.js';   // v1.4.0 (R6)
 import { METHODS, invoiceLines, makeDoc, nextNumber, docTotals } from '../engine/billing.js';
 import { reportSnapshot, weekOf, monthOf, photoPool, PHOTOS_MIN, PHOTOS_MAX } from '../engine/report.js';
 import { periodPdf } from './periodpdf.js';   // v1.58.0 (owner R8): layout A
+import { periodSheets, periodXlsxName } from '../engine/periodxlsx.js';   // v1.67.0 (owner R7)
+import { xlsxBytes } from '../core/xlsxwrite.js';
+import { billingOf } from '../engine/billing.js';
+import { archiveFolder } from '../engine/logsheet.js';
+import { projectCode } from '../engine/docref.js';
+import { downloadText } from '../core/util.js';
+import { saveBase64 } from '../sync/drive.js';
+import { mailReady } from '../sync/mail.js';
 import { performanceReport } from '../engine/performance.js';
 import { paySheet, delayRecord } from '../engine/site.js';
 import { uid, money, num, fmtDate, fmtFull, fmtDay, toDay, fromDay, sum, clamp } from '../core/util.js';
@@ -610,6 +618,7 @@ export function render(c) {
         <span class="grow"></span>
         ${draft ? html`<button class="btn" data-act="refreshReport" title="Rebuild the figures from the latest data, keeping your remarks">Refresh figures</button>` : html`${sealBar(`doc:${doc.id}`, REPORT_SIGN, { ref: doc.number, type: 'report', projectId: c.project.id })}${EMAIL_BUTTON}`}
         <button class="btn" data-act="periodPdf" title="The report as a PDF in the daily report's layout: page 1 the data, then the photos">PDF</button>
+        <button class="btn" data-act="periodXlsx" title="The report as an Excel workbook: Summary with formulas, Daily, Manpower, Work, Progress, Delays, Requests, Materials">Excel</button>
         ${draft && store.canApprove ? html`<button class="btn primary" data-act="advance">Approve and issue</button>` : ''}
         ${draft || store.canApprove ? html`<button class="btn danger" data-act="remove">Delete</button>` : ''}
       </div>
@@ -706,6 +715,22 @@ export function render(c) {
 }
 
 const current = ws => ws.docs.find(d => d.id === sel?.id);
+
+/** v1.67.0 (owner, 15 Nov, R7): the period report as an Excel workbook ({ name, bytes }). */
+function periodWorkbook(c, d) {
+  const code = c.project.fieldCode || projectCode(c.project);
+  const title = d.kind === 'monthly' ? 'Monthly Progress Report' : d.kind === 'weekly' ? 'Weekly Progress Report' : 'Progress Report';
+  const sheets = periodSheets({ project: c.project, kind: d.kind, title, number: d.number, from: d.period.from, to: d.period.to, reports: c.ws.reports, data: d.data, hoursPerDay: billingOf(c.project).hoursPerDay, approvedOnly: d.kind !== 'daily', asOf: c.today });
+  return { name: periodXlsxName({ from: d.period.from, code, kind: d.kind, number: d.number }), bytes: xlsxBytes(sheets), code };
+}
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const b64 = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768)); return btoa(s); };
+/** Saves the workbook to Drive: <CODE> <name>/Weekly and monthly reports/YYYY/MM. */
+function workbookToDrive(c, d) {
+  const w = periodWorkbook(c, d);
+  return saveBase64(w.name, b64(w.bytes), XLSX_TYPE, { folder: archiveFolder(d.period.from, w.code, 'Weekly and monthly reports', c.project.name) });
+}
+
 // v1.1.0 (G4): invoices, quotations, purchase orders and client reports are outgoing documents
 register(['invoice', 'quote', 'po', 'report'], id => { const d = store.ws.docs.find(x => x.id === id); return d && { rec: d, no: d.number, title: `${TITLE[d.type]} ${d.number}`, to: d.party?.name || store.project?.client?.name || '', project: store.project?.id || '', projectName: store.project?.name || '' }; });
 
@@ -743,6 +768,14 @@ export const actions = {
   period(el) { period = el.dataset.k; },
   /** v1.58.0 (owner R8): the saved client report as a PDF in layout A (js/ui/periodpdf.js). */
   periodPdf(el, c) { const d = current(c.ws); if (d) periodPdf(c, d); },
+  /** v1.67.0 (owner R7): download the Excel workbook; it is also saved to Drive when Drive is set up on this computer. */
+  periodXlsx(el, c) {
+    const d = current(c.ws);
+    if (!d) return;
+    const w = periodWorkbook(c, d);
+    downloadText(w.name, w.bytes, XLSX_TYPE);
+    if (mailReady()) workbookToDrive(c, d).then(() => { notice = `${w.name} is also saved in Drive.`; store.notify(); }).catch(err => { notice = `Downloaded; not saved in Drive (${err.message}).`; store.notify(); });
+  },
   /** v0.66.0: add a photo to the weekly report, or take it out; at most 12. */
   pickPhoto(el, c) {
     const d = current(c.ws);
@@ -807,6 +840,11 @@ export const actions = {
       }
       if (doc.type === 'po' && isOut(doc)) ws.poOpen = [...(ws.poOpen || []).filter(x => x.id !== doc.id), poPublic(doc)];   // v1.4.0 (R6): the site receives against it
     });
+    // v1.67.0 (owner R7): an issued weekly, monthly or custom report is filed in Drive as Excel by itself
+    if (d.type === 'report' && next === 'issued' && d.kind !== 'daily' && mailReady()) {
+      const doc = current(store.ws);
+      if (doc) workbookToDrive(c, doc).then(out => { notice = `Issued. The Excel copy is in Drive (${out.name}).`; store.notify(); }).catch(err => { notice = `Issued. The Excel copy was not saved in Drive (${err.message}).`; store.notify(); });
+    }
   },
   /** Email the document on screen: the dialog opens with the client's address and a covering note, both editable. */
   email(el, c) {

@@ -12,60 +12,38 @@ import { fileCopy } from './sync/filecopy.js';
 import { diaryWaiting } from './engine/diary.js';
 import { prefs } from './core/prefs.js';
 import * as home from './ui/home.js';
-import * as signins from './ui/signins.js';   // v0.98.0 (G2)
 import * as activity from './ui/activity.js';   // v0.99.0 (G1)
 import * as outgoing from './ui/outgoing.js';   // v1.1.0 (G4)
 import * as datafeed from './ui/datafeed.js';   // v1.2.0 (G5)
-import * as sitestore from './ui/sitestore.js';   // v1.3.0 (FR R5)
 import * as purchases from './ui/purchases.js';   // v1.4.0 (FR R6)
-import * as usage from './ui/usage.js';   // v1.5.0 (FR R7)
-import * as weather from './ui/weather.js';   // v1.6.0 (FR R8)
-import * as workphotos from './ui/workphotos.js';   // v1.8.0 (FR 2.66.0)
-import * as excel from './ui/excellink.js';   // v1.9.0 (G7)
 import * as zoho from './ui/zoho.js';   // v1.18.0 (G9)
-import * as products from './ui/products.js';   // v1.19.0 (G10 T1)
 import * as partners from './ui/partners.js';   // v1.20.0 (G10 T2)
 import * as deals from './ui/deals.js';   // v1.21.0 (G10 T3)
-import * as engagement from './ui/engagement.js';   // v1.7.0 (G3)
 import { setSink, act } from './core/activity.js';
 import { paperNo } from './sync/share.js';
-import * as dashboard from './ui/dashboard.js';
 import * as reports from './ui/reports.js';
-import * as schedule from './ui/schedule.js';
 import * as ledger from './ui/ledger.js';
 import * as prices from './ui/prices.js';
-import * as docs from './ui/docs.js';
-import * as finance from './ui/finance.js';
 import * as trade from './ui/trade.js';
 import * as hr from './ui/hr.js';
 import * as contracts from './ui/contracts.js';
 import * as discuss from './ui/discuss.js';
 import * as meetings from './ui/meetings.js';
-import * as contactsView from './ui/contacts.js';
 import * as evaluation from './ui/evaluation.js';
 import * as directory from './ui/directory.js';
 import { setExtraPositions } from './engine/positions.js';
-import * as letters from './ui/letters.js';
-import * as logsheet from './ui/logsheet.js';
 import * as siteinstr from './ui/siteinstr.js';
 import * as requests from './ui/requests.js';
 import * as payroll from './ui/payroll.js';
-import * as cashflow from './ui/cashflow.js';
-import * as payments from './ui/payments.js';
 import * as attendance from './ui/attendance.js';
 import { payFlags } from './engine/paysteps.js';
 import { spotFlags } from './engine/spotlight.js';
 import { crewPhotoFlags, officeStaffOf, officeStaffStale } from './engine/attendance.js';
 import { tierOfPerson } from './engine/manpower.js';
-import * as employment from './ui/employment.js';
-import * as signatures from './ui/signatures.js';
 import * as setup from './ui/setup.js';
-import * as owners from './ui/owners.js';
 import * as notifications from './ui/notifications.js';
 import * as fieldusers from './ui/fieldusers.js';
 import * as peopleaccess from './ui/peopleaccess.js';   // v1.47.0 (People & Access)
-import * as master from './ui/master.js';   // v1.48.0 (Master page)
-import * as discovery from './ui/discovery.js';   // v1.52.0 (Discovery)
 import * as crewforms from './ui/crewforms.js';
 import * as quick from './ui/quick.js';
 import { sendRules } from './ui/prices.js';
@@ -97,6 +75,48 @@ import { offerInstall } from './core/install.js';   // v0.70.0
 import { watchUrgent } from './ui/urgent.js';   // v0.72.0
 
 const APP = 'Central Hub';
+// v1.68.0 (owner, 15 Nov, P2): pages opened only from the menu load the first time they are opened, so Central Hub
+// starts faster. 5 seconds after start-up the rest load quietly, so they are kept for offline use as before.
+const LAZY_PAGES = {
+  signatures: () => import('./ui/signatures.js'),
+  workphotos: () => import('./ui/workphotos.js'),
+  employment: () => import('./ui/employment.js'),
+  engagement: () => import('./ui/engagement.js'),
+  sitestore: () => import('./ui/sitestore.js'),
+  master: () => import('./ui/master.js'),
+  usage: () => import('./ui/usage.js'),
+  weather: () => import('./ui/weather.js'),
+  products: () => import('./ui/products.js'),
+  dashboard: () => import('./ui/dashboard.js'),
+  logsheet: () => import('./ui/logsheet.js'),
+  discovery: () => import('./ui/discovery.js'),
+  cashflow: () => import('./ui/cashflow.js'),
+  signins: () => import('./ui/signins.js'),
+  letters: () => import('./ui/letters.js'),
+  owners: () => import('./ui/owners.js'),
+  finance: () => import('./ui/finance.js'),
+  payments: () => import('./ui/payments.js'),
+  schedule: () => import('./ui/schedule.js'),
+  docs: () => import('./ui/docs.js'),
+  contactsView: () => import('./ui/contacts.js'),
+  excel: () => import('./ui/excellink.js'),
+};
+function lazyPage(name, load) {
+  let mod = null, wait = null, preset = null;
+  const get = () => wait ||= load().then(m => { mod = m; if (preset) m.preset?.(preset); refresh(); return m; })
+    .catch(err => { wait = null; diagnostics.record(err, `load page ${name}`); throw err; });
+  return new Proxy({}, {
+    get(_, k) {
+      if (k === 'load') return get;
+      if (k === 'render') return c => { if (mod) return mod.render(c); get().catch(() => {}); return html`<section class="card"><p class="muted">Loading…</p></section>`; };
+      if (k === 'preset') return x => { if (mod) mod.preset?.(x); else { preset = x; get().catch(() => {}); } };
+      return mod?.[k];
+    },
+  });
+}
+const lazy = Object.fromEntries(Object.entries(LAZY_PAGES).map(([k, load]) => [k, lazyPage(k, load)]));
+const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, docs, contactsView, excel } = lazy;
+setTimeout(() => { for (const p of Object.values(lazy)) p.load().catch(() => {}); }, 5000);
 const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, zoho, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, products, partners, deals, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView, peopleaccess, master, discovery };   // peopleaccess: v1.47.0; master: v1.48.0
 // v1.14.2: home (the Dashboard) was left out of this list in v0.98.0; the Dashboard stayed on "Loading project…"
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen

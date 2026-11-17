@@ -7,6 +7,9 @@ import { html, meter, chip } from './dom.js';
 import { unseenAlerts, markSeen, flagKey, itemKey } from './seen.js';
 import { itemsOf } from './setup.js';
 import { projectForm, submits as spotSubmits } from './spotnotes.js';
+import { markDayOff } from '../sync/fieldreport.js';
+
+const DAYOFF_KINDS = ['Holiday', 'Weather', 'Client stop', 'Other'];   // = Field Report script 7.68.0
 
 const SEV_LABEL = { high: 'Urgent', warn: 'Watch', info: 'Note' };
 const REMIND_EVERY_DAYS = 3;
@@ -45,7 +48,9 @@ export function render(c) {
         <li><a href="#${f.link}" class="row ${unseen.has(flagKey(f)) ? 'unread' : ''}" data-act="seen" data-key="${flagKey(f)}">
           ${chip(SEV_LABEL[f.sev], f.sev)}
           <span class="row-main"><b>${f.title}</b><span class="muted">${f.kind}. ${f.detail}</span></span>
-        </a></li>`)}</ul>` : html`<p class="empty">Nothing is flagged on this project.</p>`}
+        </a>${f.day && p.fieldCode && store.canApprove && !store.readOnly ? html`<span class="toolbar">
+          <select aria-label="Reason for the day off" data-dayoff-k>${DAYOFF_KINDS.map(k => html`<option>${k}</option>`)}</select>
+          <button class="btn small" data-act="dayOff" data-day="${f.day}">Mark ${fmtDate(f.day)} as day-off</button></span>` : ''}</li>`)}</ul>` : html`<p class="empty">Nothing is flagged on this project.</p>`}
     </section>
 
     <section class="card">
@@ -107,4 +112,14 @@ export const actions = {
   },
   close(el, c) { store.update(ws => Object.assign(ws.items.find(i => i.id === el.dataset.id), { status: 'closed', closedAt: c.today })); },
   remove(el) { store.update(ws => { ws.items = ws.items.filter(i => i.id !== el.dataset.id); }); },
+  /** v1.71.0 (owner, 17 Nov): the GM or the PE marks the missing day as a day off in Field Report; the calendar adds it. */
+  async dayOff(el, c) {
+    const day = el.dataset.day, k = el.closest('li')?.querySelector('[data-dayoff-k]')?.value || 'Holiday';
+    if (!confirm(`Mark ${fmtDate(day)} as a day off (${k}) for ${c.project.name}? No report is then needed for that day.`)) return;
+    el.disabled = true;
+    try {
+      await markDayOff({ proj: c.project.fieldCode, date: day, k, by: store.user?.name || '' });
+      store.updateProject(p => { p.nonWorking = [...new Set([...(p.nonWorking || []), day])].sort(); });
+    } catch (e) { el.disabled = false; alert(`Not marked: ${e.message}`); }
+  },
 };

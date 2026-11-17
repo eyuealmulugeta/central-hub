@@ -2,7 +2,7 @@
 // decorates manual action items with overdue / reminder-due state.
 
 import { calendarOf } from './calendar.js';
-import { toDay, fmtDay, fmtDate, prevWork, money } from '../core/util.js';
+import { toDay, fromDay, fmtDay, fmtDate, prevWork, money } from '../core/util.js';
 
 const SEVERITY = { high: 0, warn: 1, info: 2 };
 const ORDER_SOON_DAYS = 7;
@@ -96,6 +96,7 @@ export function buildFlags({ project, ws, sched, boq, led, bill, today }) {
   if (sched.rows.length && sched.progress < 100 && sched.start <= lastWorkDay && (!lastReport || toDay(lastReport) < lastWorkDay)) {
     flag('info', 'Reporting', 'Daily report missing',
       lastReport ? `Last report was ${fmtDate(lastReport)}` : 'No daily reports submitted yet', 'reports');
+    auto.at(-1).day = fromDay(lastWorkDay);   // v1.71.0: the day the GM or the PE may mark as a day off
   }
 
   auto.sort((a, b) => SEVERITY[a.sev] - SEVERITY[b.sev]);

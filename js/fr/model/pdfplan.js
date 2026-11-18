@@ -90,7 +90,8 @@ export function spreadIds(ids, n = CLIENT_PHOTOS) {
 export function clientIds(photos = [], pick = null) {
   const ids = photos.map(p => p.id);
   // 3.0.2: a report from before the exact-12 rule with 12 or fewer photos and nothing ticked keeps them all
-  if (ids.length <= CLIENT_PHOTOS && !photos.some(p => p.client) && !Array.isArray(pick)) return ids;
+  // 3.7.0 (owner, 18 Nov): fewer than 12 photos: all of them go, in order (the grid fills from the top left)
+  if (!Array.isArray(pick) && (ids.length < CLIENT_PHOTOS || (ids.length === CLIENT_PHOTOS && !photos.some(p => p.client)))) return ids;
   const chosen = Array.isArray(pick) ? pick : photos.filter(p => p.client).map(p => p.id);
   const keep = ids.filter(id => chosen.includes(id));
   return keep.length ? keep.slice(0, CLIENT_PHOTOS) : spreadIds(ids);
@@ -107,10 +108,14 @@ export function clientNeed(photos = []) {
 /** The line that stops the report ('' = exactly 12 chosen). */
 export function clientProblem(photos = []) {
   const x = clientNeed(photos), s = k => (k > 1 ? 's' : '');
-  if (x.take) return `Take ${x.take} more photo${s(x.take)}: the client's report needs exactly ${CLIENT_PHOTOS}`;
+  if (x.take) return '';   // 3.7.0 (owner): fewer than 12 may be sent; Send asks for the reason (fewAsk)
   if (x.untick) return `Untick ${x.untick} photo${s(x.untick)}: exactly ${CLIENT_PHOTOS} go to the client`;
   if (x.tick) return `Choose ${x.tick} more photo${s(x.tick)} for the client (exactly ${CLIENT_PHOTOS})`;
   return '';
 }
+/** 3.7.0 (owner, 18 Nov): fewer than 12 photos need a reason of at least 10 characters before Send. */
+export const FEW_MIN = 10;
+export const isFew = (photos = []) => photos.length < CLIENT_PHOTOS;
+export const fewOk = r => !isFew(r.photos || []) || String(r.fewWhy || '').trim().length >= FEW_MIN;
 /** How many more to tick (kept for older callers). */
 export const clientLeft = (photos = []) => clientNeed(photos).tick;

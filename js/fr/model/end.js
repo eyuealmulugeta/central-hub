@@ -8,7 +8,7 @@ import { openPlanned } from './report.js';
 import { itemLine, itemReady, workMeta } from './items.js';
 import { manpowerMeta, attendanceRows, totals } from './crew.js';
 import { dayMeta, photoNeedsCaption } from './day.js';
-import { clientProblem } from './pdfplan.js';
+import { clientProblem, isFew } from './pdfplan.js';
 
 export const REQUEST_TYPES = ['Manpower', 'Material', 'Equipment', 'Tool', 'Expense', 'Other'];
 // 2.29.0 (owner, Phase B1): an expense: amount in ETB or USD, the Ledger category, who was paid, a receipt photo. The PE
@@ -140,6 +140,8 @@ export function reportMeta(r, project, profile = {}) {
     instructions: String(r.instructions || '').split('\n').map(x => x.trim()).filter(Boolean),
     preparedBy: String(profile.name || '').trim(), position: String(profile.position || '').trim(),
     photos: r.photos.length,
+    // 3.7.0 (owner, 18 Nov): sent with fewer than 12 photos, and why (office only: never on the PDF)
+    ...(isFew(r.photos) && String(r.fewWhy || '').trim() ? { fewPhotos: { n: r.photos.length, why: String(r.fewWhy).trim().slice(0, 300) } } : {}),
     photoTags: r.photos.map(p => ({ caption: p.caption || p.captionKind || '', time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '' })),
     // 2.1.0: the photos sent to Drive with this report (the script fills in fileId)
     photoFiles: r.photos.map(p => ({ id: p.id, caption: p.caption || p.captionKind || '', ...(p.gallery ? { gallery: true } : {}), ...(p.client ? { client: true } : {}),   // 2.99.0: for the client   // 2.93.0: a gallery photo is flagged; only the office copy says so

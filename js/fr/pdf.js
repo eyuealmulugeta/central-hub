@@ -392,7 +392,7 @@ export function buildPdf(JsPDF, d) {
 
   /* 2.96.0 (owner R7): the photos start on page 2 and fill each page: 3 across and 4 down (2 across and 3 down when the
      Site Engineer chose bigger photos), one even gap, the caption under each; page 3 and on carry on the same way */
-  const pics = d.photos || [];
+  const pics = (d.photos || []).slice(0, 12);   // 3.7.0: page 2 holds 12 at most; fewer fill from the top left, empty cells have no frame
   // 3.0.2 (owner, 12 Nov: "Make it a slightly landscape rather than a square"): every photo frame is 4:3 landscape;
   // the rows share the page's spare height (at most 28 pt between rows), the rest stays white at the bottom
   // 3.2.0 (owner, 15 Nov): page 2 is 12 photos, 3 across and 4 down, each with a 0.5 pt #D0D0D0 border

@@ -293,6 +293,11 @@ function checkedBy(r) {
     : html`<div class="sig-check"><span>Checked by: <b>sign before approving</b></span><button class="btn small" type="button" data-act="sigDraw">Sign</button><span class="muted small">Your signature is kept for the next reports, on every device.</span></div>`;
 }
 
+/** v1.72.0 (owner, 18 Nov; FR 3.7.0): sent with fewer than 12 photos and why. For the office only: never for a site account, never on the PDF. */
+export const fewSent = (r, c) => {
+  const x = r.field?.fewPhotos;
+  return x && x.why && c?.role !== 'site' ? html`<p class="notice warn no-print">Submitted with ${x.n} photo${x.n === 1 ? '' : 's'} – ${x.why}</p>` : '';
+};
 /** Who approved and signed, and when: in Central Hub's history of the report, not on its PDF. */
 /** v0.30.0: a report sent from the site without a connection: when Send was pressed and when it reached the office. */
 export function offlineSent(f) {
@@ -333,7 +338,7 @@ function replyBox(r, c) {
   const f = r.field;
   const [label, cls] = FIELD_STATUS[f.status] || FIELD_STATUS.submitted;
   const send = (decision, text, primary) => html`<button class="btn small ${primary ? 'primary' : ''}" type="button" data-act="reply" data-id="${r.id}" data-d="${decision}" ${sending.has(r.id) ? 'disabled' : ''}>${text}</button>`;
-  return html`<div class="reply">
+  return html`<div class="reply">${fewSent(r, c)}
     <span><span class="muted">In Field Report</span> ${chip(label, cls)}${f.reviewedBy ? html` <span class="muted">by ${f.reviewedBy}</span>` : ''}</span>
     ${stepsOf(r).length ? html`<ul class="plain report-steps">${stepsOf(r).slice(0, 12).map(x => html`<li><b>${STEP_WORD[x.kind] || x.kind}</b> <span class="muted">${stamp(x.at)}${x.by ? ` · ${x.by}` : ''}</span>${x.text ? html` ${x.text}` : ''}</li>`)}</ul>` : ''}
     ${c.role === 'site' ? '' : html`
@@ -642,7 +647,7 @@ function readCard(r, c) {
       ${isSiteUser(c) ? '' : html`<button class="btn small primary" data-act="openDoc" data-fresh data-id="${r.id}" title="The formal report to print or send">Daily site report</button>`}
       ${r.source === 'field' && r.review === 'done' && r.field?.pdf && store.canApprove ? html`<button class="btn small" data-act="officeCorrect" data-id="${r.id}" title="Back to To approve; your corrections become a new office version">Correct</button>` : ''}
       <button class="btn ghost small" data-act="remove" data-id="${r.id}" title="Moves it to the recycle bin">Delete</button></div>
-    ${offlineSent(r.field) ? html`<p class="notice warn no-print">${offlineSent(r.field)}</p>` : ''}${approvalLine(r)}
+    ${offlineSent(r.field) ? html`<p class="notice warn no-print">${offlineSent(r.field)}</p>` : ''}${fewSent(r, c)}${approvalLine(r)}
     ${(r.pastApprovals || []).map(a => html`<p class="muted no-print">Earlier approval of version ${a.v}: ${a.by}${a.at ? `, ${at(a.at)}` : ''}</p>`)}
     ${replyNotice ? html`<p class="callout ok"><b>✓</b> <span>${replyNotice}</span></p>` : notice ? html`<p class="callout ok"><b>✓</b> <span>${notice}</span></p>` : ''}
     ${sheet(r, c)}

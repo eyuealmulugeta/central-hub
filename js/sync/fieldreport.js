@@ -274,6 +274,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
         equipment: meta.equipment || [],
         progress: meta.progress || [], extra: meta.progressExtra || [], notes: meta.notes || [], plan: meta.plan || [],
         requests: meta.requestItems || [], photos: meta.photos || 0,
+        ...(meta.fewPhotos && meta.fewPhotos.why ? { fewPhotos: { n: Number(meta.fewPhotos.n) || 0, why: String(meta.fewPhotos.why).slice(0, 300) } } : {}),   // v1.72.0 (FR 3.7.0): office only
         photoFiles: meta.photoFiles || [],   // v0.23.1: the photos in Drive (Field Report 2.1.0)
         rating: ratingOf(meta.rating),   // v0.67.0: Field Report's rating of the report out of 5 (2.18.0 and later)
         // structured entries, sent once Field Report works from this project's lists (see buildSetup)

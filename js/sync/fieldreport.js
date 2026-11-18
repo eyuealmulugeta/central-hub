@@ -109,6 +109,19 @@ export async function markDayOff({ proj, date, k, note, undo, by }) {
   return out;
 }
 
+/** v1.73.0 (owner, 18 Nov): the report requests of a project's days and its site engineers, the usual one first (script 7.70.0). */
+export async function reqListFR(proj) {
+  const out = await post({ action: 'reqList', proj: String(proj || '').toUpperCase() });
+  if (!out.ok) throw new Error(out.error || 'Field Report did not answer.');
+  return out;
+}
+/** v1.73.0: ask the site engineer for a missing day's report (a push and a pop-up on his phone), or cancel the request. */
+export async function requestReport({ proj, date, to, note, due, cancel }) {
+  const out = await post({ action: 'reqReport', proj: String(proj || '').toUpperCase(), date, to: to || '', note: String(note || '').slice(0, 200), due: due || '', cancel: !!cancel });
+  if (!out.ok) throw new Error(out.error || 'Field Report did not send the request.');
+  return out;
+}
+
 export async function reviewFieldReport({ name, decision, text }) {
   if (!name) throw new Error('This report has no Field Report file name yet. Click "Check now" once, then try again.');
   const out = await post({ action: 'review', name, decision, text: text || '' });

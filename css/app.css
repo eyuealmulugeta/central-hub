@@ -2171,3 +2171,10 @@ body.presenting #subrow { display: none; }
 
 /* v1.53.0: the site's Spotlight photo on the Dashboard */
 .xspot-pic { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; flex: none; }
+/* v1.74.0: reports by month and week */
+.rep-month { margin-top: 10px; }
+.rep-h { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; background: var(--primary-soft); }
+.rep-h.sub { background: transparent; padding-left: 22px; }
+.rep-week .list { margin-left: 12px; }
+.rep-find { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; }

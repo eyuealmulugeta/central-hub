@@ -25,6 +25,8 @@ import { siLink, fromSigned } from '../engine/siteinstr.js';
 import { consultantOf, maySendDiary, diaryLink, diaryPage, contactUrl, DIARY_STATUS, DIARY_TONE } from '../engine/diary.js';
 import { photoGrid, photoList } from './photos.js';
 import { clientIds, CLIENT_PHOTOS } from '../fr/model/pdfplan.js';   // v1.59.0
+import { monthWeeks, monthCounts, monthTitle, monthShift, findReports } from '../fr/model/review.js';   // v1.74.0 (FR 3.9.0)
+import { offDates } from '../engine/calendar.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
@@ -138,6 +140,50 @@ let docOf = null;       // id of the report shown as the Daily Site Report (v0.2
 let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
 let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
 const period = { year: 0, month: 0, week: 0 };   // the reports shown: 0 is any
+// v1.74.0 (owner, 18 Nov; FR 3.9.0): the reports by Month › Week, one more month shown as the list is scrolled to its end
+let monthsShown = 1, findId = '';
+const shut = new Set();
+const repStatus = r => (r.approval || r.approvedBy || r.field?.status === 'approved' || (r.source !== 'field' && r.review !== 'pending') ? 'approved' : 'submitted');
+/** The report as Field Report's Review sees it (date, no, status, work lines [taskId, milestoneId, task, zone, text]). */
+const asFr = (r, names) => ({ r, date: r.date, no: String(r.field?.no || ''), status: repStatus(r), name: r.id,
+  w: [...(r.field?.work || []).map(w => [w.taskId || '', '', names.get(w.taskId) || '', w.location || '', w.note || '']),
+    ...(r.field?.work?.length ? [] : (r.entries || []).map(e => [e.taskId || '', '', names.get(e.taskId) || '', '', e.note || ''])),   // a report typed in Central Hub
+    ...(r.field?.milestones || []).map(id => ['', typeof id === 'string' ? id : id?.taskId || '', names.get(typeof id === 'string' ? id : id?.taskId) || '', '', 'Reached'])] });
+const counts = n => html`<span class="muted">${n.sent} sent · ${n.approved} approved · <b class="${n.missing ? 'bad' : ''}">${n.missing} missing</b></span>`;
+if (typeof document !== 'undefined') document.addEventListener('scroll', () => {   // the next month when the end is in view
+  const b = document.getElementById('repMore');
+  if (b && !b.disabled && b.getBoundingClientRect().top < innerHeight + 200) { b.disabled = true; b.click(); }
+}, { passive: true, capture: true });
+/** v1.74.0: the shown reports grouped by month and week; counts over every report of the project. */
+function groupedList(c, shown, reports, rowOf) {
+  const names = new Map((c.sched?.rows || []).map(x => [x.id, x.name]));
+  const all = reports.map(r => asFr(r, names)), vis = shown.map(r => asFr(r, names));
+  const months = [...new Set(all.map(x => x.date.slice(0, 7)))].sort().reverse();
+  if (!months.length) return html`<p class="empty">No reports yet.</p>`;
+  const cur = c.today.slice(0, 7), list = [cur, ...months.filter(m => m < cur)].filter((m, i, a) => a.indexOf(m) === i);
+  const opt = { today: c.today, nwDow: weeklyOff(c.project), off: offDates(c.project, reports), start: all.reduce((a, x) => (!a || x.date < a ? x.date : a), '') };
+  const out = list.slice(0, monthsShown).map(m => {
+    const weeks = monthWeeks(m, vis.filter(x => x.date.startsWith(m)), all.filter(x => x.date.startsWith(m)), opt), open = !shut.has(m);
+    return html`<div class="rep-month"><button type="button" class="link rep-h" data-act="repShut" data-k="${m}" aria-expanded="${open}"><b>${open ? '▾' : '▸'} ${monthTitle(m)}</b> ${counts(monthCounts(weeks))}</button>
+      ${open ? weeks.map(w => { const wo = !shut.has(w.key); return html`<div class="rep-week"><button type="button" class="link rep-h sub" data-act="repShut" data-k="${w.key}" aria-expanded="${wo}"><b>${wo ? '▾' : '▸'} ${monthTitle(m).split(' ')[0]} › ${w.title}</b> ${counts(w)}</button>
+        ${wo ? (w.rows.length ? html`<ul class="list">${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
+  });
+  const next = list[monthsShown];
+  return html`${out}${next ? html`<button class="btn" id="repMore" data-act="repMore">Show ${monthTitle(next)}</button>` : html`<p class="muted small">That is every report.</p>`}`;
+}
+/** v1.74.0: search by an activity or milestone of the schedule: the reports that name it, the first and the last. */
+function findCard(c, reports) {
+  const rows = c.sched?.rows || [], names = new Map(rows.map(x => [x.id, x.name]));
+  const pick = html`<label class="rep-find">Find by activity or milestone <select data-chg="repFind" aria-label="Find by activity or milestone"><option value="">Choose from the schedule</option>
+    ${rows.map(x => html`<option value="${x.id}" ${findId === x.id ? 'selected' : ''}>${x.milestone ? 'Milestone' : 'Activity'}: ${x.name}</option>`)}</select></label>`;
+  if (!findId) return pick;
+  const r = findReports(reports.map(x => asFr(x, names)), findId, names.get(findId) || '');
+  const mark = (line, hit) => { const i = hit ? line.indexOf(hit) : -1; return i < 0 ? line : html`${line.slice(0, i)}<mark>${hit}</mark>${line.slice(i + hit.length)}`; };
+  return html`${pick} <button class="btn ghost small" data-act="repFindClear">Clear</button>
+    ${r.first ? html`<p><b>First report:</b> ${fmtDate(r.first.x.date)}${r.first.x.no ? `, No. ${r.first.x.no}` : ''} · <b>Last report:</b> ${fmtDate(r.last.x.date)}${r.last.x.no ? `, No. ${r.last.x.no}` : ''} · ${r.hits.length} report${r.hits.length === 1 ? '' : 's'}</p>
+      <ul class="list">${r.hits.map(h => html`<li class="row"><span class="row-main"><span><b>${fmtDate(h.x.date)}</b> <span class="muted">${h.x.no ? `No. ${h.x.no} · ` : ''}${c.project.name}</span></span><span>${mark(h.line, h.hit)}${h.more ? ` (+${h.more} more)` : ''}</span></span>
+        <button class="btn small" data-act="openReport" data-fresh data-id="${h.x.r.id}">Open</button></li>`)}</ul>` : html`<p class="empty">No report names it.</p>`}`;
+}
 
 /** v0.37.0: "1 Nov, 09:12", the time of every step of a report. */
 const stamp = at => (at && !Number.isNaN(Date.parse(at)) ? new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
@@ -524,7 +570,8 @@ export function render(c) {
         <select data-chg="period" data-f="month" aria-label="Month"><option value="0">Every month</option>${options(pick.months.map(m => [m, monthName(m)]), period.month)}</select>
         <select data-chg="period" data-f="week" aria-label="Week"><option value="0">Every week</option>${options(pick.weeks.map(w => [w, `Week ${w}`]), period.week)}</select>
       </div>
-      ${shown.length ? html`<ul class="list">${shown.map(r => html`
+      ${findCard(c, reports)}
+      ${findId ? '' : shown.length ? groupedList(c, shown, reports, r => html`
         <li class="stack">
           <div class="row top">
             <span class="row-main">
@@ -538,7 +585,7 @@ export function render(c) {
             <button class="btn ghost small" data-act="toggle" data-id="${r.id}">${expanded.has(r.id) ? 'Hide' : 'Show all'}</button>
           </div>
           ${expanded.has(r.id) ? sheet(r, c) : ''}
-        </li>`)}</ul>` : html`<p class="empty">${reports.length ? 'No reports in this period.' : 'No reports yet.'}</p>`}
+        </li>`) : html`<p class="empty">${reports.length ? 'No reports in this period.' : 'No reports yet.'}</p>`}
       ${binBody()}
     </section>`;
 
@@ -809,6 +856,7 @@ export const changes = {
   spotAbout(el) { spot.about = el.value; },
   /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
   addTrade(el) { if (el.value) shownTrades.add(el.value); },
+  repFind(el) { findId = el.value || ''; if (findId) monthsShown = 99; },   // v1.74.0: every month for the search
   period(el) {
     period[el.dataset.f] = +el.value || 0;
     if (el.dataset.f === 'year') { period.month = 0; period.week = 0; }
@@ -883,6 +931,9 @@ export const actions = {
     binNotice = `Report of ${fmtDate(r.date)} moved to the recycle bin.`;
   },
   toggle(el) { if (!expanded.delete(el.dataset.id)) expanded.add(el.dataset.id); },
+  repShut(el) { if (!shut.delete(el.dataset.k)) shut.add(el.dataset.k); },   // v1.74.0
+  repMore() { monthsShown++; },
+  repFindClear() { findId = ''; },
   /** v1.12.0 (owner, 8 Nov): Approve on the list approves the report as the site sent it, in one tap after a short question;
    *  the same approval as the review form (signature, figures, the site told), so Field Report shows it at once. */
   async quickApprove(el, c) {

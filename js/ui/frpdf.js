@@ -55,7 +55,10 @@ export async function frPdf(c, r, client = false, v = 0) {
     }
     const w = weatherFile(weatherTerm(rec.full.r.start?.cond));
     const [logo, weather] = await Promise.all([asDataUrl('assets/fr/icon-192.png'), w ? asDataUrl(`assets/fr/weather/${w}.png`) : '']);
-    const ap = r.approval || {}, approver = (ap.by || r.approvedBy) ? { name: ap.by || r.approvedBy, position: ap.title || '', sig: ap.sig || '', at: String(ap.at || r.approvedAt || '').slice(0, 10) } : null;   // v1.62.0: Approved by, on the right
+    // v1.62.0: Approved by, on the right. v1.77.0 (owner, 19 Nov): full name, role, date AND time, signature; the role and
+    // signature given in Field Report fill what the record lacks (they were dropped: blank role, date only)
+    const ap = r.approval || {}, fc = r.field?.checked || {};
+    const approver = (ap.by || r.approvedBy) ? { name: ap.by || r.approvedBy, position: ap.title || (ap.from === 'field' ? fc.pos || '' : ''), sig: ap.sig || (ap.from === 'field' ? fc.sig || '' : ''), at: ap.at || r.approvedAt || '' } : null;
     const doc = buildPdf(JsPDF, { ...pdfInput(rec, { logo, weather, photos }, false), ...(approver ? { approver } : {}) });
     downloadFile(new File([doc.output('blob')], pdfFileName(rec, client), { type: 'application/pdf' }));
     const missing = ids.length - photos.length;

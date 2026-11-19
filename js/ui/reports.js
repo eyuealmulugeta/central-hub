@@ -774,7 +774,10 @@ export const submits = {
         officeOpen: false, ...(officeChanges.length ? { field: { ...cur.field, photoFiles: photosAfter(cur.field.photoFiles, draft) } } : {}),
         by, weather: fd.get('weather'), entries, review: 'done', approvedBy: who, approvedAt: new Date().toISOString(),
         // v0.26.0: who approved and signed "Checked by", and when (kept in the history here, not on the PDF)
-        approval: { by: who, email: store.user?.email || '', title: store.profile.title || '', at: new Date().toISOString(), sig, from: fieldSig(cur) ? 'field' : 'hub' },
+        // v1.77.0 (owner, 19 Nov): a signature given in Field Report goes with the name and role of who gave it, never under
+        // another person's name (it showed the Central Hub approver's name with the site approver's signature)
+        approval: fieldSig(cur) ? { by: cur.field.checked?.by || who, email: '', title: cur.field.checked?.pos || '', at: cur.field.checked?.at || new Date().toISOString(), sig, from: 'field' }
+          : { by: who, email: store.user?.email || '', title: store.profile.title || store.profile.position || '', at: new Date().toISOString(), sig, from: 'hub' },
         // v0.23.2: the site still has to be told; the server import tells it again until it has been (see importer.js)
         ...(cur.source === 'field' && cur.field?.pdf ? { tellSite: true } : {}),
         manpower: manpower.map(m => (hrs.get(m.trade) != null && m.ot === cur.manpower.find(x => x.trade === m.trade)?.ot ? { ...m, hrs: hrs.get(m.trade) } : m)),

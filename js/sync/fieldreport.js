@@ -247,7 +247,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
   // v0.55.0: a report the office is correcting stays To approve until approved here again
   const approvedHere = (old, meta) => (meta.status === 'approved' && (!old || old.review !== 'done') && !old?.officeOpen ? {
     review: 'done', approvedBy: meta.reviewedBy || meta.checked?.by || 'Field Report', approvedAt: meta.checked?.at || new Date().toISOString(),
-    approval: { by: meta.reviewedBy || meta.checked?.by || 'Field Report', email: '', title: '', at: meta.checked?.at || '', sig: meta.checked?.sig || '', from: 'field' },
+    approval: { by: meta.checked?.by || meta.reviewedBy || 'Field Report', email: '', title: meta.checked?.pos || '', at: meta.checked?.at || meta.reviewedAt || '', sig: meta.checked?.sig || '', from: 'field' },   // v1.77.0: the role kept; the signer's own name
   } : {});
   const put = rec => {
     const i = ws.reports.findIndex(r => r.id === rec.id);

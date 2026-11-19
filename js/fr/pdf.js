@@ -365,7 +365,7 @@ export function buildPdf(JsPDF, d) {
   room(64);
   y += 12 + pad; gaps++;
   const ry = y;
-  signBox(doc, { x: M + CW - ow, y: ry, w: ow, label: 'APPROVED BY:', name: (d.approver || {}).name || '', position: (d.approver || {}).position || '', sig: (d.approver || {}).sig || '', when: (d.approver || {}).at || '' }, { font, lines, INK, MUTED, color });
+  signBox(doc, { x: M + CW - ow, y: ry, w: ow, label: 'APPROVED BY:', name: (d.approver || {}).name || '', position: (d.approver || {}).position || '', sig: (d.approver || {}).sig || '', when: approvedWhen((d.approver || {}).at) }, { font, lines, INK, MUTED, color });
   font(8, 'bold', MUTED); doc.text('PREPARED BY:', ox, ry);
   font(10, 'bold', INK); doc.text(lines(profile.name || '', ow)[0] || '', ox, ry + 15);
   // 2.89.0 (QA D4): the whole job title: a smaller font first, then two lines (it was cut: "Senior Site")
@@ -427,6 +427,15 @@ export function buildPdf(JsPDF, d) {
     if (d.stamp) stampOn(doc, d.stamp, M + CW);   // 2.94.0: the in-app final report only (never the sent file)
   }
   return doc;
+}
+
+/** 3.12.0: the approval's date and time on the site's clock (19 Nov 2026, 14:05); a plain date stays as it is. */
+export function approvedWhen(at) {
+  const s = String(at || '');
+  if (!s || /^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Addis_Ababa', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 }
 
 /** 3.2.0: one sign-off box: label, name, position, the signature on its line, the date under it. */

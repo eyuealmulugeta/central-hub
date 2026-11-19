@@ -9,7 +9,7 @@ import { tierOfPerson } from '../engine/manpower.js';
 import { tierOfPosition } from '../engine/positions.js';
 import { wageOf, monthlyRolesOf } from '../engine/crewpay.js';
 import { docRef } from '../engine/docref.js';
-import { onSite } from '../sync/fieldreport.js';
+import { onSite, crewDecideFR } from '../sync/fieldreport.js';
 import { toDay, fmtFull } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { html } from './dom.js';
@@ -218,6 +218,7 @@ export function render(c) {
     ${edit ? html`<p class="muted no-print att-help">Tap a day to correct it. The pay period (weekly, every two weeks or monthly) is set under Settings, This project, Calendar and rates.</p>` : ''}
     ${edit ? siteList(c) : ''}
     ${penList(c, p)}
+    ${crewChanges(c)}
     ${editor(c, r)}
     <section class="card sheet att-sheet"><div class="paper att dsr land" data-foot="${footText(c, 'Attendance sheet', ref)}">
       ${checkBar(c, p)}
@@ -270,7 +271,38 @@ export const changes = {
   setOt(el, c) { if (editing) save(c, { ot: Math.max(0, +el.value || 0) }); },
 };
 
+/**
+ * v1.76.0 (owner, 19 Nov): Remove crew asked from site (reason, last working day): the PE or GM (approvers) approves or
+ * rejects with a reason; people taken off in the last 60 days can be reinstated. Past attendance and pay stay.
+ */
+const dayOf = iso => String(iso || '').slice(0, 10);
+function crewChanges(c) {
+  const team = c.ws.team || [], since = new Date(Date.now() - 60 * 864e5).toISOString();
+  const asked = team.filter(m => m.active !== false && m.dropAsk);
+  const off = team.filter(m => m.active === false && m.dropOk && String(m.dropOk.at || '') > since).sort((a, b) => String(b.dropOk.at).localeCompare(String(a.dropOk.at)));
+  if (!asked.length && !off.length) return '';
+  const may = store.canApprove && !!c.project.fieldCode;
+  const why = x => [x.reason, x.note].filter(Boolean).join(': ');
+  return html`<section class="card no-print"><div class="toolbar"><h2>Crew changes</h2><span class="muted">Asked from Field Report. The PE or the GM decides; past attendance and pay stay.</span></div>
+    ${asked.length ? html`<h3>Waiting for approval · ${asked.length}</h3><table class="table compact"><thead><tr><th>Name</th><th>Trade</th><th>Reason</th><th>Last working day</th><th>Asked by</th><th></th></tr></thead><tbody>
+      ${asked.map(m => html`<tr><td><b>${m.name}</b> ${chipPending()}</td><td>${m.role || ''}</td><td>${why(m.dropAsk)}</td><td>${m.dropAsk.lastDay || ''}</td><td>${m.dropAsk.byName || m.dropAsk.by || ''}<br><span class="muted small">${dayOf(m.dropAsk.at)}</span></td>
+        <td class="nowrap">${may ? html`<button type="button" class="btn small primary" data-act="crewDo" data-a="crewOff" data-id="${m.id}" data-n="${m.name}">Approve</button> <button type="button" class="btn small ghost" data-act="crewDo" data-a="crewKeep" data-id="${m.id}" data-n="${m.name}">Reject</button>` : html`<span class="muted small">PE or GM</span>`}</td></tr>`)}</tbody></table>` : ''}
+    ${off.length ? html`<h3>Taken off in the last 60 days · ${off.length}</h3><table class="table compact"><thead><tr><th>Name</th><th>Trade</th><th>Reason</th><th>Last working day</th><th>Approved by</th><th></th></tr></thead><tbody>
+      ${off.map(m => html`<tr><td><b>${m.name}</b></td><td>${m.role || ''}</td><td>${why(m.dropOk)}</td><td>${m.dropOk.lastDay || dayOf(m.dropOk.at)}</td><td>${m.dropOk.byName || m.dropOk.by || ''}<br><span class="muted small">${dayOf(m.dropOk.at)}</span></td>
+        <td>${may ? html`<button type="button" class="btn small ghost" data-act="crewDo" data-a="crewBack" data-id="${m.id}" data-n="${m.name}">Reinstate</button>` : ''}</td></tr>`)}</tbody></table>` : ''}
+  </section>`;
+}
+const chipPending = () => html`<span class="chip warn">Pending</span>`;
+
 export const actions = {
+  async crewDo(el, c) {   // v1.76.0
+    const a = el.dataset.a, n = el.dataset.n;
+    let why = '';
+    if (a === 'crewKeep') { why = (prompt(`Why does ${n} stay on the crew? The site sees this.`) || '').trim(); if (!why) return; }
+    else if (!confirm(a === 'crewOff' ? `Take ${n} off ${c.project.name} after the last working day? Past attendance and pay stay.` : `Put ${n} back on the crew of ${c.project.name}?`)) return;
+    try { await crewDecideFR({ proj: c.project.fieldCode, id: el.dataset.id, action: a, why }); tell(a === 'crewOff' ? `✓ ${n} is taken off.` : a === 'crewKeep' ? `✓ ${n} stays.` : `✓ ${n} is back on the crew.`); }
+    catch (e) { tell(`Not saved: ${e.message}`); }
+  },
   // v0.97.0 (owner, R3): the PE or GM (approvers) approves or rejects a penalty given on site
   penDecide(el, c) {
     if (!store.canApprove) return;

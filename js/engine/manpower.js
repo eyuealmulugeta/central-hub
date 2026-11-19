@@ -40,7 +40,10 @@ export function projectOfRow(person) {
 export function directoryRows(staff, table, f = {}) {
   const text = String(f.search || '').trim().toLowerCase();
   const status = f.status || 'active';
-  return (staff || []).filter(p => p.division !== 'trading' && (table === 'all' || tableOf(p) === table)   // v0.57.0: 'all' is staff and crew in one list
+  // v1.76.0 (owner, 19 Nov: "crews not engaged anywhere should show in the available crews list"): 'avail' is the crew
+  // on no project (a crew member taken off their last project lands here)
+  const inTable = p => (table === 'all' ? true : table === 'avail' ? tableOf(p) === 'crew' && !p.allProjects && !activeProjects(p).length : tableOf(p) === table);
+  return (staff || []).filter(p => p.division !== 'trading' && inTable(p)   // v0.57.0: 'all' is staff and crew in one list
     && (status === 'all' || (status === 'left' ? p.status === 'left' : p.status !== 'left'))
     && (!f.position || positionsOf(p).includes(f.position))
     && (!f.tier || String(tierOfPerson(p) ?? '') === String(f.tier))

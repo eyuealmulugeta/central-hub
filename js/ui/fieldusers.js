@@ -16,7 +16,7 @@ import { personByEmail, addedStamp, addedName } from '../engine/manpower.js';
 import { fromTeam, assign } from '../engine/people.js';
 import { importPlan, applyImport, frRoleOf, codeMaps, NEEDS_PROJECT, FR_ROLE_WORD } from '../engine/onesource.js';   // v1.11.0
 
-export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'GM'], ['technician', 'Technician (shares work photos)']];   // technician: v1.8.0
+export const ROLE_WORDS = [['engineer', 'Site engineer'], ['coordinator', 'Project engineer'], ['admin', 'Admin'], ['exec', 'GM'], ['technician', 'Technician (shares photos from crews)']];   // technician: v1.8.0
 const ST_WORDS = { active: ['Active', 'ok'], suspended: ['Suspended', 'warn'], blocked: ['Blocked', 'high'] };
 // v1.11.0 (owner): no Remove here: access is taken away in the Manpower Directory (status Left, or the sign-in email cleared)
 const ACTIONS = [['', 'No change'], ['approve', 'Approve new device'], ['deny', 'Deny new device'], ['activate', 'Activate'], ['suspend', 'Suspend'], ['block', 'Block']];

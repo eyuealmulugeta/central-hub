@@ -102,6 +102,14 @@ export async function pushUrgent({ id, title, text, emails }) {
   return out;
 }
 
+/** v1.76.0 (owner, 19 Nov): Remove crew: approve (crewOff), reject with why (crewKeep) or reinstate (crewBack); the server decides. */
+export async function crewDecideFR({ proj, id, action, why }) {
+  if (!['crewOff', 'crewKeep', 'crewBack'].includes(action)) throw new Error('Which decision?');
+  const out = await post({ action, proj: String(proj || '').toUpperCase(), id, why: why || '' });
+  if (!out.ok) throw new Error(out.error || 'Not saved.');
+  return out;
+}
+
 /** v1.71.0 (owner, 17 Nov): mark a missing day of a project as a day off in Field Report (script 7.68.0), or change it back. */
 export async function markDayOff({ proj, date, k, note, undo, by }) {
   const out = await post({ action: 'dayOff', proj: String(proj || '').toUpperCase(), date, k, note: note || '', undo: !!undo, by: by || '' });

@@ -176,7 +176,7 @@ export const APPS = [
     { page: 'siteinstr', name: 'Site instructions', does: 'Instructions to the site, signed' },
     { page: 'sitestore', name: 'Site store', does: 'The store kept on Field Report, read only, Excel' },
     { page: 'usage', name: 'Materials used', does: 'Materials used against work done' },
-    { page: 'workphotos', name: 'Work photos', does: 'Technicians\' photos from Field Report' },
+    { page: 'workphotos', name: 'Photos from crews', does: 'Technicians\' photos from Field Report' },
   ] },
   { group: 'People pages', about: 'The pages of People', apps: [
     { page: 'crewforms', name: 'Crew forms', does: 'Links for new crew to fill in their details' },
@@ -210,7 +210,7 @@ export const APPS = [
     { page: 'fr_quick', name: 'Quick tab', does: 'The + tab' },
     { page: 'fr_media', name: 'FR Dashboard', does: 'Photos and videos of all projects (GM)' },
     { page: 'fr_store', name: 'Store', does: 'The site store' },
-    { page: 'fr_shots', name: 'Share work', does: 'Technicians\' work photos' },
+    { page: 'fr_shots', name: 'Share work', does: 'Technicians\' photos from crews' },
     { page: 'fr_chat', name: 'Discuss', does: 'The Discuss tab on the phone; switches with Discuss in Central Hub' },
   ] },
 ];

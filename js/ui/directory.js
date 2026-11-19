@@ -132,14 +132,14 @@ function manpower(c) {
   const rows = directoryRows(staff, table, filt).filter(p => !manage || accessMatch(p.id, filt.app));
   const count = t => directoryRows(staff, t, { status: filt.status }).length;
   const sel = (f, label, list) => html`<select data-chg="mpFilt" data-f="${f}" data-fk="mp-f-${f}" aria-label="${label}">${options(list, filt[f])}</select>`;
-  const used = [...new Set(staff.filter(p => table === 'all' || tableOf(p) === table).map(p => normRole(p.title)).filter(Boolean))];
+  const used = [...new Set(staff.filter(p => table === 'all' || tableOf(p) === (table === 'avail' ? 'crew' : table)).map(p => normRole(p.title)).filter(Boolean))];
   const positions = [...ROLES.filter(r => used.includes(r)), ...used.filter(r => !ROLES.includes(r))];
   return html`<section class="card" id="panel-manpower">
     <div class="toolbar"><h2>Manpower Directory</h2><span class="muted">The only place a person is added. Each person has an employee-data record.</span>
       <span class="grow"></span><div class="actions left mp-buttons">${edit ? html`<button type="button" class="btn primary" data-act="mpAdd">+ Add a person</button>` : ''}${manage ? accessButtons(edit) : ''}</div></div>
     ${manage ? accessNotes() : ''}
     <div class="emp-tabs set-tabs" role="tablist">
-      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['all', 'All people'], ['lists', 'Positions & trades'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : k === 'lists' ? ROLES.length : count(k)}</span></button>`)}
+      ${[['staff', 'Staff · Tiers 1, 2, 3 and 5'], ['crew', 'Crew · Tier 4'], ['avail', `Available crew · ${count('avail')}`], ['all', 'All people'], ['lists', 'Positions & trades'], ['new', 'New crew for approval']].map(([k, label]) => html`<button type="button" role="tab" class="tab ${table === k ? 'on' : ''}" data-act="mpTable" data-t="${k}" aria-selected="${table === k ? 'true' : 'false'}">${label} <span class="badge">${k === 'new' ? newCount(c) : k === 'lists' ? ROLES.length : count(k)}</span></button>`)}
     </div>
     ${table === 'new' ? newCrew(c) : table === 'lists' ? lists(edit) : html`
     <div class="toolbar wrap">
@@ -155,7 +155,7 @@ function manpower(c) {
     ${rows.length ? html`<div class="table-wrap"><table class="table compact mp-table">
       <thead><tr><th>No.</th><th>Photo</th><th>Person</th><th>Email</th><th>Phone</th><th>Position &amp; Tier</th><th>Project</th>${more ? html`<th>Rating</th><th>${edit ? 'Rate · currency · wage type' : table === 'crew' ? 'Wage' : table === 'all' ? 'Pay' : 'Salary'}</th><th>Added by</th>` : ''}<th>Status</th>${manage ? html`<th class="c">CH</th><th class="c">FR</th>` : ''}<th>Actions</th><th>Employee data</th></tr></thead>
       <tbody>${rows.map((p, i) => row(p, i, c, edit, manage))}</tbody>
-    </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
+    </table></div>` : html`<p class="empty">${count(table) ? 'Nobody matches.' : table === 'crew' ? 'No crew yet. Add a person and choose a Tier 4 position.' : table === 'avail' ? 'Every crew member is on a project.' : 'Nobody yet. Add the first person with "+ Add a person".'}</p>`}
     <p class="muted">Changing a position or a project asks first. Each person's rate, currency (ETB or USD) and wage type (Daily or Monthly) are set here and nowhere else: Payments, Payroll, the pay sheets and the labour cost all take them from here. They are never shown to Site users.</p>`}
   </section>`;
 }

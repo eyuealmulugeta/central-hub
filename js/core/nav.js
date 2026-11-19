@@ -45,7 +45,7 @@ export const GROUPS = {
   employment: { label: 'Employment & forms', pages: [['employment', 'Agreements'], ['crewforms', 'Crew forms']] },
   attendance: { label: 'Attendance', pages: [['attendance', 'Site'], ['officeatt', 'Office']] },
   // v1.42.0 (R3): Reports
-  reports: { label: 'Daily report', pages: [['reports', 'Daily report'], ['workphotos', 'Work photos']] },
+  reports: { label: 'Daily report', pages: [['reports', 'Daily report'], ['workphotos', 'Photos from crews']] },
   sitestore: { label: 'Site store', pages: [['sitestore', 'Store'], ['usage', 'Materials used']] },
   // v1.43.0 (R4): the Admin's records and the exports
   activity: { label: 'Activity', pages: [['activity', 'Activity'], ['signins', 'Sign-ins'], ['outgoing', 'Outgoing register']] },

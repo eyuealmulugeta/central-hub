@@ -35,9 +35,10 @@ export const isSE = (role, position) => role === 'engineer' || /site\s*eng/i.tes
 export function withPreparer(rows, profile = {}, role = '') {
   const name = String(profile.name || '').trim();
   if (!name || !isSE(role, profile.position)) return rows || [];
+  // 3.11.0 (owner, 19 Nov): the Site engineer is the first entry, Present by default and still changeable
   const list = [...(rows || [])], i = list.findIndex(r => String(r.name || '').trim().toLowerCase() === name.toLowerCase());
-  if (i >= 0) { if (!list[i].state) list[i] = { ...list[i], state: 'present', self: true }; return list; }
-  return [...list, { id: '', name, trade: String(profile.position || '').trim() || 'Site engineer', state: 'present', ot: 0, added: true, self: true }];
+  if (i >= 0) { const me = list[i].state ? { ...list[i], self: true } : { ...list[i], state: 'present', self: true }; list.splice(i, 1); return [me, ...list]; }
+  return [{ id: '', name, trade: String(profile.position || '').trim() || 'Site engineer', state: 'present', ot: 0, added: true, self: true }, ...list];
 }
 
 /** Head count, absentees, man-hours and manpower by trade for the day's working hours. */
@@ -113,19 +114,22 @@ export function wageDiffers(person, trades) {
  */
 // 2.14.2: the same office roles Central Hub leaves out of a site's crew (Central Hub js/sync/fieldreport.js OFFICE_ROLE)
 const OFFICE_ROLE = /\b(gm|admin|administrator|owner|general manager|managing director|office engineer|coordinator|accountant|procurement|logistics|cashier|secretary|human resources|hr)\b/i;
-export function withTeam(p, team) {
+/** 3.11.0 (owner, 19 Nov): a removal approved with a last working day still to come: on the crew until that day. */
+export const leaving = (m, day) => !!(m && m.active === false && m.dropOk && m.dropOk.lastDay && day && day <= m.dropOk.lastDay);
+export function withTeam(p, team, day = '') {
   if (!p || !team) return p;
   const by = new Map(team.map(m => [m.id, m]));
+  const on = m => m.active !== false || leaving(m, day);
   // 2.17.0: only the crew Central Hub has on the project (owner, 1 Nov): anyone else leaves every device
-  const staff = (p.staff || []).filter(s => s.id && by.has(s.id) && by.get(s.id).active !== false)
-    .map(s => { const m = by.get(s.id); return { ...s, name: m.name || s.name, trade: normTrade(m.role || s.trade), fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, personId: m.personId || '' }; });   // 2.45.0: personId, the employee record
+  const staff = (p.staff || []).filter(s => s.id && by.has(s.id) && on(by.get(s.id)))
+    .map(s => { const m = by.get(s.id); return { ...s, name: m.name || s.name, trade: normTrade(m.role || s.trade), fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, dropNo: m.dropNo || null, lastDay: leaving(m, day) ? m.dropOk.lastDay : '', personId: m.personId || '' }; });   // 2.45.0: personId, the employee record
   const have = new Set(staff.map(s => s.id));
   // 2.14.2: anyone ticked in Central Hub's Allocated crew joins at once (office roles stay out, as in Central Hub)
-  for (const m of team) if (m.active !== false && !have.has(m.id) && m.name && (m.fromSite || !OFFICE_ROLE.test(m.role || ''))) staff.push({ id: m.id, name: m.name, trade: normTrade(m.role), active: true, level: 'crew', fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, personId: m.personId || '' });
+  for (const m of team) if (on(m) && !have.has(m.id) && m.name && (m.fromSite || !OFFICE_ROLE.test(m.role || ''))) staff.push({ id: m.id, name: m.name, trade: normTrade(m.role), active: true, level: 'crew', fromSite: !!m.fromSite, dropAsk: m.dropAsk || null, dropNo: m.dropNo || null, lastDay: leaving(m, day) ? m.dropOk.lastDay : '', personId: m.personId || '' });
   // 2.16.0: someone approved in Central Hub leaves the waiting list on every device at once, not at the next check
   const approved = new Set(team.filter(m => m.fromSite && m.active !== false).map(m => String(m.name || '').trim().toLowerCase()));
   const crewWait = (p.crewWait || []).filter(w => !approved.has(String(w.name || '').trim().toLowerCase()));
-  return { ...p, staff, crewWait, gone: team.filter(m => m.active === false).map(m => m.id) };
+  return { ...p, staff, crewWait, gone: team.filter(m => m.active === false && !leaving(m, day)).map(m => m.id) };
 }
 
 /** 2.15.0: positions the owner merged: shown as the one they became (Central Hub js/engine/positions.js OLD_ROLES). */

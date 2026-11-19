@@ -49,13 +49,18 @@ export function needGroups(needs = []) {
  * its requests waiting for an answer, and one line for each other project that has something waiting.
  * @returns [{ sev, kind, title, detail, link, projectId }]
  */
-export function needsYou({ project, flags, requests = [], others = [], approver = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, autoDrafts = [], bills = [], level = 0, me = '', settings = null }) {
+export function needsYou({ project, flags, requests = [], others = [], approver = false, decider = false, gm = false, trades = [], meetings = [], now = Date.now(), today = '', weekly = false, autoDrafts = [], bills = [], level = 0, me = '', settings = null }) {
   const out = [];
   for (const f of flags?.auto || []) if (f.sev !== 'info' || f.kind === 'Reporting') out.push({ ...f, projectId: project.id, project: project.name });
+  // v1.79.0 (owner, 19 Nov): one line per request waiting, so it is approved or rejected right there and the count drops at
+  // once; the GM and the PE (decider) see them on a Site account too
+  if (approver || decider) {
+    for (const r of requests.filter(x => x.status === 'requested' && x.kind !== 'expense')) {
+      const l = (r.lines || []).find(x => String(x.description || '').trim());
+      out.push({ sev: /urgent|high/i.test(r.priority || '') ? 'high' : 'warn', kind: 'Requests', reqId: r.id, title: l ? `${l.description}${l.qty ? ` · ${l.qty} ${l.unit || ''}`.trimEnd() : ''}` : (r.number || 'Site request'), detail: `${r.kind === 'manpower' ? 'Manpower' : r.kind === 'equipment' ? 'Equipment' : 'Material'} request from ${r.byName || r.by || 'the site'}`, link: 'requests', projectId: project.id, project: project.name });
+    }
+  }
   if (approver) {
-    const asked = requests.filter(r => r.status === 'requested' && r.kind !== 'expense');
-    const urgent = asked.filter(r => /urgent|high/i.test(r.priority || ''));
-    if (asked.length) out.push({ sev: urgent.length ? 'high' : 'warn', kind: 'Requests', title: `${asked.length} site request${asked.length > 1 ? 's' : ''} waiting for an answer`, detail: urgent.length ? `${urgent.length} marked urgent` : 'Material, manpower or equipment', link: 'requests', projectId: project.id, project: project.name });
     // v0.61.0: approved expenses to pay (the office)
     const toPay = requests.filter(r => r.kind === 'expense' && r.status === 'approved');
     if (toPay.length) out.push({ sev: 'info', kind: 'Expenses', title: `${toPay.length} approved expense${toPay.length > 1 ? 's' : ''} to pay`, detail: 'Mark each paid with the method and the bank reference', link: 'requests', projectId: project.id, project: project.name });

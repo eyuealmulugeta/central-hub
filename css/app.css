@@ -2183,3 +2183,7 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 .chip.na { background: #ede9fe; color: #6d28d9; } .na-t { color: #6d28d9; } .na-row { border-left: 3px solid #7c3aed; }
 .tabs .tab .ico { flex: none; }
 :root[data-theme="dark"] .chip.na { background: #3b2a63; color: #ddd6fe; }
+/* v1.79.0: a site request with its decision, in "things need you" and on the request */
+.req-dec { display: grid; gap: 4px; }
+.req-dec .actions { margin-top: 4px; gap: 6px; }
+.trow.treq { align-items: flex-start; }

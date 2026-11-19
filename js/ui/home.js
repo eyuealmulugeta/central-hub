@@ -26,6 +26,7 @@ import { prefs } from '../core/prefs.js';
 import { orderOf } from '../core/nav.js';
 import { openArrange } from './quick.js';
 import { siteVisits, loadSiteNotes, spotsOf } from './reports.js';
+import { decideBox, decideActions, withDecided, mayDecideHere, reqNotice } from './requests.js';   // v1.79.0
 
 // v0.95.1 (owner, 5 Nov): the all-projects choice is gone; the Dashboard is about the project open in the chooser
 
@@ -258,6 +259,10 @@ let shownNeeds = [];
 const forget = keys => prefs.set(NEEDS_GONE, [...new Set([...(prefs.get(NEEDS_GONE) || []), ...keys])].slice(-400));
 function needRow(n, c) {
   const other = n.projectId !== c.project.id;
+  // v1.79.0: a site request: everything about it, with Approve and Reject (or Awaiting approval), in the line itself
+  const req = n.reqId && !other && (c.ws.requests || []).find(r => r.id === n.reqId);
+  if (req) return html`<li class="trow treq"><span class="tic ${SEV_TONE[n.sev]}">${icon('docs', 18)}</span><span class="tt">${decideBox(req, c)}</span>
+    <a class="btn small" href="#requests" data-act="openReq" data-id="${req.id}">Open</a></li>`;
   return html`<li class="trow">
     <span class="tic ${SEV_TONE[n.sev]}">${icon(n.link === 'reports' ? 'reports' : n.link === 'schedule' ? 'schedule' : n.link === 'requests' ? 'docs' : ['ledger', 'docs', 'invoices'].includes(n.link) ? 'finance' : 'dashboard', 18)}</span>
     <span class="tt"><b>${n.title}</b><span class="muted">${n.detail || ''}</span></span>
@@ -324,7 +329,7 @@ export function render(c) {
   const summaries = c.summaries || [];
   const meetings = [...(c.company.meetings || []).filter(m => !me() || m.by === me() || (m.invitees || []).some(i => i.email === me())), ...(c.company.bookings || [])];
   const others = summaries.filter(s => s.project.id !== c.project.id);
-  const needs = needsYou({ project: c.project, flags: c.flags, requests: c.ws.requests || [], others, approver: c.role !== 'site', gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), autoDrafts: store.canApprove ? (c.ws.docs || []).filter(d => d.type === 'report' && d.auto && d.status === 'draft') : [], bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
+  const needs = needsYou({ project: c.project, flags: c.flags, requests: withDecided(c.ws.requests || []), others, approver: c.role !== 'site', decider: mayDecideHere(), gm: isGM({ role: c.role, ranks: store.ranks }), level: levelOf({ role: c.role, ranks: store.ranks }), me: store.user?.email || '', settings: c.global, meetings, today: c.today, weekly: c.role !== 'site' && weeklyDue(c.ws, c.today), autoDrafts: store.canApprove ? (c.ws.docs || []).filter(d => d.type === 'report' && d.auto && d.status === 'draft') : [], bills: (c.ws.bills || []).map(b => ({ supplier: b.supplier, status: billStatus(b, c.today) })), trades: c.role === 'site' ? [] : tradeWarnings(tradeLines(c.project, tradeActuals(c.ws, c.project, c.company.staff))) })
     .filter(n => n.projectId === c.project.id);
   // v1.28.0 (owner, 8 Nov): a notice taken away with × (or all with Clear) stays away for this person
   const gone = new Set(prefs.get(NEEDS_GONE) || []);
@@ -376,7 +381,7 @@ export function render(c) {
   const BOX = {
     today: () => todayBox(media, c),
     money: () => moneyBox(split, c, bars),
-    action: () => box('action', (needs.length ? [html`<p class="xclear"><button type="button" class="btn small ghost" data-act="needsClear" title="Take away every notice here">Clear</button></p>`] : []).concat(needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
+    action: () => box('action', [reqNotice()].concat(needs.length ? [html`<p class="xclear"><button type="button" class="btn small ghost" data-act="needsClear" title="Take away every notice here">Clear</button></p>`] : []).concat(needGroups(needs).map(g => html`<details class="ngroup" ${folded.has(g.kind) ? '' : 'open'}>
           <summary data-act="needFold" data-k="${g.kind}"><b>${g.kind}</b> <em class="count-q">${g.items.length}</em>${g.high ? html` <span class="tag ${SEV_TONE.high}">${g.high} ${SEV_LABEL.high.toLowerCase()}</span>` : ''}</summary>
           <ul class="tlist">${g.items.map(n => needRow(n, c))}</ul></details>`).concat(needs.length ? [] : [html`<p class="empty">All clear. Nothing needs you right now.</p>`])), { n: String(needs.length), link: ['notifications', 'All'] }),
     spot: () => box('spot', html`${spotTabs}${spotOn.length ? '' : html`<p class="empty">No Spotlight note or visitor ${sDay === c.today ? 'today' : `on ${fmtDate(sDay)}`}.</p>`}<ul class="xlist xspot">${spotOn.map(n => n.visit ? html`<li><a class="xrowlink" href="#spotlight"><span class="tag xvis">Visitor</span><span class="xt"><b>${n.visit.type} · ${n.visit.name}${n.visit.org ? `, ${n.visit.org}` : ''}</b><br><small>${[n.visit.purpose, `${n.visit.tin}–${n.visit.tout || 'on site'}`, fmtDate(n.date)].filter(Boolean).join(' · ')}</small></span></a></li>`
@@ -455,6 +460,8 @@ function addVideo(c, day) {
 }
 
 export const actions = {
+  ...decideActions,   // v1.79.0
+  openReq(el) { try { sessionStorage.setItem('ch_openReq', el.dataset.id || ''); } catch { /* private mode */ } },
   videoAdd(el, c) { if (!vids.adding) addVideo(c, el.dataset.d); },
   mediaDay(el) { mediaDay = el.dataset.d || ''; },
   mediaWeek(el) { const v = +el.dataset.v; mediaWeek = v === 0 ? 0 : Math.min(0, mediaWeek + v); mediaDay = ''; },   // v1.32.0

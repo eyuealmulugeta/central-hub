@@ -110,6 +110,15 @@ export async function crewDecideFR({ proj, id, action, why }) {
   return out;
 }
 
+/** v1.79.0 (owner, 19 Nov): approve or reject a site request; the server checks, saves and tells the person who asked. */
+export async function reqDecideFR({ pid, id, to, reason }) {
+  if (!['approved', 'rejected'].includes(to)) throw new Error('Approve or reject?');
+  if (!fieldServer.call) throw new Error('Approving needs the Central Hub server: sign in again.');
+  const out = await fieldServer.call({ action: 'reqDecide', pid, id, to, reason: reason || '' });
+  if (!out || !out.ok) throw new Error((out && (out.error || out.refused)) || 'Not saved.');
+  return out;
+}
+
 /** v1.71.0 (owner, 17 Nov): mark a missing day of a project as a day off in Field Report (script 7.68.0), or change it back. */
 export async function markDayOff({ proj, date, k, note, undo, by }) {
   const out = await post({ action: 'dayOff', proj: String(proj || '').toUpperCase(), date, k, note: note || '', undo: !!undo, by: by || '' });

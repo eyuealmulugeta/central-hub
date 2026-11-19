@@ -19,6 +19,62 @@ import { levelOf, expenseWaiting, isWaiting, approvalLimits, LEVEL_SHORT } from 
 import { isExpense, expenseMoves, expenseStatus, expenseStep, checkExpense, expenseTitle, costOf, isGM, limitOf, overLimit, EXPENSE_CATEGORIES, PAY_METHODS, RECEIPT } from '../engine/expenses.js';
 import { pictureFor, tell } from '../core/image.js';
 import { money } from '../core/util.js';
+import { reqDecideFR } from '../sync/fieldreport.js';   // v1.79.0
+
+/*
+ * v1.79.0 (owner, 19 Nov: approve or reject a site request in one step, from "things need you" or the request).
+ * Cause of the old failure: Approve and Reject showed for Office and Admin accounts only (approver()), and the rules let no
+ * Site account, the Project engineer's, save the decision; any Office user could decide. Now the server decides
+ * (functions/reqdecide.js): the GM, the Admin and the project's PE only; everyone else sees "Awaiting approval".
+ */
+export const mayDecideHere = () => !store.readOnly && (store.isAdmin || (store.ranks || []).includes('general_manager') || (store.ranks || []).includes('project_manager'));
+const decidedNow = new Map();   // id -> status, until the database sends the change back: the list and the count drop at once
+let reqMsg = null;              // { ok } or { err, id, to, reason } (Try again)
+export const withDecided = list => (list || []).map(r => (decidedNow.has(r.id) && r.status === 'requested' ? { ...r, status: decidedNow.get(r.id) } : r));
+export const decidable = r => r && !isExpense(r) && r.status === 'requested';
+const reqTime = r => { const at = (r.log || []).find(x => x.status === 'requested')?.at || r.editedAt || r.date || ''; return at ? fmtFull(String(at).slice(0, 10)) + (String(at).length > 10 ? ` ${new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '') : ''; };
+const reasonOf = r => r.purpose || r.fr?.location || '';
+
+/** The request in one block: item, quantity, project, who asked, why, when; Approve and Reject for the GM and the PE. */
+export function decideBox(r, c) {
+  const lines = (r.lines || []).filter(l => String(l.description || '').trim());
+  return html`<div class="req-dec" data-id="${r.id}">
+    <div class="req-what">${lines.map(l => html`<div><b>${l.description}</b>${l.qty ? html` · ${l.qty} ${l.unit || ''}` : ''}</div>`)}</div>
+    <div class="muted small">${c.project.name} · asked by ${r.byName || r.by || 'site'}${reqTime(r) ? ` · ${reqTime(r)}` : ''}${r.priority === 'urgent' ? ' · URGENT' : ''}</div>
+    ${reasonOf(r) ? html`<div class="small">Why: ${reasonOf(r)}</div>` : ''}
+    ${mayDecideHere() ? html`<div class="actions left"><button type="button" class="btn primary small" data-act="reqApprove" data-id="${r.id}">Approve</button><button type="button" class="btn danger small" data-act="reqReject" data-id="${r.id}">Reject</button></div>`
+      : html`<div>${chip('Awaiting approval', 'warn')} <span class="muted small">The GM or the project engineer decides.</span></div>`}
+  </div>`;
+}
+
+/** The answer after a decision: done, or the error with Try again. */
+export const reqNotice = () => (!reqMsg ? '' : reqMsg.ok ? html`<p class="ok" role="status">${reqMsg.ok}</p>`
+  : html`<p class="bad" role="alert">Not saved: ${reqMsg.err} <button type="button" class="btn small" data-act="reqRetry">Try again</button></p>`);
+
+export async function decideReq(c, id, to, reason) {
+  const r = (c.ws.requests || []).find(x => x.id === id);
+  if (!r || !mayDecideHere()) return;
+  if (to === 'rejected' && reason == null) {
+    reason = prompt('Why is it rejected? One line: the person who asked will see it.');
+    if (reason === null) return;
+    reason = reason.trim();
+    if (!reason) { reqMsg = { err: 'write why it is rejected', id, to, reason: null }; store.notify(); return; }
+  }
+  decidedNow.set(id, to); reqMsg = null; store.notify();
+  try {
+    const out = await reqDecideFR({ pid: c.project.id, id, to, reason: reason || '' });
+    reqMsg = { ok: `${r.number || 'Request'} ${to === 'approved' ? 'approved' : 'rejected'}.${out.pushed ? ' The site was told on their phone.' : ''}` };
+  } catch (err) {
+    decidedNow.delete(id);
+    reqMsg = { err: String(err?.message || err), id, to, reason: reason || '' };
+  }
+  store.notify();
+}
+export const decideActions = {
+  reqApprove(el, c) { decideReq(c, el.dataset.id, 'approved', ''); },
+  reqReject(el, c) { decideReq(c, el.dataset.id, 'rejected', null); },
+  reqRetry(el, c) { if (reqMsg?.id) decideReq(c, reqMsg.id, reqMsg.to, reqMsg.reason); },
+};
 
 let selected = null;
 let filter = null;          // waiting | open | done | all; chosen from the person's role until they pick one
@@ -40,12 +96,13 @@ const titleFor = r => (isExpense(r) ? expenseTitle(r) : titleOf(r));
 let receipt = null;   // the receipt photo chosen for a new expense, made small
 
 export function render(c) {
-  const r = find(c.ws);
-  return r ? detail(r, c) : list(c);
+  try { const want = sessionStorage.getItem('ch_openReq'); if (want) { sessionStorage.removeItem('ch_openReq'); selected = want; } } catch { /* private mode */ }   // v1.79.0: Open from things need you
+  const found = find(c.ws), r = found && withDecided([found])[0];
+  return html`${reqNotice()}${r ? detail(r, c) : list(c)}`;
 }
 
 function list(c) {
-  const all = c.ws.requests.filter(sent).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.number.localeCompare(a.number));
+  const all = withDecided(c.ws.requests).filter(sent).sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.number.localeCompare(a.number));
   const s = summary(all, c.today);
   const on = filter || (approver() ? 'waiting' : 'open');
   const shown = all.filter(r => (on === 'waiting' ? ['requested', 'gm'].includes(r.status) : on === 'open' ? isOpen(r) : on === 'done' ? !isOpen(r) : on === 'expenses' ? isExpense(r) : true));
@@ -120,7 +177,7 @@ function detail(r, c) {
       <button class="btn ghost" data-act="back">← Requests</button>
       <span class="muted">${r.number}${r.emails?.length ? `. Emailed to ${r.emails.at(-1).to} on ${fmtFull(r.emails.at(-1).at)}` : ''}</span>
       <span class="grow"></span>
-      ${moves(r.status, can).map(([to, label]) => html`<button class="btn ${to === 'approved' || to === 'fulfilled' ? 'primary' : ''}" data-act="move" data-to="${to}">${label}</button>`)}
+      ${moves(r.status, can).filter(([to]) => !(decidable(r) && ['approved', 'rejected'].includes(to))).map(([to, label]) => html`<button class="btn ${to === 'approved' || to === 'fulfilled' ? 'primary' : ''}" data-act="move" data-to="${to}">${label}</button>`)}
       ${can && r.kind === 'material' && ['approved', 'arranging'].includes(r.status) ? (c.ws.docs || []).some(d => d.type === 'po' && d.reqId === r.id) ? html`<span class="muted">PO ${c.ws.docs.filter(d => d.type === 'po' && d.reqId === r.id).map(d => d.number).join(', ')}</span>` : html`<button class="btn primary" data-act="reqPo">Make purchase order</button>` : ''}
       <button class="btn" data-act="email">Email as PDF</button>
       <button class="btn" data-share title="Send this document as a PDF file on WhatsApp or Telegram">WhatsApp / Telegram</button>
@@ -128,6 +185,7 @@ function detail(r, c) {
       <button class="btn danger" data-act="removeRequest">Delete</button>
     </div>
     ${notice ? html`<p class="ok no-print">${notice}</p>` : ''}
+    ${decidable(r) ? html`<section class="card no-print">${decideBox(r, c)}</section>` : ''}
     ${problems.length ? html`<ul class="plain bad no-print">${problems.map(p => html`<li>${p}</li>`)}</ul>` : ''}
     ${edit ? html`<section class="card no-print"><div class="grid2">
       <label>Needed by <input type="date" data-chg="set" data-f="neededBy" data-fk="rq-need" value="${r.neededBy || ''}"></label>
@@ -211,6 +269,7 @@ function expenseDetail(r, c) {
 const reqRef = (c, r) => docRef({ company: c.global.company, project: c.project, key: r.number });
 
 export const actions = {
+  ...decideActions,   // v1.79.0
   /** v1.4.0 (R6): a draft PO from this approved material request (PE or office); the GM approves it before it goes out. */
   reqPo(el, c) {
     const r = find(c.ws);

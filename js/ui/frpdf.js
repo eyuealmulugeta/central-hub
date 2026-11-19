@@ -3,7 +3,9 @@
 // So Central Hub and Field Report give exactly the same PDF. The client copy is the same builder's client mode: no
 // photo times and no time under the signatures. Photos come from Drive through the server, like the report page.
 
-import { clientIds, CLIENT_PHOTOS } from '../fr/model/pdfplan.js';   // v1.59.0; v1.60.0 exactly 12
+import { clientIds, CLIENT_PHOTOS, progressRows } from '../fr/model/pdfplan.js';   // v1.59.0; v1.60.0 exactly 12
+import { schedule } from '../engine/gantt.js';
+import { calendarOf } from '../engine/calendar.js';
 import { buildPdf, loadPdfLib, photoCaption, weatherFile } from '../fr/pdf.js';
 import { weatherTerm } from '../fr/model/report.js';
 import { fieldPhoto } from '../sync/fieldreport.js';
@@ -23,6 +25,18 @@ export const pdfInput = (rec, pics = {}, client = false) => ({
  
   logo: pics.logo || '', weather: pics.weather || '', photos: pics.photos || [], ...(client ? { client: true } : {}),
 });
+
+/**
+ * v1.78.0 (owner, 19 Nov): the chart of a report saved without one (sent before the schedule reached the phone). Done
+ * before = the schedule worked out from the approved reports before that day; done that day = the report's own lines.
+ */
+export function pastProgress(project, ws, date, items) {
+  const before = (ws.reports || []).filter(x => x.review !== 'pending' && String(x.date || '') < date);
+  const xl = (ws.xlProgress || []).filter(x => String(x.date || '') < date);
+  const rows = schedule(ws.tasks || [], [...before, ...xl], { today: date, workDays: calendarOf(project, ws.reports || []) }).rows || [];
+  const tasks = rows.filter(r => !r.milestone && r.name).map(r => ({ id: r.id, name: r.name, unit: r.qtyTotal ? r.unit || '' : '%', total: r.qtyTotal || 0, done: r.qtyTotal ? r.qtyDone : r.progress }));
+  return progressRows({ tasks }, items || []);
+}
 
 /** The file name: Field Report's name. v1.54.0 (owner, 12 Nov: "dont label as client copy in the pdf"): the copy for the client has the same name, no "(client)". */
 export const pdfFileName = rec => `${String(rec.pdf || `report-${rec.date}`).replace(/\.pdf$/i, '')}.pdf`;
@@ -59,7 +73,9 @@ export async function frPdf(c, r, client = false, v = 0) {
     // signature given in Field Report fill what the record lacks (they were dropped: blank role, date only)
     const ap = r.approval || {}, fc = r.field?.checked || {};
     const approver = (ap.by || r.approvedBy) ? { name: ap.by || r.approvedBy, position: ap.title || (ap.from === 'field' ? fc.pos || '' : ''), sig: ap.sig || (ap.from === 'field' ? fc.sig || '' : ''), at: ap.at || r.approvedAt || '' } : null;
-    const doc = buildPdf(JsPDF, { ...pdfInput(rec, { logo, weather, photos }, false), ...(approver ? { approver } : {}) });
+    const input = pdfInput(rec, { logo, weather, photos }, false);
+    if (!input.progress.length && c.ws) { try { input.progress = pastProgress(c.project, c.ws, rec.full.r.date || r.date, rec.full.r.items); } catch { /* no chart */ } }
+    const doc = buildPdf(JsPDF, { ...input, ...(approver ? { approver } : {}) });
     downloadFile(new File([doc.output('blob')], pdfFileName(rec, client), { type: 'application/pdf' }));
     const missing = ids.length - photos.length;
     tell(`✓ ${pdfFileName(rec, client)} downloaded.${missing > 0 ? ` ${missing} photo${missing > 1 ? 's' : ''} could not be read from Drive.` : ''}`);

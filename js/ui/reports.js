@@ -1158,7 +1158,12 @@ async function pullOther(project) {
  */
 let crewTimer = 0;
 /** v0.59.0 (owner): what Field Report must be sent again for: the crew, and the site details (location, scope, links, status). */
-export const setupKey = setup => JSON.stringify([setup.staff, setup.location || '', setup.scope || '', setup.mapLink || '', setup.layoutLink || '', setup.status || '']);
+// v1.78.0 (owner, 19 Nov: "why is the chart not seen in the reports?"): the schedule too (tasks, their totals and what is
+// done, the finished ones, milestones). The key left them out, so a schedule change never reached Field Report and the
+// report's progress chart stayed empty until someone pressed "Send lists to Field Report".
+const taskKey = t => [t.id, t.name, t.unit || '', Number(t.total) || 0, Number(t.done) || 0];
+export const setupKey = setup => JSON.stringify([setup.staff, setup.location || '', setup.scope || '', setup.mapLink || '', setup.layoutLink || '', setup.status || '',
+  (setup.tasks || []).map(taskKey), (setup.finished || []).map(taskKey), (setup.milestones || []).map(m => [m.id, m.name, !!m.payment])]);
 
 export function watchCrew() {
   clearTimeout(crewTimer);
@@ -1169,7 +1174,7 @@ export function watchCrew() {
     try { key = setupKey(buildSetup({ ...derive(p, store.ws, store.global, todayISO()), people: store.users }, todayISO())); } catch { return; }
     if (key === p.fieldCrewKey) return;
     resendSetup().then(ok => { if (ok) store.updateProject(x => { x.fieldCrewKey = key; }); });
-  }, 4000);
+  }, 30000);   // v1.78.0: 30 s after the last change, so many schedule edits go as one
 }
 
 /** v0.31.1: the lists of any project (Allocated Crew changes projects that are not open), with its own workspace. */

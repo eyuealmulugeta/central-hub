@@ -106,4 +106,20 @@ export const MARKS = {
   backup: `
     <path class="ia" d="M7 19.4a5 5 0 01-.6-9.96A6.5 6.5 0 0118.9 11 4.2 4.2 0 0118 19.4z"/>
     <path class="ib" d="M12 9.2l4 4.2h-2.6v3.8h-2.8v-3.8H8z"/>`,
+  // v1.75.0 (owner, 19 Nov): one icon per Reports tab
+  tabReview: `
+    <rect class="ia" x="3" y="3" width="13" height="17" rx="2"/>
+    <circle class="ib" cx="15.5" cy="14.5" r="4.5"/><rect class="ic" x="18.6" y="17.4" width="2.4" height="5" rx="1" transform="rotate(-45 19.8 19.9)"/>`,
+  tabStatus: `
+    <rect class="ia" x="3" y="12" width="4" height="9" rx="1"/><rect class="ib" x="10" y="7" width="4" height="14" rx="1"/><rect class="ic" x="17" y="3" width="4" height="18" rx="1"/>`,
+  tabAttend: `
+    <circle class="ia" cx="9" cy="8" r="4"/><path class="ia" d="M2 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5z"/>
+    <path class="ib" d="M15 12.5l2.3 2.3 4.4-4.6 1.3 1.3-5.7 5.9-3.6-3.6z"/>`,
+  tabInstr: `
+    <rect class="ia" x="4" y="4" width="16" height="18" rx="2"/><rect class="ib" x="8" y="2" width="8" height="4.5" rx="1.2"/>
+    <rect class="iw" x="7.5" y="10" width="9" height="1.8" rx=".9"/><rect class="iw" x="7.5" y="14.5" width="6" height="1.8" rx=".9"/>`,
+  tabSpot: `
+    <path class="ib" d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4l-5.9 3.1 1.2-6.5-4.8-4.6 6.6-.9z"/>`,
+  tabStore: `
+    <path class="ia" d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path class="ib" d="M3 7l9 4 9-4-9-4z"/>`,
 };

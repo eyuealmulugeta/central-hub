@@ -2178,3 +2178,8 @@ body.presenting #subrow { display: none; }
 .rep-week .list { margin-left: 12px; }
 .rep-find { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
 mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; }
+
+/* v1.75.0 (owner, 19 Nov): No activity, its own colour (violet); the Reports tabs with an icon, one row (scrolls sideways on a phone) */
+.chip.na { background: #ede9fe; color: #6d28d9; } .na-t { color: #6d28d9; } .na-row { border-left: 3px solid #7c3aed; }
+.tabs .tab .ico { flex: none; }
+:root[data-theme="dark"] .chip.na { background: #3b2a63; color: #ddd6fe; }

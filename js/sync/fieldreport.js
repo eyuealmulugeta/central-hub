@@ -109,6 +109,13 @@ export async function markDayOff({ proj, date, k, note, undo, by }) {
   return out;
 }
 
+/** v1.75.0 (owner, 19 Nov): mark a day No activity with a reason (script 7.72.0); change it, or remove it (undo). */
+export async function markNoAct({ proj, date, why, undo }) {
+  const out = await post({ action: 'noAct', proj: String(proj || '').toUpperCase(), date, why: why || '', undo: !!undo });
+  if (!out.ok) throw new Error(out.error || 'Field Report did not mark the day.');
+  return out;
+}
+
 /** v1.73.0 (owner, 18 Nov): the report requests of a project's days and its site engineers, the usual one first (script 7.70.0). */
 export async function reqListFR(proj) {
   const out = await post({ action: 'reqList', proj: String(proj || '').toUpperCase() });
@@ -384,6 +391,8 @@ export function buildSetup({ project, ws, sched, bill, people = [], company = {}
     crew: site.map(m => ({ id: m.id, name: m.name, role: normRole(m.role) })),   // v0.39.0: merged positions as the one they became (Foreman)
     // the roster of this project: only people currently on it (a team member can be switched off without being deleted)
     staff: site.filter(m => m.active !== false).map(m => ({ id: m.id, name: m.name, trade: normRole(m.role), active: true, level: m.level || 'crew' })),
+    // v1.75.0 (owner, 19 Nov): the project start: Field Report shows no day or month before it
+    start: /^\d{4}-\d{2}-\d{2}/.test(String(project.start || '')) ? String(project.start).slice(0, 10) : '',
     // the calendar and the target (finish) date: start + planned working days, skipping every non-working day
     ...(({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }) => ({ nonWorking, nwDow, targetDate, workingDaysLeft, plannedWorkingDays }))(targetFor(project, ws, today)),
     // the people whose email the Admin linked to this project: the only ones who should see it in Field Report

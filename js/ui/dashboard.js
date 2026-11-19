@@ -7,7 +7,7 @@ import { html, meter, chip } from './dom.js';
 import { unseenAlerts, markSeen, flagKey, itemKey } from './seen.js';
 import { itemsOf } from './setup.js';
 import { projectForm, submits as spotSubmits } from './spotnotes.js';
-import { markDayOff, reqListFR, requestReport } from '../sync/fieldreport.js';
+import { markDayOff, markNoAct, reqListFR, requestReport } from '../sync/fieldreport.js';
 
 // v1.73.0 (owner, 18 Nov): Request report on a missing day (Field Report script 7.70.0): the requests and engineers of a project
 const frReq = {};   // Field Report code -> { reqs, engineers, at, busy }
@@ -92,7 +92,9 @@ export function render(c) {
           <span class="row-main"><b>${f.title}</b><span class="muted">${f.kind}. ${f.detail}</span></span>
         </a>${f.day && p.fieldCode && store.canApprove && !store.readOnly ? html`<span class="toolbar">
           <select aria-label="Reason for the day off" data-dayoff-k>${DAYOFF_KINDS.map(k => html`<option>${k}</option>`)}</select>
-          <button class="btn small" data-act="dayOff" data-day="${f.day}">Mark ${fmtDate(f.day)} as day-off</button></span>${reqRow(p.fieldCode, f.day, c.today)}` : ''}</li>`)}</ul>` : html`<p class="empty">Nothing is flagged on this project.</p>`}
+          <button class="btn small" data-act="dayOff" data-day="${f.day}">Mark ${fmtDate(f.day)} as day-off</button></span>
+          <span class="toolbar"><input aria-label="Reason for No activity" maxlength="120" placeholder="Reason for No activity (required)" data-na-why>
+          <button class="btn small" data-act="noAct" data-day="${f.day}">⏸ Mark ${fmtDate(f.day)} No activity</button></span>${reqRow(p.fieldCode, f.day, c.today)}` : ''}</li>`)}</ul>` : html`<p class="empty">Nothing is flagged on this project.</p>`}
     </section>
 
     <section class="card">
@@ -171,6 +173,14 @@ export const actions = {
     const code = c.project.fieldCode;
     try { const out = await requestReport({ proj: code, date: el.dataset.day, cancel: true }); frReq[code] = { ...(frReq[code] || { engineers: [] }), reqs: out.reqs || {}, at: Date.now(), busy: false }; paintReqs(code); el.remove(); }
     catch (e) { alert(`Not cancelled: ${e.message}`); }
+  },
+  // v1.75.0 (owner, 19 Nov): No activity: a working day (keeps its report number), not missing, a reason required
+  async noAct(el, c) {
+    const day = el.dataset.day, why = (el.closest('li')?.querySelector('[data-na-why]')?.value || '').trim();
+    if (!why) { alert('Write the reason for No activity first.'); return; }
+    el.disabled = true;
+    try { const out = await markNoAct({ proj: c.project.fieldCode, date: day, why }); store.updateProject(p => { p.noAct = out.noAct || {}; }); }
+    catch (e) { el.disabled = false; alert(`Not marked: ${e.message}`); }
   },
   async dayOff(el, c) {
     const day = el.dataset.day, k = el.closest('li')?.querySelector('[data-dayoff-k]')?.value || 'Holiday';

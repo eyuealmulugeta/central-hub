@@ -22,7 +22,8 @@ export const ALIASES = {
   employment: { view: 'employment', title: 'Agreement' },
   documentsign: { view: 'signatures', title: 'Document sign' },
   attendance: { view: 'attendance', title: 'Attendance sheet', switch: 'reports' },
-  spotlight: { view: 'reports', title: 'Spotlight', preset: { spot: true }, switch: 'reports' },   // v0.31.0; v0.50.1 the Admin and HR
+  spotlight: { view: 'reports', title: 'Spotlight', preset: { spot: true }, switch: 'reports' },
+  review: { view: 'reports', title: 'Review', preset: { review: true }, switch: 'reports' },   // v1.75.0 (owner, 19 Nov): the past reports, its own tab   // v0.31.0; v0.50.1 the Admin and HR
   officeatt: { view: 'attendance', title: 'Office attendance', preset: { office: true } },   // v0.50.1: office staff, the Admin and HR
 };
 
@@ -50,6 +51,8 @@ export const GROUPS = {
   activity: { label: 'Activity', pages: [['activity', 'Activity'], ['signins', 'Sign-ins'], ['outgoing', 'Outgoing register']] },
   excel: { label: 'Exports', pages: [['excel', 'Excel link'], ['zoho', 'Zoho export']] },
 };
+/** v1.75.0 (owner, 19 Nov): an icon on each Reports tab (the same size and spacing). */
+export const TAB_ICONS = { reports: 'reports', review: 'tabReview', status: 'tabStatus', attendance: 'tabAttend', siteinstr: 'tabInstr', spotlight: 'tabSpot', sitestore: 'tabStore' };
 /** The group a page belongs to ('' for none). */
 export const groupOf = page => Object.keys(GROUPS).find(k => GROUPS[k].pages.some(([p]) => p === page)) || '';
 /** The tabs drawn in a section's row: a page of a group is left out when its group's first page is there. */
@@ -81,7 +84,7 @@ export const MENUS = {
     today,
     quickHub,
     { id: 'projects', label: 'Project', icon: 'dashboard', tabs: ['dashboard', 'schedule', 'requests', 'setup'] },   // v1.42.0 (R3): Requests is site work
-    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'status', 'attendance', 'officeatt', 'spotlight', 'siteinstr', 'sitestore', 'usage', 'workphotos'] },   // workphotos: v1.8.0   // siteinstr: v0.77.0
+    { id: 'report', label: 'Reports', icon: 'reports', tabs: ['reports', 'review', 'status', 'attendance', 'officeatt', 'siteinstr', 'spotlight', 'sitestore', 'usage', 'workphotos'] },   // v1.75.0 (owner, 19 Nov): Daily report · Review · Status report · Attendance · Site instructions · Spotlight · Site store   // workphotos: v1.8.0   // siteinstr: v0.77.0
     { id: 'crew', label: 'People', icon: 'hr', tabs: ['directory', 'hr', 'employment', 'crewforms', 'evaluation', 'payroll'] },   // v1.47.0: People & Access first   // v1.41.0 (R2): Office attendance is beside Attendance   // crewforms: v0.33.0
     { id: 'finance', label: 'Money', icon: 'finance', tabs: ['ledger', 'invoices', 'quotations', 'payments', 'purchases', 'cashflow', 'summary', 'excel', 'zoho'] },   // excel: v1.9.0 (G7); zoho: v1.18.0 (G9)
     { id: 'admin', label: 'Documents', icon: 'contracts', tabs: ['contracts', 'documentsign', 'letters', 'logsheet', 'contacts', 'owners'] },   // logsheet: v0.51.0

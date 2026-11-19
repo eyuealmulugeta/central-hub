@@ -6,7 +6,7 @@
 import { normRole, tradeChoices } from '../engine/positions.js';
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds, markNoAct } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -149,7 +149,10 @@ const asFr = (r, names) => ({ r, date: r.date, no: String(r.field?.no || ''), st
   w: [...(r.field?.work || []).map(w => [w.taskId || '', '', names.get(w.taskId) || '', w.location || '', w.note || '']),
     ...(r.field?.work?.length ? [] : (r.entries || []).map(e => [e.taskId || '', '', names.get(e.taskId) || '', '', e.note || ''])),   // a report typed in Central Hub
     ...(r.field?.milestones || []).map(id => ['', typeof id === 'string' ? id : id?.taskId || '', names.get(typeof id === 'string' ? id : id?.taskId) || '', '', 'Reached'])] });
-const counts = n => html`<span class="muted">${n.sent} sent · ${n.approved} approved · <b class="${n.missing ? 'bad' : ''}">${n.missing} missing</b></span>`;
+const counts = n => html`<span class="muted">${n.sent} sent · ${n.approved} approved · <b class="${n.missing ? 'bad' : ''}">${n.missing} missing</b>${n.noact ? html` · <span class="na-t">${n.noact} no activity</span>` : ''}</span>`;
+/** v1.75.0: a day marked No activity in its week (reason on hover; the Admin changes or removes it). */
+const naRow = (d, na) => html`<li class="row na-row" title="${na.why}"><span class="row-main"><span><b>${fmtDate(d)}</b> <span class="chip na">⏸ No activity</span></span><span class="muted">${na.why} · marked by ${na.by}${na.at ? `, ${fmtDate(na.at.slice(0, 10))}` : ''}</span></span>
+  ${store.isAdmin && !store.readOnly ? html`<span class="toolbar"><button class="btn ghost small" data-act="noActEdit" data-day="${d}">Change reason</button><button class="btn ghost small" data-act="noActRemove" data-day="${d}">Remove</button></span>` : ''}</li>`;
 if (typeof document !== 'undefined') document.addEventListener('scroll', () => {   // the next month when the end is in view
   const b = document.getElementById('repMore');
   if (b && !b.disabled && b.getBoundingClientRect().top < innerHeight + 200) { b.disabled = true; b.click(); }
@@ -160,16 +163,19 @@ function groupedList(c, shown, reports, rowOf) {
   const all = reports.map(r => asFr(r, names)), vis = shown.map(r => asFr(r, names));
   const months = [...new Set(all.map(x => x.date.slice(0, 7)))].sort().reverse();
   if (!months.length) return html`<p class="empty">No reports yet.</p>`;
-  const cur = c.today.slice(0, 7), list = [cur, ...months.filter(m => m < cur)].filter((m, i, a) => a.indexOf(m) === i);
-  const opt = { today: c.today, nwDow: weeklyOff(c.project), off: offDates(c.project, reports), start: all.reduce((a, x) => (!a || x.date < a ? x.date : a), '') };
+  // v1.75.0 (owner, 19 Nov): the months start at the project start date (Project › Setup); without one, the first report
+  const pst = String(c.project.start || '').slice(0, 10), sm = pst.slice(0, 7), na = c.project.noAct || {};
+  const cur = c.today.slice(0, 7), list = [cur, ...months.filter(m => m < cur)].filter((m, i, a) => a.indexOf(m) === i && (!sm || m >= sm));
+  const opt = { today: c.today, nwDow: weeklyOff(c.project), off: offDates(c.project, reports), noact: Object.keys(na), start: pst || all.reduce((a, x) => (!a || x.date < a ? x.date : a), '') };
   const out = list.slice(0, monthsShown).map(m => {
     const weeks = monthWeeks(m, vis.filter(x => x.date.startsWith(m)), all.filter(x => x.date.startsWith(m)), opt), open = !shut.has(m);
     return html`<div class="rep-month"><button type="button" class="link rep-h" data-act="repShut" data-k="${m}" aria-expanded="${open}"><b>${open ? '▾' : '▸'} ${monthTitle(m)}</b> ${counts(monthCounts(weeks))}</button>
       ${open ? weeks.map(w => { const wo = !shut.has(w.key); return html`<div class="rep-week"><button type="button" class="link rep-h sub" data-act="repShut" data-k="${w.key}" aria-expanded="${wo}"><b>${wo ? '▾' : '▸'} ${monthTitle(m).split(' ')[0]} › ${w.title}</b> ${counts(w)}</button>
-        ${wo ? (w.rows.length ? html`<ul class="list">${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
+        ${wo ? (w.rows.length || Object.keys(na).some(d => d >= w.from && d <= w.to) ? html`<ul class="list">${Object.keys(na).filter(d => d >= w.from && d <= w.to).sort().reverse().map(d => naRow(d, na[d]))}${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
   });
   const next = list[monthsShown];
-  return html`${out}${next ? html`<button class="btn" id="repMore" data-act="repMore">Show ${monthTitle(next)}</button>` : html`<p class="muted small">That is every report.</p>`}`;
+  const ask = !pst && store.isAdmin ? html`<p class="notice warn">No project start date yet: Review starts at the first report. <a href="#setup">Set the start date in Project › Setup</a>.</p>` : '';
+  return html`${ask}${out}${next ? html`<button class="btn" id="repMore" data-act="repMore">Show ${monthTitle(next)}</button>` : html`<p class="muted small">${pst ? `That is every report since the project start, ${fmtDate(pst)}.` : 'That is every report.'}</p>`}`;
 }
 /** v1.74.0: search by an activity or milestone of the schedule: the reports that name it, the first and the last. */
 function findCard(c, reports) {
@@ -398,8 +404,8 @@ function replyBox(r, c) {
 }
 
 /** v0.31.0: opened as Spotlight (its own tab) or as the Daily field report. */
-let spotPage = false;
-export function preset(p = {}) { spotPage = !!p.spot; }
+let spotPage = false, reviewPage = false;   // v1.75.0: Review (the past reports) is its own tab
+export function preset(p = {}) { spotPage = !!p.spot; reviewPage = !!p.review; }
 
 // v0.80.0: the consultant's answer, looked up once per link while Reports is open (the server also copies it)
 const diaryChecked = new Set();
@@ -603,13 +609,9 @@ export function render(c) {
         </aside>
       </div>`;
   }
-  const now = tab || (c.role === 'site' ? 'enter' : 'list');
-  const tabs = [['list', 'Reports', pending.length], ['enter', 'Daily report']];   // v0.31.0: Spotlight has its own tab at the top
-  // one column: Field Report first, then the tabs
+  // v1.75.0 (owner, 19 Nov): Daily report (write and approve) and Review (the past reports) are two tabs of Reports
   return html`<div class="side">${fieldCard}
-    <div class="emp-tabs set-tabs" role="tablist">${tabs.map(([k, label, n]) => html`
-      <button type="button" role="tab" class="tab ${now === k ? 'on' : ''}" data-act="repTab" data-t="${k}" aria-selected="${now === k ? 'true' : 'false'}">${label}${n ? html` <span class="badge">${n}</span>` : ''}</button>`)}</div>
-    ${now === 'enter' || back ? formCard : listCard}</div>`;
+    ${reviewPage && !back ? listCard : formCard}</div>`;
 }
 
 /** v0.80.0: the screen's style rules of the report sheet (colours, sections, photos), for the consultant's copy. */
@@ -934,6 +936,19 @@ export const actions = {
   repShut(el) { if (!shut.delete(el.dataset.k)) shut.add(el.dataset.k); },   // v1.74.0
   repMore() { monthsShown++; },
   repFindClear() { findId = ''; },
+  // v1.75.0 (owner, 19 Nov): No activity: change the reason or remove it (the Admin only; the script checks too)
+  async noActEdit(el, c) {
+    const d = el.dataset.day, old = (c.project.noAct || {})[d] || {}, why = (prompt(`New reason for No activity on ${fmtDate(d)}:`, old.why || '') || '').trim();
+    if (!why) return;
+    try { const out = await markNoAct({ proj: c.project.fieldCode, date: d, why }); store.updateProject(p => { p.noAct = out.noAct || {}; }); }
+    catch (e) { alert(`Not changed: ${e.message}`); }
+  },
+  async noActRemove(el, c) {
+    const d = el.dataset.day;
+    if (!confirm(`Remove No activity from ${fmtDate(d)}? The day is missing again.`)) return;
+    try { const out = await markNoAct({ proj: c.project.fieldCode, date: d, undo: true }); store.updateProject(p => { p.noAct = out.noAct || {}; }); }
+    catch (e) { alert(`Not removed: ${e.message}`); }
+  },
   /** v1.12.0 (owner, 8 Nov): Approve on the list approves the report as the site sent it, in one tap after a short question;
    *  the same approval as the review form (signature, figures, the site told), so Field Report shows it at once. */
   async quickApprove(el, c) {
@@ -1201,6 +1216,7 @@ Import its ${count} report(s) into the Central Hub project "${project.name}"?`))
     // the calendar Field Report holds: its non-working dates are added to the project's, its weekly off days are only compared
     const cal = mergeCalendar(project, out);
     if (cal.added.length) store.updateProject(p => { p.nonWorking = cal.nonWorking; });
+    if (out.noAct && JSON.stringify(out.noAct) !== JSON.stringify(project.noAct || {})) store.updateProject(p => { p.noAct = out.noAct; });   // v1.75.0: No activity days (script 7.72.0)
     const weeklyNote = cal.weeklyDiffers
       ? ` Field Report has ${cal.theirs.length ? cal.theirs.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ') : 'no weekday'} as weekly off days, this project has ${weeklyOff(project).map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ') || 'none'}. Change the working week under Settings if Field Report is right.` : '';
     const noworkBefore = store.ws.reports.filter(r => r.field?.nowork).length;

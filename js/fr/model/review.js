@@ -52,27 +52,28 @@ const short = iso => `${Number(iso.slice(8))} ${MON[Number(iso.slice(5, 7)) - 1]
 export const weekTitle = (w, from, to) => `Week ${w}, ${from === to ? short(to) : from.slice(5, 7) === to.slice(5, 7) ? `${Number(from.slice(8))}-${short(to)}` : `${short(from)}-${short(to)}`}`;
 /**
  * The weeks of a month, newest first, each with its reports (newest first) and its counts.
- * opt: { today, nwDow:[0], off:[dates], nowork:[dates], start (first day a report is due) }; missing counts only working days
+ * opt: { today, nwDow:[0], off:[dates], nowork:[dates], noact:[dates], start (first day a report is due) }; missing counts only working days
+ * 3.10.0: a No activity day is not missing; it is counted on its own (noact).
  * before today, from `start`, with no report and no no-work notice. rows: the reports shown (after the filters).
  */
 export function monthWeeks(month, rows, all, opt = {}) {
   const today = opt.today || '9999-12-31', last = month === today.slice(0, 7) ? today : plus(monthShift(month, 1) + '-01', -1);
   const first = month + '-01', weeks = [];
   if (last < first) return weeks;
-  const sent = new Set((all || []).map(x => x.date)), nw = new Set(opt.nowork || []), off = new Set(opt.off || []), nwDow = opt.nwDow || [0];
+  const sent = new Set((all || []).map(x => x.date)), nw = new Set(opt.nowork || []), na = new Set(opt.noact || []), off = new Set(opt.off || []), nwDow = opt.nwDow || [0];
   for (let mon = monday(last); mon >= monday(first); mon = plus(mon, -7)) {
     const from = mon < first ? first : mon, sun = plus(mon, 6), to = sun > last ? last : sun;
     const inWeek = x => x.date >= from && x.date <= to;
     const mine = (all || []).filter(inWeek);
-    let missing = 0;
-    for (let d = from; d <= to; d = plus(d, 1)) if (d < today && (!opt.start || d >= opt.start) && !nwDow.includes(dow(d)) && !off.has(d) && !sent.has(d) && !nw.has(d)) missing++;
+    let missing = 0, noact = 0;
+    for (let d = from; d <= to; d = plus(d, 1)) if (d <= today && (!opt.start || d >= opt.start) && !nwDow.includes(dow(d)) && !off.has(d) && !sent.has(d) && !nw.has(d)) { if (na.has(d)) noact++; else if (d < today) missing++; }
     weeks.push({ key: `${month}|${mon}`, title: weekTitle(isoWeek(mon), from, sun > plus(monthShift(month, 1) + '-01', -1) ? plus(monthShift(month, 1) + '-01', -1) : sun), from, to,
-      rows: (rows || []).filter(inWeek), sent: mine.length, approved: mine.filter(x => x.status === 'approved').length, missing });
+      rows: (rows || []).filter(inWeek), sent: mine.length, approved: mine.filter(x => x.status === 'approved').length, missing, noact });
   }
   return weeks;
 }
 /** The month's counts: the sum of its weeks. */
-export const monthCounts = weeks => weeks.reduce((a, w) => ({ sent: a.sent + w.sent, approved: a.approved + w.approved, missing: a.missing + w.missing }), { sent: 0, approved: 0, missing: 0 });
+export const monthCounts = weeks => weeks.reduce((a, w) => ({ sent: a.sent + w.sent, approved: a.approved + w.approved, missing: a.missing + w.missing, noact: a.noact + (w.noact || 0) }), { sent: 0, approved: 0, missing: 0, noact: 0 });
 /** May an older month still be loaded? No once the two oldest loaded months are both empty, or before 2025. */
 export const moreMonths = months => {
   const keys = Object.keys(months || {}).sort(), [a, b] = keys;

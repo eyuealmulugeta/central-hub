@@ -58,7 +58,7 @@ import { autoSync as fieldAutoSync } from './ui/fieldprojects.js';
 import { syncPeople } from './ui/peoplesync.js';
 import { PROJECT_PAGES, TRADING_PAGES, SETTINGS_PAGES, pageOn, appOn, adminOnly, isDelete, permKey, MONEY_PAGES } from './core/access.js';
 import { scopedCompany, setCurrentDivision } from './core/division.js';
-import { GROUPS, groupOf, rowTabs } from './core/nav.js';   // v1.40.0 (R1)
+import { GROUPS, groupOf, rowTabs, TAB_ICONS } from './core/nav.js';   // v1.40.0 (R1)
 import { ALIASES, REDIRECT, baseOf, switchOf, resolve, hubsOf, pagesIn, divisionsOf, divisionFor, divisionLabel, PHONE_TABS, arranged, orderOf, MENU_ORDER } from './core/nav.js';
 import { healthOf } from './engine/today.js';
 import { footCss } from './ui/print.js';
@@ -126,7 +126,7 @@ const COMPANY_VIEWS = { home: 'The open project at a glance: photos, money, requ
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Sales, pipeline, what is owed and shipments', owners: 'The owners of the company, Admin only' });
 const TITLES = { discovery: 'Discovery', master: 'Master', peopleaccess: 'People & Access', deals: 'Deals', partners: 'Partners', products: 'Products', zoho: 'Zoho export', excel: 'Excel link', workphotos: 'Work photos', engagement: 'Engagement', weather: 'Weather and holidays', usage: 'Materials used', purchases: 'Purchases', sitestore: 'Site store', datafeed: 'Data tracker', outgoing: 'Outgoing register', activity: 'Activity record', signins: 'Sign-in history', mine: 'My settings', home: 'Dashboard', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Follow-ups', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'Access rules', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
-Object.assign(TITLES, { siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
+Object.assign(TITLES, { review: 'Review', siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
 let division = (() => { try { return localStorage.getItem('sf:division') || 'installation'; } catch { return 'installation'; } })();
@@ -396,7 +396,7 @@ function renderSidebar(name, summaries) {
   const isOn = t => t === name || groupOf(name) === t;
   const tabCount = t => (GROUPS[t] ? GROUPS[t].pages.reduce((n, [x]) => n + (count[x] || 0), 0) : count[t]);
   $('#tabs').innerHTML = String(html`${tabs.map(t => html`
-    <a href="#${t}" class="tab ${isOn(t) ? 'on' : ''} ${offPage(t) ? 'off' : ''}" ${isOn(t) ? html`aria-current="page"` : ''}>${GROUPS[t]?.label || TITLES[t]}${offPage(t) ? html`<span class="off-chip">Turned off</span>` : badge(tabCount(t))}</a>`)}
+    <a href="#${t}" class="tab ${isOn(t) ? 'on' : ''} ${offPage(t) ? 'off' : ''}" ${isOn(t) ? html`aria-current="page"` : ''}>${TAB_ICONS[t] ? icon(TAB_ICONS[t], 16) : ''}${GROUPS[t]?.label || TITLES[t]}${offPage(t) ? html`<span class="off-chip">Turned off</span>` : badge(tabCount(t))}</a>`)}
     ${here && PROJECT_PAGES.includes(switchOf(name)) && here.id !== 'projects' ? html`<span class="muted tab-note">For ${p.name}</span>` : ''}
     ${tabs.some(t => count[t]) ? html`<button type="button" class="tab mark-read" data-markread="hub" title="Hide the red numbers of this section until something new needs attention">✓ Mark as read</button>` : ''}`);
   // a section with a single page needs no row of tabs

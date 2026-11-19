@@ -87,12 +87,12 @@ export function buildFlags({ project, ws, sched, boq, led, bill, today }) {
   const unconfirmed = ws.reports.filter(r => r.review === 'pending').length;
   if (unconfirmed) {
     flag('warn', 'Field reports', `${unconfirmed} field report${unconfirmed > 1 ? 's' : ''} to confirm`,
-      'Their progress is not in the schedule until the Office confirms them', 'reports');
+      'Their progress is not in the schedule until the Office confirms them', 'review');   // v1.75.0: Review is its own tab
   }
 
   // reporting discipline
   const lastWorkDay = prevWork(T - 1, calendarOf(project));   // a date set aside as non-working needs no report
-  const lastReport = ws.reports.map(r => r.date).sort().at(-1);
+  const lastReport = [...ws.reports.map(r => r.date), ...Object.keys(project.noAct || {})].sort().at(-1);   // v1.75.0: a No activity day is not missing
   if (sched.rows.length && sched.progress < 100 && sched.start <= lastWorkDay && (!lastReport || toDay(lastReport) < lastWorkDay)) {
     flag('info', 'Reporting', 'Daily report missing',
       lastReport ? `Last report was ${fmtDate(lastReport)}` : 'No daily reports submitted yet', 'reports');

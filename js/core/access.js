@@ -65,7 +65,7 @@ export function tickPage(user, page, on) {
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).
-const PERM = { workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'trade' };   // v1.23.0 (G10 T5, owner): everyone with Trading
+const PERM = { review: 'reports', workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'trade' };   // v1.23.0 (G10 T5, owner): everyone with Trading
 export const permKey = page => PERM[page] || page;
 const key = permKey;
 
@@ -169,6 +169,7 @@ export const APPS = [
   ] },
   { group: 'Project and report pages', about: 'The pages of Project and Reports', apps: [
     { page: 'setup', name: 'Project setup', does: 'Create and set up projects' },
+    { page: 'review', name: 'Review', does: 'The past daily reports by month and week, with No activity days' },   // v1.75.0
     { page: 'status', name: 'Status report', does: 'The client status report' },
     { page: 'attendance', name: 'Attendance sheet', does: 'The crew attendance of the project' },
     { page: 'spotlight', name: 'Spotlight', does: 'Photos, videos and notes from site for Central Hub only' },

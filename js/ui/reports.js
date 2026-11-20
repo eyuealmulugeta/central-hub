@@ -6,7 +6,7 @@
 import { normRole, tradeChoices } from '../engine/positions.js';
 import { store } from '../core/store.js';
 import { billingOf } from '../engine/billing.js';
-import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds, markNoAct } from '../sync/fieldreport.js';
+import { fieldConfig, fieldServer, fetchFieldReports, importFieldReports, importSince, fieldFingerprint, serverFresh, suggestQuantities, reviewFieldReport, reportedByTask, buildSetup, sendSetup, FIELD_SCHEMA, DEEP_OVERLAP_DAYS, fileOf, olderId, movePdfIds, markNoAct, takeBack } from '../sync/fieldreport.js';
 import { mergeCalendar, weeklyOff } from '../engine/calendar.js';
 import { uid, toDay, fromDay, fmtDate, clamp, sum, num, todayISO } from '../core/util.js';
 import { derive } from '../core/derive.js';
@@ -1038,6 +1038,7 @@ export const actions = {
     const text = reviewing === id ? pinsMessage(report.pins, typed) : typed;
     if ((decision === 'changes' || decision === 'comment') && !text) { replyNotice = 'Write the message first.'; return; }
     const projectId = c.project.id, before = structuredClone(report.field || {}), pins = report.pins;
+    const was = { review: report.review, approval: report.approval ?? null, approvedBy: report.approvedBy || '', approvedAt: report.approvedAt || '', pastApprovals: report.pastApprovals || [] };
     // v0.24.0: shown here at once; the site is told in the background (it used to hold the page for 10-15 seconds)
     const expect = { approve: 'approved', changes: 'changes', reopen: 'submitted' }[decision];
     const mine = store.profile.name || store.user?.name || store.user?.email || 'Central Hub';
@@ -1045,6 +1046,7 @@ export const actions = {
       const rec = ws.reports.find(r => r.id === id);
       rec.field = { ...rec.field, ...(expect ? { status: expect } : {}), ...(text ? { comments: [...(rec.field?.comments || []), { by: mine, at: new Date().toISOString(), text, sending: true }] } : {}) };
       if (decision !== 'reopen') delete rec.pins;
+      if (decision === 'reopen' && rec.review === 'done') Object.assign(rec, takeBack(rec));   // v1.80.0: back to To approve at once
     });
     replyNotice = `${REPLY_DONE[decision]} (sending in the background)`;
     if (reviewing === id && (decision === 'changes' || decision === 'approve')) {
@@ -1067,7 +1069,7 @@ export const actions = {
     } catch (err) {
       // not delivered: put the report back as it was, so nothing looks sent that was not
       if (store.project?.id === projectId) {
-        store.update(ws => { const rec = ws.reports.find(r => r.id === id); if (rec) { rec.field = before; if (pins) rec.pins = pins; } });
+        store.update(ws => { const rec = ws.reports.find(r => r.id === id); if (rec) { rec.field = before; if (pins) rec.pins = pins; if (decision === 'reopen') Object.assign(rec, was); } });
       }
       replyNotice = `Not sent: ${err.message}. Nothing was changed; try again.`;
     }

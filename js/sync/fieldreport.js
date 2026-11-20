@@ -249,6 +249,18 @@ export function movePdfIds(ws) {
   return n;
 }
 
+/**
+ * v1.80.0 (owner, 20 Nov: report No. 132 "will not approve"): an approved report that Field Report reopened or sent back,
+ * or that the site sent again, is no longer approved here: the approval moves to the earlier approvals and the report
+ * goes back to To approve (it stayed "approved" in Central Hub and never came back to the approver).
+ */
+export const takeBack = old => ({
+  review: 'pending', approval: null, approvedBy: '', approvedAt: '',
+  pastApprovals: [...(old.pastApprovals || []), { by: old.approval?.by || old.approvedBy || '', at: old.approval?.at || old.approvedAt || '', v: old.field?.office?.v || old.field?.version || 1, back: true }],
+});
+/** Was approved here, and Field Report now says it is not (a Central Hub approval still being sent is not taken back). */
+const reopened = (old, meta) => !!old && old.review === 'done' && !!(old.approval || old.approvedBy) && !old.tellSite && !old.officeOpen && (meta.status === 'changes' || meta.status === 'submitted') && (old.field?.status === 'approved' || meta.status === 'changes');
+
 export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = true } = {}) {
   let added = 0, updated = 0;
   movePdfIds(ws);
@@ -282,9 +294,9 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       // nothing new from the site, but a review made elsewhere may have changed its status or added comments
       const comments = meta.comments || [];
       const keepOlder = others.length ? { older: others } : {};
-      if (Object.keys(approvedHere(old, meta)).length || old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
+      if (Object.keys(approvedHere(old, meta)).length || reopened(old, meta) || old.field.status !== (meta.status || 'submitted') || (old.field.comments || []).length !== comments.length || JSON.stringify(old.field.older || []) !== JSON.stringify(others) || (old.field.checked?.at || '') !== (meta.checked?.at || '')) {
         // v0.27.0: "Checked by" signed in Field Report (script 7.36.0) comes with the review
-        put({ id, field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder, ...(meta.rating ? { rating: ratingOf(meta.rating) } : {}) }, ...approvedHere(old, meta) });
+        put({ id, ...(reopened(old, meta) ? takeBack(old) : {}), field: { ...old.field, status: meta.status || 'submitted', comments, reviewedBy: meta.reviewedBy || '', history: meta.history || old.field.history || [], ...(meta.checked ? { checked: meta.checked } : {}), ...keepOlder, ...(meta.rating ? { rating: ratingOf(meta.rating) } : {}) }, ...approvedHere(old, meta) });
       }
       putFile(ws, id, meta.pdfId, meta.folderId);
       continue;
@@ -296,6 +308,7 @@ export function importFieldReports(ws, payload, { hoursPerDay = 8, addTrades = t
       entries: old?.entries || [], issue: '', source: 'field',
       // a re-submitted report needs confirming again; a refresh of the same version keeps its state
       review: sameVersion ? old.review : 'pending',
+      ...(!sameVersion && old?.review === 'done' && meta.status !== 'approved' ? takeBack(old) : {}),   // v1.80.0
       ...approvedHere(old, meta),   // v0.44.2
       // every entry the Field Report app collects, kept as the site wrote it
       field: {

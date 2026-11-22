@@ -73,7 +73,7 @@ export function progressRows(setup = {}, items = []) {
   return [
     ...((setup || {}).finished || []).filter(t => t && t.name).map(t => row(t, Number(t.total) > 0 ? t.total : 100)),
     ...((setup || {}).tasks || []).filter(t => t && t.name).map(t => row(t, t.done)),
-  ];
+  ].filter(r => r.before > 0 || r.now > 0);   // 3.14.0 (owner, 22 Nov): an activity with nothing logged is not in the client report
 }
 
 /**

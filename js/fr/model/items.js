@@ -28,6 +28,21 @@ export function itemLine(i) {
   return [i.zone, what, amt].filter(Boolean).join(' · ');
 }
 
+/**
+ * 3.14.0 (owner, 22 Nov: "Work executed"): the amount of a work item against its task's total (setup.tasks total/done
+ * from Central Hub). Never negative; going over the total needs a reason, which Central Hub flags.
+ * Returns { bad } (cannot be saved), { over, after, total, unit } (needs a reason), or { after, total, unit } / {}.
+ */
+export function qtyCheck(it, items = [], setup = {}) {
+  const q = num(it.qty);
+  if (q != null && q < 0) return { bad: 'The amount cannot be negative.' };
+  const t = ((setup && setup.tasks) || []).find(x => x.id === it.taskId);
+  if (!t || !(Number(t.total) > 0) || it.unit === '%' || t.unit === '%') return {};
+  const others = items.filter(x => x.taskId === it.taskId && x.id !== it.id).reduce((s, x) => s + (num(x.qty) || 0), 0);
+  const after = Math.round(((Number(t.done) || 0) + others + (q || 0)) * 100) / 100, total = Number(t.total);
+  return after > total ? { over: Math.round((after - total) * 100) / 100, after, total, unit: t.unit || '' } : { after, total, unit: t.unit || '' };
+}
+
 export const itemReady = i => !!(i.text.trim() || i.task || i.type);
 
 /**
@@ -38,6 +53,7 @@ export function workMeta(items) {
   const work = items.filter(i => i.taskId).map(i => {
     const e = { taskId: i.taskId, location: i.zone || '', note: i.text || '' };
     if (i.unit === '%') e.pct = num(i.qty) ?? 0; else e.qty = num(i.qty) ?? 0;
+    if (i.overWhy && String(i.overWhy).trim()) e.overWhy = String(i.overWhy).trim().slice(0, 300);   // 3.14.0
     return e;
   });
   const progress = items.filter(itemReady).map(i => `• ${[itemLine(i), i.text].filter(Boolean).join(': ')}`).join('\n');

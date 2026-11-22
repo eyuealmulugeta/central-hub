@@ -97,6 +97,7 @@ const LAZY_PAGES = {
   finance: () => import('./ui/finance.js'),
   payments: () => import('./ui/payments.js'),
   schedule: () => import('./ui/schedule.js'),
+  register: () => import('./ui/register.js'),   // v1.81.0
   docs: () => import('./ui/docs.js'),
   contactsView: () => import('./ui/contacts.js'),
   excel: () => import('./ui/excellink.js'),
@@ -115,9 +116,9 @@ function lazyPage(name, load) {
   });
 }
 const lazy = Object.fromEntries(Object.entries(LAZY_PAGES).map(([k, load]) => [k, lazyPage(k, load)]));
-const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, docs, contactsView, excel } = lazy;
+const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, register, docs, contactsView, excel } = lazy;
 setTimeout(() => { for (const p of Object.values(lazy)) p.load().catch(() => {}); }, 5000);
-const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, zoho, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, products, partners, deals, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView, peopleaccess, master, discovery };   // peopleaccess: v1.47.0; master: v1.48.0
+const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, register, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, zoho, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, products, partners, deals, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView, peopleaccess, master, discovery };   // peopleaccess: v1.47.0; master: v1.48.0
 // v1.14.2: home (the Dashboard) was left out of this list in v0.98.0; the Dashboard stayed on "Loading project…"
 // a second way into a screen that is already there (Invoices, Income, Status report...) uses the same screen
 for (const [id, a] of Object.entries(ALIASES)) VIEWS[id] ||= VIEWS[a.view];
@@ -126,7 +127,7 @@ const COMPANY_VIEWS = { home: 'The open project at a glance: photos, money, requ
   apps: 'Choose what Amistad uses', access: 'Who may sign in and what they may open', catalog: 'Shared by every project', company: 'Printed on every document' };
 Object.assign(COMPANY_VIEWS, { quick: 'Your most used pages, one click away', crewforms: 'Links for the crew to fill in their own details, forms to review and the crew pool', summary: COMPANY_VIEWS.finance, crewletters: COMPANY_VIEWS.letters, employment: 'Employment agreements, Admin only', documentsign: 'Documents sent for signature', contacts: 'Email addresses and phone numbers, saved once', tradesummary: 'Sales, pipeline, what is owed and shipments', owners: 'The owners of the company, Admin only' });
 const TITLES = { discovery: 'Discovery', master: 'Master', peopleaccess: 'People & Access', deals: 'Deals', partners: 'Partners', products: 'Products', zoho: 'Zoho export', excel: 'Excel link', workphotos: 'Photos from crews', engagement: 'Engagement', weather: 'Weather and holidays', usage: 'Materials used', purchases: 'Purchases', sitestore: 'Site store', datafeed: 'Data tracker', outgoing: 'Outgoing register', activity: 'Activity record', signins: 'Sign-in history', mine: 'My settings', home: 'Dashboard', quick: 'Quick', notifications: 'Notifications', discuss: 'Discuss', meetings: 'Meetings', dashboard: 'Follow-ups', reports: 'Daily report', schedule: 'Schedule', ledger: 'Costs', evaluation: 'Evaluation', directory: 'Manpower Directory', letters: 'Letters', requests: 'Requests', payroll: 'Payroll', cashflow: 'Cash flow', payments: 'Payments', docs: 'Invoices and documents', apps: 'Apps', prices: 'This project', access: 'Access rules', catalog: 'Currency', company: 'Company details', links: 'Field Report and import', bin: 'Recycle bin', finance: 'Company finance', trade: 'Shipments', stock: 'Stock and sales', hr: 'HR', contracts: 'Contracts' };
-Object.assign(TITLES, { review: 'Review', siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
+Object.assign(TITLES, { register: 'Register', review: 'Review', siteinstr: 'Site instructions', logsheet: 'Log sheet', crewforms: 'Crew forms', ledger: 'Ledger', reports: 'Daily field report', hr: 'Employee data', payroll: 'Salary', contracts: 'Agreements', requests: 'Material & manpower request', docs: 'Invoices', setup: 'Setup', owners: 'Company owners', contacts: 'Contacts' });
 for (const [id, a] of Object.entries(ALIASES)) TITLES[id] = a.title;
 // The menu is in core/nav.js: two divisions, each with its own sections, each section a row of tabs.
 let division = (() => { try { return localStorage.getItem('sf:division') || 'installation'; } catch { return 'installation'; } })();

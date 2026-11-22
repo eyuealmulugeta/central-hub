@@ -52,12 +52,12 @@ export function zoneTiles(reports, r) {
   return [...seen.values()];
 }
 
-/** Progress by activity for the client: the schedule's tasks (not milestones) that have started, then the next ones, at most `max`. */
+/** Progress by activity for the client: the schedule's tasks (not milestones) that have started, at most `max`. */
 export function activityProgress(rows, max = 10) {
   const work = rows.filter(t => !t.milestone);
   const started = work.filter(t => t.progress > 0);
-  const next = work.filter(t => !(t.progress > 0)).sort((a, b) => a.es - b.es);
-  return [...started, ...next].slice(0, max).map(t => ({ name: t.name, progress: Math.round(t.progress || 0), status: t.status, slip: t.slip || 0 }));
+  // v1.82.0 (owner, 22 Nov): only activities with logged work go to the client; the others are "Not started" in Progress
+  return started.slice(0, max).map(t => ({ name: t.name, progress: Math.round(t.progress || 0), status: t.status, slip: t.slip || 0 }));
 }
 
 /** The next milestones not reached yet, soonest first. */

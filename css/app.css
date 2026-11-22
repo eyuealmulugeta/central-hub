@@ -2187,3 +2187,29 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 .req-dec { display: grid; gap: 4px; }
 .req-dec .actions { margin-top: 4px; gap: 6px; }
 .trow.treq { align-items: flex-start; }
+/* v1.81.0–v1.83.0 (owner, 22 Nov): Register and Progress */
+.table.reg td, .table.reg th { white-space: nowrap; }
+.table.reg .reg-in { width: 100%; min-width: 160px; padding: 4px 6px; }
+.table.reg .reg-in[type="date"] { min-width: 130px; width: 140px; }
+.table.reg .reg-in.w-s, .reg-fix .w-s { min-width: 0; width: 64px; }
+.table.reg .reg-in.w-m, .reg-fix .w-m { min-width: 0; width: 90px; }
+.reg-fix { display: inline-flex; gap: 6px; align-items: center; }
+.reg-fix input[type="text"] { width: 220px; }
+.reg-bars, .reg-days { width: 100%; height: auto; max-width: 640px; }
+.reg-bars .rb-full { fill: #e8eef5; }
+.reg-bars .rb-done, .reg-days .rb-done { fill: #0b4f9c; }
+.reg-bars .rb-late { fill: #c0392b; }
+.reg-bars .rb-over, .reg-days .rb-over { fill: #d68910; }
+.reg-bars .rb-plan { stroke: #111; stroke-width: 2; }
+.sc-key .rb-k { display: inline-block; width: 2px; height: 12px; background: #111; margin: 0 6px 0 12px; vertical-align: middle; }
+.card.crit { border: 2px solid #c0392b; background: #fdf2f1; }
+.card.crit h3 { color: #c0392b; margin-top: 0; }
+.crit-i { margin: 8px 0 12px; }
+.crit-i ol { margin: 6px 0 0 18px; }
+.crit-i li.rec { font-weight: 600; }
+.table.reg td.bad { color: #c0392b; }
+.table.reg td.ok { color: #1e8449; }
+.view-register { display: block; overflow-y: auto; }
+.view-register > * { margin-bottom: 12px; }
+.view-register .card { overflow: visible; }
+.view-register > .toolbar { flex-wrap: wrap; gap: 8px; }

@@ -65,7 +65,7 @@ export function tickPage(user, page, on) {
 }
 
 // A page that is a second way into another screen is allowed by what allows that screen (see core/nav.js).
-const PERM = { review: 'reports', workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'trade' };   // v1.23.0 (G10 T5, owner): everyone with Trading
+const PERM = { register: 'schedule', progress: 'schedule', review: 'reports', workphotos: 'reports', weather: 'reports', usage: 'reports', purchases: 'ledger', sitestore: 'requests', siteinstr: 'reports', stock: 'trade', products: 'trade', partners: 'trade', deals: 'trade', invoices: 'docs', quotations: 'docs', status: 'docs', income: 'ledger', expenses: 'ledger', attendance: 'reports', crewletters: 'letters', employment: 'hr', documentsign: 'contracts', summary: 'finance', tradesummary: 'trade' };   // v1.23.0 (G10 T5, owner): everyone with Trading
 export const permKey = page => PERM[page] || page;
 const key = permKey;
 
@@ -169,6 +169,8 @@ export const APPS = [
   ] },
   { group: 'Project and report pages', about: 'The pages of Project and Reports', apps: [
     { page: 'setup', name: 'Project setup', does: 'Create and set up projects' },
+    { page: 'register', name: 'Register', does: 'The schedule and quantity register: WBS, totals, planned dates and daily rates' },   // v1.81.0
+    { page: 'progress', name: 'Progress', does: 'Work executed against the total: S-curve, progress per activity, CRITICAL RISK' },   // v1.82.0
     { page: 'review', name: 'Review', does: 'The past daily reports by month and week, with No activity days' },   // v1.75.0
     { page: 'status', name: 'Status report', does: 'The client status report' },
     { page: 'attendance', name: 'Attendance sheet', does: 'The crew attendance of the project' },

@@ -31,6 +31,7 @@ import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
 import { fieldSpotlight } from '../sync/fieldreport.js';
+import { missTools, missActions } from './misstools.js';   // v1.82.0 (B4); not dashboard.js, which loads when opened
 import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';
 import { fromField } from '../engine/spotlight.js';
 import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
@@ -153,6 +154,16 @@ const counts = n => html`<span class="muted">${n.sent} sent · ${n.approved} app
 /** v1.75.0: a day marked No activity in its week (reason on hover; the Admin changes or removes it). */
 const naRow = (d, na) => html`<li class="row na-row" title="${na.why}"><span class="row-main"><span><b>${fmtDate(d)}</b> <span class="chip na">⏸ No activity</span></span><span class="muted">${na.why} · marked by ${na.by}${na.at ? `, ${fmtDate(na.at.slice(0, 10))}` : ''}</span></span>
   ${store.isAdmin && !store.readOnly ? html`<span class="toolbar"><button class="btn ghost small" data-act="noActEdit" data-day="${d}">Change reason</button><button class="btn ghost small" data-act="noActRemove" data-day="${d}">Remove</button></span>` : ''}</li>`;
+/** v1.82.0 (owner, 22 Nov, B4): the missing days of a week, the same rule as its count (today is not missing yet). */
+export function missDays(w, opt, sent, na) {
+  const out = [], nwDow = opt.nwDow || [0], off = new Set(opt.off || []);
+  for (let t = Date.parse(w.from + 'T00:00:00Z'), end = Date.parse(w.to + 'T00:00:00Z'); t <= end; t += 864e5) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    if (d < opt.today && (!opt.start || d >= opt.start) && !nwDow.includes(new Date(t).getUTCDay()) && !off.has(d) && !sent.has(d) && !na[d]) out.push(d);
+  }
+  return out.reverse();
+}
+const missRow = (c, d) => html`<li class="row miss-row"><span class="row-main"><span><b>${fmtDate(d)}</b> <span class="chip bad">Missing</span></span><span class="muted">No report for this day.</span></span>${missTools(c, d)}</li>`;
 if (typeof document !== 'undefined') document.addEventListener('scroll', () => {   // the next month when the end is in view
   const b = document.getElementById('repMore');
   if (b && !b.disabled && b.getBoundingClientRect().top < innerHeight + 200) { b.disabled = true; b.click(); }
@@ -166,12 +177,14 @@ function groupedList(c, shown, reports, rowOf) {
   // v1.75.0 (owner, 19 Nov): the months start at the project start date (Project › Setup); without one, the first report
   const pst = String(c.project.start || '').slice(0, 10), sm = pst.slice(0, 7), na = c.project.noAct || {};
   const cur = c.today.slice(0, 7), list = [cur, ...months.filter(m => m < cur)].filter((m, i, a) => a.indexOf(m) === i && (!sm || m >= sm));
+  const sent = new Set(all.map(x => x.date));
   const opt = { today: c.today, nwDow: weeklyOff(c.project), off: offDates(c.project, reports), noact: Object.keys(na), start: pst || all.reduce((a, x) => (!a || x.date < a ? x.date : a), '') };
   const out = list.slice(0, monthsShown).map(m => {
+    let miss = [];
     const weeks = monthWeeks(m, vis.filter(x => x.date.startsWith(m)), all.filter(x => x.date.startsWith(m)), opt), open = !shut.has(m);
     return html`<div class="rep-month"><button type="button" class="link rep-h" data-act="repShut" data-k="${m}" aria-expanded="${open}"><b>${open ? '▾' : '▸'} ${monthTitle(m)}</b> ${counts(monthCounts(weeks))}</button>
       ${open ? weeks.map(w => { const wo = !shut.has(w.key); return html`<div class="rep-week"><button type="button" class="link rep-h sub" data-act="repShut" data-k="${w.key}" aria-expanded="${wo}"><b>${wo ? '▾' : '▸'} ${monthTitle(m).split(' ')[0]} › ${w.title}</b> ${counts(w)}</button>
-        ${wo ? (w.rows.length || Object.keys(na).some(d => d >= w.from && d <= w.to) ? html`<ul class="list">${Object.keys(na).filter(d => d >= w.from && d <= w.to).sort().reverse().map(d => naRow(d, na[d]))}${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
+        ${wo ? ((miss = missDays(w, opt, sent, na)).length || w.rows.length || Object.keys(na).some(d => d >= w.from && d <= w.to) ? html`<ul class="list">${miss.map(d => missRow(c, d))}${Object.keys(na).filter(d => d >= w.from && d <= w.to).sort().reverse().map(d => naRow(d, na[d]))}${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
   });
   const next = list[monthsShown];
   const ask = !pst && store.isAdmin ? html`<p class="notice warn">No project start date yet: Review starts at the first report. <a href="#setup">Set the start date in Project › Setup</a>.</p>` : '';
@@ -870,6 +883,8 @@ export const changes = {
 };
 
 export const actions = {
+  // v1.82.0 (B4): the missing-day buttons in Review do what they do in Needs attention
+  ...missActions,
   // v0.80.0 (owner): the approved report to the project's consultant, who reads it and signs it by link (site diary)
   async diarySend(el, c) {
     const r = c.ws.reports.find(x => x.id === el.dataset.id), con = consultantOf(c.project);

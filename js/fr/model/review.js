@@ -3,7 +3,7 @@
 // decide the rest on the script.
 
 // 2.66.0 (owner): a technician only shares photos of the work done
-export const kindOf = role => (role === 'technician' ? 'technician' : role === 'coordinator' || role === 'admin' ? 'reviewer' : role === 'viewer' || role === 'exec' ? 'viewer' : 'reporter');
+export const kindOf = role => (role === 'technician' ? 'technician' : role === 'coordinator' || role === 'admin' || role === 'exec' ? 'reviewer' : role === 'viewer' ? 'viewer' : 'reporter');
 export const KIND_WORD = { reporter: 'Site', reviewer: 'Approve, send back, comment', viewer: 'View only', technician: 'Share photos from crews' };
 
 // 3.4.0 (owner, 15 Nov): one Review hub: Pending, Approved, Rejected (sent back), Requests (reports with material requests), All

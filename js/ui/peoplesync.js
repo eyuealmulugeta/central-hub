@@ -6,7 +6,7 @@
 
 import { store } from '../core/store.js';
 import { titleFixes, userSyncPatches, sameNameLinks } from '../engine/manpower.js';
-import { syncPages, sendRules } from './prices.js';
+import { syncPages, sendRules } from './rules.js';   // v1.89.0
 import { payMerges } from '../engine/crewpay.js';
 import { dayRateOf, dayCurOf } from '../engine/people.js';
 

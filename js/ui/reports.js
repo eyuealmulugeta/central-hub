@@ -13,7 +13,7 @@ import { derive } from '../core/derive.js';
 import { summaryOf } from './seen.js';
 import { html, options, chip } from './dom.js';
 import { connected } from './fieldsetup.js';
-import { openPanel } from './prices.js';
+import { openPanel } from './panel.js';   // v1.89.0
 import { toTrash, restore as restoreTrash } from '../engine/trash.js';
 import { mySignature, openPad } from './sigpad.js';
 import { inPeriod, periodChoices, monthName } from '../engine/periods.js';
@@ -29,7 +29,7 @@ import { monthWeeks, monthCounts, monthTitle, monthShift, findReports } from '..
 import { offDates } from '../engine/calendar.js';
 import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
-import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
+import { iMay } from './rules.js';   // v0.29.0: who approves follows the access rules
 import { fieldSpotlight } from '../sync/fieldreport.js';
 import { missTools, missActions, missPick, missBulk } from './misstools.js';   // v1.82.0 (B4); not dashboard.js, which loads when opened
 import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';

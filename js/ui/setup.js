@@ -8,7 +8,7 @@
 import { store } from '../core/store.js';
 import { checklist, progress } from '../engine/setup.js';
 import { html, chip, meter } from './dom.js';
-import { openPanel } from './prices.js';
+import { openPanel } from './panel.js';   // v1.89.0
 
 const GROUPS = [
   ['Basics', 'The contract and how it is billed'],

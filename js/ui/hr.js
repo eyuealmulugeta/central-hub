@@ -7,7 +7,7 @@
 
 import { PAY_OPTIONS } from '../engine/currencies.js';
 import { store } from '../core/store.js';
-import { syncPages, sendRules } from './prices.js';   // v0.29.0: access follows the rules
+import { syncPages, sendRules } from './rules.js';   // v0.29.0: access follows the rules
 import { AGREEMENT_TYPES, PAY_PERIODS, DOCUMENT_KINDS, RATING_FILTERS, agreementLabel, hrSummary, filterStaff, ratingOf } from '../engine/hr.js';
 import { uid, money, fmtFull } from '../core/util.js';
 import { ratingsOf, rankLabel, scaleLabel, averages, LEVELS, levelOf } from '../engine/evaluation.js';

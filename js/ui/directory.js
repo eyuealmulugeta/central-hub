@@ -15,7 +15,7 @@ const ALL = '@all';
 const adminMails = () => (store.users || []).filter(u => u.role === 'owner').map(u => u.email);
 import { ratingOf } from '../engine/hr.js';
 import { tierOfTitle, tierOfPerson, positionsOf, tableOf, payOf, projectOfRow, directoryRows, moveTo, addedStamp, addedName, rankPatchFor, TIER_WORDS } from '../engine/manpower.js';
-import { syncPages, sendRules } from './prices.js';
+import { syncPages, sendRules } from './rules.js';   // v1.89.0
 import { focusOn, relink } from './hr.js';
 import { sendListsFor } from './reports.js';
 import { tell } from '../core/image.js';

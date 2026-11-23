@@ -39,6 +39,9 @@ import { transferMember } from '../engine/sitecrew.js';
 import { FEATURES, TIERS, POSITIONS, positionOf, tierOf, positionWords, valueOf, levelValue, reached, setFlag, clearAt, askText, pagesFrom, frRules, startChanges, blank, mayDo, copyLevel, seeAs } from '../engine/accessrules.js';
 import { act as logAct } from '../core/activity.js';   // v1.0.0 (G6): access changes go to the activity record
 import { fieldReady, fieldUserDo } from '../sync/fieldreport.js';
+import { rulesOn, rulesNow, syncPages, iMay, sendRules } from './rules.js';   // v1.89.0
+import { getSection, setSection, openPanel, takePanel } from './panel.js';   // v1.89.0
+export { rulesOn, syncPages, iMay, sendRules, getSection, setSection, openPanel };
 
 /** v0.28.0: the projects a team member can be moved to. */
 const otherProjects = p => store.projects.filter(x => x.id !== p.id && !x.binned && x.status !== 'closed');
@@ -60,14 +63,11 @@ const PAGE_NAME = Object.fromEntries(GRANTABLE);
 // Settings is five pages, one per tab: this project, people and access, currencies,
 // company details, and Field Report and import. Each shows its cards in full, so nothing has to
 // be unfolded and nothing moves when a value is changed.
-let section = 'prices';
-export const setSection = s => { section = s; };
-export const getSection = () => section;
 /** All the text of a Settings page, every tab of it, for the search (one tab is on screen at a time). Put back as it was. */
 export function indexText(c) {
   const keep = { projTab, accTab, linkTab };
   const parts = [];
-  const tabs = section === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : section === 'access' ? ['accTab', ['manpower', 'people', 'crew', 'perms', 'you', 'problems']] : section === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
+  const tabs = getSection() === 'prices' ? ['projTab', PROJ_TABS.map(t => t[0])] : getSection() === 'access' ? ['accTab', ['manpower', 'people', 'crew', 'perms', 'you', 'problems']] : getSection() === 'links' ? ['linkTab', ['field', 'projects', 'import']] : null;
   try {
     for (const k of tabs ? tabs[1] : [null]) {
       if (tabs) ({ projTab, accTab, linkTab } = { ...keep, [tabs[0]]: k });
@@ -78,9 +78,6 @@ export function indexText(c) {
 }
 // v1.39.0: the exchange rates are a box of Company details
 const SECTION_OF = { fx: 'company', company: 'company', calendar: 'company', monthly: 'company', field: 'links', import: 'links' };
-/** Jump to the tab that holds a card (Setup's "Do this" buttons use the card's id). */
-const PANEL_TAB = { project: 'basics', deploy: 'site', team: 'team', linked: 'team' };
-export const openPanel = id => { if (PANEL_TAB[id]) projTab = PANEL_TAB[id]; };
 // Two pages are split in tabs: This project (Basics, Site, Team, Calendar and rates) and People and access
 // (People, You, Problems). One tab is on screen at a time, so a page is short and nothing has to be scrolled past.
 // v0.25.0: the calendar went to Admin settings, Company; day rates and the pay period to Payments
@@ -113,7 +110,7 @@ function tradeBudgetBox(c) {
 const box = (id, title, body, sub = '') => html`<section class="card set-box" id="panel-${id}"><h3>${title}${sub ? html` <span class="muted">${sub}</span>` : ''}</h3>${body}</section>`;
 /** A row of tick boxes drawn as small pills. */
 const pills = list => html`<div class="pills">${list}</div>`;
-const panel = (id, title, sub, body) => (SECTION_OF[id] !== section ? '' : html`
+const panel = (id, title, sub, body) => (SECTION_OF[id] !== getSection() ? '' : html`
   <section class="card" id="panel-${id}">
     <div class="toolbar"><h2>${title}</h2><span class="muted">${sub}</span></div>
     ${body()}
@@ -125,7 +122,7 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const NAV = [['apps', 'Apps', 'apps'], ['prices', 'This project', 'dashboard'], ['access', 'Access rules', 'access'],   // v1.49.0: one People & Access (People row); this is the page rules
   ['company', 'Company details', 'company'], ['links', 'Field Report and import', 'links'], ['bin', 'Recycle bin', 'backup']];
 const link = ([k, label, ic]) => html`
-      <a href="#${k}" class="side-link ${k === section ? 'on' : ''}" ${k === section ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
+      <a href="#${k}" class="side-link ${k === getSection() ? 'on' : ''}" ${k === getSection() ? html`aria-current="page"` : ''}>${icon(ic)}<span>${label}</span>${k === 'access' && store.requests.length ? html`<em title="Waiting for your approval">${store.requests.length}</em>` : ''}</a>`;
 // v0.24.0: My settings for everyone, then the Admin settings (backup and clear cache are the Admin's tools)
 const inTrading = () => currentDivision() === 'trading';   // v1.22.2: Trading sees only what belongs to it
 const nav = () => html`
@@ -347,9 +344,7 @@ function peopleTab() {
     </div>`;
 }
 
-/** v0.29.0: are the access rules in use? Until the Admin starts them, the page ticks of before decide. */
-export const rulesOn = () => !!store.global?.access?.started;
-const rulesNow = () => store.global?.access || blank();
+// v1.89.0 (Release C step 2): the access-rule helpers live in rules.js, so this page can load when opened
 // the demo has nobody who signs in: the Access rules show sample people there
 const SAMPLE = [{ email: 'sara@example.com', name: 'Sara (sample)', role: 'office', ranks: ['project_manager'] }, { email: 'abebe@example.com', name: 'Abebe (sample)', role: 'site', ranks: ['site_engineer'] },
   { email: 'hana@example.com', name: 'Hana (sample)', role: 'office', ranks: ['accountant'] }, { email: 'meron@example.com', name: 'Meron (sample)', role: 'office', ranks: ['coordinator'] }];
@@ -358,30 +353,6 @@ const PAGE_WORD = Object.fromEntries(GRANTABLE);
 const scopeWords = (scope, id) => scope === 'person' ? (people().find(u => u.email === id)?.name || id)
   : scope === 'pos' ? `a ${positionWords(id)}` : `in ${TIERS.find(t => String(t[0]) === String(id))?.[1].split(' · ')[0] || `Tier ${id}`}`;
 
-/** The CH pages each person opens follow the rules: write the ones that changed. Returns how many people changed. */
-export function syncPages(list = store.users, rules = store.global?.access) {
-  if (!rules?.started || !store.cloud) return 0;
-  let n = 0;
-  for (const u of list) {
-    if (u.role === 'owner') continue;
-    const give = pagesFrom(rules, u), want = grantableFor(u).map(([k]) => k).filter(k => give.includes(k));
-    const approver = u.role === 'office' && positionOf(u) === 'general_manager';   // issuing the client PDF: Admin and GM only
-    if (u.pagesV !== 2 || want.join() !== pagesOf(u).join() || !!u.approver !== approver) { store.setUser(u.email, { pages: want, pagesV: 2, approver }); n++; }
-  }
-  return n;
-}
-/** May the signed-in person do this feature? The Admin always; anyone while the rules are not started (the ticks of before decide). */
-export const iMay = feat => store.isAdmin || !rulesOn() || mayDo(rulesNow(), { role: store.role, email: store.user?.email, ranks: store.ranks }, feat);
-let frTimer = 0;
-/** The FR part of the rules goes to the script a moment after the last change (script 7.38.0). */
-export function sendRules() {
-  if (!rulesOn() || !store.cloud || !fieldReady()) return;
-  clearTimeout(frTimer);
-  frTimer = setTimeout(async () => {
-    try { await fieldUserDo('accessRules', { rules: frRules(rulesNow(), store.users) }); }
-    catch (e) { tell(`✗ Field Report did not take the access rules: ${e.message}`); }
-  }, 1500);
-}
 /** A change of position or project: what it does to the person's access, asked before it is made. */
 function verifyMove(u, patch, what) {
   const next = { ...u, ...patch };
@@ -781,12 +752,13 @@ function calendarPanel(c) {
 const chipText = text => html`<span class="chip ok">${text}</span>`;
 
 export function render(c) {
-  if (section === 'mine' || !store.isAdmin) return html`${nav()}${minePage()}`;
-  if (section === 'apps' || (inTrading() && INSTALL_SETTINGS.includes(section))) return html`${nav()}${appsPage(c)}`;
-  if (section === 'prices') return html`${nav()}${projectPage(c)}`;
-  if (section === 'access') return html`${nav()}${accessPage(c)}`;
-  if (section === 'links') return html`${nav()}${linksPage(c)}`;
-  if (section === 'bin') return html`${nav()}${binPage(c)}`;
+  const want = takePanel(); if (want) projTab = want;   // v1.89.0: Setup's "Do this" opens the right tab
+  if (getSection() === 'mine' || !store.isAdmin) return html`${nav()}${minePage()}`;
+  if (getSection() === 'apps' || (inTrading() && INSTALL_SETTINGS.includes(getSection()))) return html`${nav()}${appsPage(c)}`;
+  if (getSection() === 'prices') return html`${nav()}${projectPage(c)}`;
+  if (getSection() === 'access') return html`${nav()}${accessPage(c)}`;
+  if (getSection() === 'links') return html`${nav()}${linksPage(c)}`;
+  if (getSection() === 'bin') return html`${nav()}${binPage(c)}`;
   const { global: g, project: p } = c;
   const co = g.company || {};
 

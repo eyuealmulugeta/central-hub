@@ -18,7 +18,6 @@ import * as datafeed from './ui/datafeed.js';   // v1.2.0 (G5)
 import { setSink, act } from './core/activity.js';
 import { paperNo } from './sync/share.js';
 import * as reports from './ui/reports.js';
-import * as prices from './ui/prices.js';
 import * as trade from './ui/trade.js';
 import * as hr from './ui/hr.js';
 import * as discuss from './ui/discuss.js';
@@ -37,7 +36,8 @@ import * as fieldusers from './ui/fieldusers.js';
 import * as peopleaccess from './ui/peopleaccess.js';   // v1.47.0 (People & Access)
 import * as crewforms from './ui/crewforms.js';
 import * as quick from './ui/quick.js';
-import { sendRules } from './ui/prices.js';
+import { sendRules } from './ui/rules.js';   // v1.89.0
+import { getSection, setSection } from './ui/panel.js';   // v1.89.0: Settings loads when opened
 import { fillPhotos } from './ui/photos.js';
 import { openWizard } from './ui/wizard.js';
 import { needsSync, syncTeam } from './engine/people.js';
@@ -102,6 +102,8 @@ const LAZY_PAGES = {
   evaluation: () => import('./ui/evaluation.js'),
   payroll: () => import('./ui/payroll.js'),
   attendance: () => import('./ui/attendance.js'),
+  // v1.89.0 (owner, 23 Nov, Release C step 2): Settings (prices.js, about 100 KB) loads when opened
+  prices: () => import('./ui/prices.js'),
 };
 function lazyPage(name, load) {
   let mod = null, wait = null, preset = null;
@@ -118,7 +120,7 @@ function lazyPage(name, load) {
   });
 }
 const lazy = Object.fromEntries(Object.entries(LAZY_PAGES).map(([k, load]) => [k, lazyPage(k, load)]));
-const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, register, docs, contactsView, excel, purchases, zoho, partners, deals, ledger, contracts, evaluation, payroll, attendance } = lazy;
+const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, register, docs, contactsView, excel, purchases, zoho, partners, deals, ledger, contracts, evaluation, payroll, attendance, prices } = lazy;
 setTimeout(() => { for (const p of Object.values(lazy)) p.load().catch(() => {}); }, 5000);
 const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, register, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, zoho, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, products, partners, deals, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView, peopleaccess, master, discovery };   // peopleaccess: v1.47.0; master: v1.48.0
 // v1.14.2: home (the Dashboard) was left out of this list in v0.98.0; the Dashboard stayed on "Loading project…"
@@ -424,7 +426,7 @@ function render() {
   const today = todayISO();
   const key = p ? `${name}|${p.id}` : '';
   if (TRADING_PAGES.includes(name)) trade.setTab(name === 'stock' ? 'stock' : 'ship');
-  if (SETTINGS_PAGES.includes(name)) prices.setSection(name);
+  if (SETTINGS_PAGES.includes(name)) setSection(name);
 
   // A change from somewhere else (another person, a background check) arrived while this
   // person is typing in a field: wait until they leave it rather than redraw under them.
@@ -619,7 +621,7 @@ function searchItems() {
 const indexEnv = () => ({
   store, company: scoped(), ctx, allowed, goTo, division, titles: TITLES, views: VIEWS, baseOf, hubs: hubsOf(division),
   focus: { hr, contracts, trade, docs, schedule, letters, owners, payroll },
-  settings: { get: prices.getSection, set: prices.setSection },
+  settings: { get: getSection, set: setSection },
 });
 
 /** The words just searched for are marked on the page that opens. */

@@ -10,7 +10,7 @@ import { groupOptions } from './choose.js';
 import { tell } from '../core/image.js';
 import { html, options, chip } from './dom.js';
 import { approveCrew, wageDiffers } from '../engine/sitecrew.js';
-import { uid } from '../core/util.js';
+import { uid, todayISO } from '../core/util.js';
 import { compareReports, clean } from '../engine/compare.js';
 import { personByEmail, addedStamp, addedName } from '../engine/manpower.js';
 import { fromTeam, assign } from '../engine/people.js';
@@ -203,7 +203,7 @@ async function crewDecide(code, yes, list, quiet = false) {
     // v0.46.0: approved crew is in the Manpower Directory too: linked to the person of the same name, else new
     if (into && (into.created.length || into.updated.length)) store.updateCompany(co => {
       // v0.78.0 (owner): who sent it and who approved it, by name
-      const by = addedStamp(`${addedName(list[0].byName || list[0].by, store.company?.staff, store.users) || 'Site'} (Field Report), approved by ${store.signature?.split(',')[0] || store.profile?.name || addedName(store.user?.email || '', store.company?.staff, store.users)}`, new Date().toISOString().slice(0, 10));
+      const by = addedStamp(`${addedName(list[0].byName || list[0].by, store.company?.staff, store.users) || 'Site'} (Field Report), approved by ${store.signature?.split(',')[0] || store.profile?.name || addedName(store.user?.email || '', store.company?.staff, store.users)}`, todayISO());
       for (const p of into.created) co.staff.push({ ...p, ...by });
       for (const u of into.updated) { const i = co.staff.findIndex(x => x.id === u.id); if (i >= 0) co.staff[i] = u; }
     });
@@ -403,7 +403,7 @@ export const actions = {
 From then on, a person's sign-in email, position and projects in the Directory decide what they get in Field Report; nobody is added on this page.`)) return;
     busy = true; store.notify();
     try {
-      const today = new Date().toISOString().slice(0, 10), by = store.profile?.name || store.user?.email || 'Admin';
+      const today = todayISO(), by = store.profile?.name || store.user?.email || 'Admin';
       let touched = [];
       if (plan.length) store.updateCompany(co => { const out = applyImport(co.staff || [], plan, { newId: () => uid('st'), today, by }); co.staff.splice(0, co.staff.length, ...out.staff); touched = out.touched; });
       for (const t of touched) for (const pid of t.pids) { const a = (t.person.assignments || []).find(x => x.projectId === pid); if (a) await store.updateOther(pid, ws => assign(ws, t.person, a)); }

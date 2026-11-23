@@ -15,27 +15,18 @@ import * as home from './ui/home.js';
 import * as activity from './ui/activity.js';   // v0.99.0 (G1)
 import * as outgoing from './ui/outgoing.js';   // v1.1.0 (G4)
 import * as datafeed from './ui/datafeed.js';   // v1.2.0 (G5)
-import * as purchases from './ui/purchases.js';   // v1.4.0 (FR R6)
-import * as zoho from './ui/zoho.js';   // v1.18.0 (G9)
-import * as partners from './ui/partners.js';   // v1.20.0 (G10 T2)
-import * as deals from './ui/deals.js';   // v1.21.0 (G10 T3)
 import { setSink, act } from './core/activity.js';
 import { paperNo } from './sync/share.js';
 import * as reports from './ui/reports.js';
-import * as ledger from './ui/ledger.js';
 import * as prices from './ui/prices.js';
 import * as trade from './ui/trade.js';
 import * as hr from './ui/hr.js';
-import * as contracts from './ui/contracts.js';
 import * as discuss from './ui/discuss.js';
 import * as meetings from './ui/meetings.js';
-import * as evaluation from './ui/evaluation.js';
 import * as directory from './ui/directory.js';
 import { setExtraPositions } from './engine/positions.js';
 import * as siteinstr from './ui/siteinstr.js';
 import * as requests from './ui/requests.js';
-import * as payroll from './ui/payroll.js';
-import * as attendance from './ui/attendance.js';
 import { payFlags } from './engine/paysteps.js';
 import { spotFlags } from './engine/spotlight.js';
 import { crewPhotoFlags, officeStaffOf, officeStaffStale } from './engine/attendance.js';
@@ -101,6 +92,16 @@ const LAZY_PAGES = {
   docs: () => import('./ui/docs.js'),
   contactsView: () => import('./ui/contacts.js'),
   excel: () => import('./ui/excellink.js'),
+  // v1.88.0 (owner, 23 Nov, Release C step 1): 9 more pages load on open (about 258 KB less at start)
+  purchases: () => import('./ui/purchases.js'),
+  zoho: () => import('./ui/zoho.js'),
+  partners: () => import('./ui/partners.js'),
+  deals: () => import('./ui/deals.js'),
+  ledger: () => import('./ui/ledger.js'),
+  contracts: () => import('./ui/contracts.js'),
+  evaluation: () => import('./ui/evaluation.js'),
+  payroll: () => import('./ui/payroll.js'),
+  attendance: () => import('./ui/attendance.js'),
 };
 function lazyPage(name, load) {
   let mod = null, wait = null, preset = null;
@@ -109,6 +110,7 @@ function lazyPage(name, load) {
   return new Proxy({}, {
     get(_, k) {
       if (k === 'load') return get;
+      if (k === 'ready') return !!mod;   // v1.88.0: a quick action waits until the page is loaded
       if (k === 'render') return c => { if (mod) return mod.render(c); get().catch(() => {}); return html`<section class="card"><p class="muted">Loading…</p></section>`; };
       if (k === 'preset') return x => { if (mod) mod.preset?.(x); else { preset = x; get().catch(() => {}); } };
       return mod?.[k];
@@ -116,7 +118,7 @@ function lazyPage(name, load) {
   });
 }
 const lazy = Object.fromEntries(Object.entries(LAZY_PAGES).map(([k, load]) => [k, lazyPage(k, load)]));
-const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, register, docs, contactsView, excel } = lazy;
+const { signatures, workphotos, employment, engagement, sitestore, master, usage, weather, products, dashboard, logsheet, discovery, cashflow, signins, letters, owners, finance, payments, schedule, register, docs, contactsView, excel, purchases, zoho, partners, deals, ledger, contracts, evaluation, payroll, attendance } = lazy;
 setTimeout(() => { for (const p of Object.values(lazy)) p.load().catch(() => {}); }, 5000);
 const VIEWS = { home, sitestore, datafeed, outgoing, activity, signins, engagement, notifications, quick, crewforms, dashboard, reports, schedule, register, ledger, evaluation, directory, letters, logsheet, siteinstr, requests, payroll, cashflow, payments, purchases, usage, weather, workphotos, excel, zoho, docs, mine: prices, apps: prices, prices, access: prices, catalog: prices, company: prices, links: prices, bin: prices, finance, trade, stock: trade, products, partners, deals, hr, contracts, discuss, meetings, attendance, employment, signatures, setup, owners, contacts: contactsView, peopleaccess, master, discovery };   // peopleaccess: v1.47.0; master: v1.48.0
 // v1.14.2: home (the Dashboard) was left out of this list in v0.98.0; the Dashboard stayed on "Loading project…"
@@ -533,7 +535,7 @@ function render() {
   if (focusKey) root.querySelector(`[data-fk="${CSS.escape(focusKey)}"]`)?.focus();
 
   // a quick action chosen from "+ New" or the search box runs once its screen is on the page
-  if (pending && pending.view === name) {
+  if (pending && pending.view === name && view.ready !== false) {
     const q = pending;
     pending = null;
     if (q.act) { byUser = true; view.actions?.[q.act]?.(root, ctx); refresh(); }

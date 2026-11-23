@@ -5,7 +5,7 @@
 
 import { store } from '../core/store.js';
 import { html, chip, options } from './dom.js';
-import { toCSV, downloadText, fmtFull } from '../core/util.js';
+import { toCSV, downloadText, fmtFull, todayISO } from '../core/util.js';
 import { KINDS, STATUS, TONE, stateOf, okToSend, askEntry, decide, sentEntry, mayApprove, keyOf, kindWords, filtered, csvRows, waiting } from '../engine/outgoing.js';
 import { companyCode } from '../engine/docref.js';
 import { stampPng } from './seal.js';
@@ -149,6 +149,6 @@ export function render(c) {
 }
 export const actions = {
   ...outActions,
-  outCsv() { downloadText(`Outgoing register ${new Date().toISOString().slice(0, 10)}.csv`, toCSV(csvRows(filtered(store.outgoing || [], f)))); },
+  outCsv() { downloadText(`Outgoing register ${todayISO()}.csv`, toCSV(csvRows(filtered(store.outgoing || [], f)))); },
 };
 export const changes = { outF(el) { f = { ...f, [el.dataset.k]: el.value }; } };

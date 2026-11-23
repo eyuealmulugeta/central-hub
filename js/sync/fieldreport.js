@@ -6,7 +6,7 @@
 import { ratingOf } from '../engine/crewratings.js';
 import { statusOf, activitiesOf, cleanActivities, cleanText, cleanLink, cleanEmail, LIMITS } from '../engine/deployment.js';
 import { targetFor } from '../engine/calendar.js';
-import { toDay, fromDay } from '../core/util.js';
+import { toDay, fromDay, todayISO } from '../core/util.js';
 import { SITE_DEPARTMENTS, normDepartment, normRole } from '../engine/positions.js';
 import { fieldProjectOf, problemsOf, differences } from '../engine/fieldproject.js';
 import { fixesForField, siteFixes } from '../engine/attendance.js';
@@ -789,7 +789,7 @@ const emailSet = list => [...new Set((list || []).map(l => cleanEmail(l?.email ?
  * With `dry` nothing is sent: the rows say what would be created ('create') or changed ('update').
  * @returns {{ rows: { id, name, code, action: 'create'|'update'|'created'|'updated'|'same'|'nocode'|'skipped'|'failed', note?: string, changes?: object[], linkedCount?: number }[], extra: object[] }}
  */
-export async function syncProjects({ projects, users = [], regions = [], dry = false, today = new Date().toISOString().slice(0, 10) }) {
+export async function syncProjects({ projects, users = [], regions = [], dry = false, today = todayISO() }) {
   const held = await fetchProjects();
   const rows = [];
   for (const p of projects) {

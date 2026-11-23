@@ -1,3 +1,4 @@
+import { todayISO } from '../core/util.js';   // v1.84.0 (audit CH-4): the local date, not UTC
 // Reading a document from the text a picture of it was turned into (OCR). A passport or an ID card carries a
 // machine-readable zone (the two or three lines of capitals and "<" at the bottom): it has check digits, so what is
 // read from it can be proved right. Other papers are read by their labels and dates, and need a human look.
@@ -20,7 +21,7 @@ const digits = s => [...s].map(ch => TO_DIGIT[ch] || ch).join('');
 const letters = s => [...s].map(ch => TO_LETTER[ch] || ch).join('');
 
 /** YYMMDD to an ISO date. `future` is true for an expiry date: the century is the nearest one that makes sense. */
-export function mrzDate(yymmdd, future, today = new Date().toISOString().slice(0, 10)) {
+export function mrzDate(yymmdd, future, today = todayISO()) {
   if (!/^\d{6}$/.test(yymmdd)) return '';
   const yy = +yymmdd.slice(0, 2), mm = yymmdd.slice(2, 4), dd = yymmdd.slice(4, 6);
   if (+mm < 1 || +mm > 12 || +dd < 1 || +dd > 31) return '';

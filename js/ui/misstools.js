@@ -59,7 +59,57 @@ export function missTools(c, day) {
           <button class="btn small" data-act="noAct" data-day="${day}">⏸ Mark ${fmtDate(day)} No activity</button></span>${reqRow(p.fieldCode, day, c.today)}`;
 }
 
+/** v1.85.0 (owner, 23 Nov, F3): tick several missing days of a week and mark them together (day-off or No activity). */
+const mayMark = c => !!c.project.fieldCode && store.canApprove && !store.readOnly;
+export const missPick = (c, day) => (mayMark(c) ? html`<input type="checkbox" class="miss-pick" data-miss-pick value="${day}" aria-label="Choose ${fmtDate(day)}">` : '');
+export function missBulk(c, days) {
+  if (days.length < 2 || !mayMark(c)) return '';
+  return html`<li class="row miss-bulk"><span class="row-main"><span><b>${days.length} missing days</b></span><span class="muted">Tick the days, then mark them together.</span></span>
+    <span class="toolbar"><button class="btn small ghost" data-act="missTickAll">Tick all</button>
+    <select aria-label="Reason for the days off" data-bulk-k>${DAYOFF_KINDS.map(k => html`<option>${k}</option>`)}</select>
+    <button class="btn small" data-act="bulkDayOff">Mark ticked as day-off</button></span>
+    <span class="toolbar"><input aria-label="Reason for No activity" maxlength="120" placeholder="Reason for No activity (required)" data-bulk-why>
+    <button class="btn small" data-act="bulkNoAct">⏸ Mark ticked No activity</button></span></li>`;
+}
+/** The ticked days of the list the button sits in, oldest first. */
+export const ticked = el => [...(el.closest('ul')?.querySelectorAll('[data-miss-pick]:checked') || [])].map(x => x.value).sort();
+const listOf = days => days.map(fmtDate).join(', ');
+
 export const missActions = {
+  missTickAll(el) {
+    const all = [...(el.closest('ul')?.querySelectorAll('[data-miss-pick]') || [])], on = all.some(x => !x.checked);
+    all.forEach(x => { x.checked = on; });
+    el.textContent = on ? 'Untick all' : 'Tick all';
+  },
+  async bulkDayOff(el, c) {
+    const days = ticked(el), k = el.closest('li')?.querySelector('[data-bulk-k]')?.value || 'Holiday';
+    if (!days.length) { alert('Tick the days first.'); return; }
+    if (!confirm(`Mark ${days.length} day(s) as day off (${k}) for ${c.project.name}?\n${listOf(days)}\nNo report is then needed for these days.`)) return;
+    el.disabled = true;
+    const done = [], bad = [];
+    for (const day of days) {   // one at a time: the Field Report script takes one day per call
+      try { await markDayOff({ proj: c.project.fieldCode, date: day, k, by: store.user?.name || '' }); done.push(day); }
+      catch (e) { bad.push(`${fmtDate(day)}: ${e.message}`); }
+    }
+    if (done.length) store.updateProject(p => { p.nonWorking = [...new Set([...(p.nonWorking || []), ...done])].sort(); p.offWhy = { ...(p.offWhy || {}), ...Object.fromEntries(done.map(d => [d, k])) }; });   // v1.86.0
+    el.disabled = false;
+    if (bad.length) alert(`Not marked:\n${bad.join('\n')}`);
+  },
+  async bulkNoAct(el, c) {
+    const days = ticked(el), why = (el.closest('li')?.querySelector('[data-bulk-why]')?.value || '').trim();
+    if (!days.length) { alert('Tick the days first.'); return; }
+    if (!why) { alert('Write the reason for No activity first.'); return; }
+    if (!confirm(`Mark ${days.length} day(s) No activity for ${c.project.name}?\n${listOf(days)}\nReason: ${why}`)) return;
+    el.disabled = true;
+    let last = null; const bad = [];
+    for (const day of days) {
+      try { last = await markNoAct({ proj: c.project.fieldCode, date: day, why }); }
+      catch (e) { bad.push(`${fmtDate(day)}: ${e.message}`); }
+    }
+    if (last) store.updateProject(p => { p.noAct = last.noAct || {}; });
+    el.disabled = false;
+    if (bad.length) alert(`Not marked:\n${bad.join('\n')}`);
+  },
   /** v1.71.0 (owner, 17 Nov): the GM or the PE marks the missing day as a day off in Field Report; the calendar adds it. */
   /** v1.73.0 (owner, 18 Nov): ask the site engineer for the missing day's report (push + pop-up on his phone). */
   async reqReport(el, c) {
@@ -92,7 +142,7 @@ export const missActions = {
     el.disabled = true;
     try {
       await markDayOff({ proj: c.project.fieldCode, date: day, k, by: store.user?.name || '' });
-      store.updateProject(p => { p.nonWorking = [...new Set([...(p.nonWorking || []), day])].sort(); });
+      store.updateProject(p => { p.nonWorking = [...new Set([...(p.nonWorking || []), day])].sort(); p.offWhy = { ...(p.offWhy || {}), [day]: k }; });   // v1.86.0: the reason, for the weekly summary
     } catch (e) { el.disabled = false; alert(`Not marked: ${e.message}`); }
   },
 };

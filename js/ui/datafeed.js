@@ -4,7 +4,7 @@
 
 import { store } from '../core/store.js';
 import { html, chip } from './dom.js';
-import { toCSV, downloadText, fmtFull } from '../core/util.js';
+import { toCSV, downloadText, fmtFull, todayISO } from '../core/util.js';
 import { seesSignins } from '../engine/signlog.js';
 import { ITEMS, EVERY, COLOUR, TONE, WHO, rowsFor, personScores, myOverdue, csvRows } from '../engine/datafeed.js';
 
@@ -56,7 +56,7 @@ export function render() {
 }
 
 export const actions = {
-  dfCsv() { downloadText(`Data tracker ${new Date().toISOString().slice(0, 10)}.csv`, toCSV(csvRows(mine()))); },
+  dfCsv() { downloadText(`Data tracker ${todayISO()}.csv`, toCSV(csvRows(mine()))); },
   async dfNow() {
     if (busy) return;
     busy = true; store.notify();

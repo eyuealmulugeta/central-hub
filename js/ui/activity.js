@@ -3,7 +3,7 @@
 
 import { store } from '../core/store.js';
 import { html } from './dom.js';
-import { toCSV, downloadText } from '../core/util.js';
+import { toCSV, downloadText, todayISO } from '../core/util.js';
 import { ACTIONS, actionWord, filtered, csvRows } from '../engine/activity.js';
 import { APPS } from '../engine/signlog.js';
 
@@ -41,5 +41,5 @@ export const changes = {
 };
 
 export const actions = {
-  csv() { downloadText(`Activity record ${new Date().toISOString().slice(0, 10)}.csv`, toCSV(csvRows(filtered(store.activity || [], { ...f, from: Date.now() - span * 864e5 })))); },
+  csv() { downloadText(`Activity record ${todayISO()}.csv`, toCSV(csvRows(filtered(store.activity || [], { ...f, from: Date.now() - span * 864e5 })))); },
 };

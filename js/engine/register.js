@@ -4,7 +4,7 @@
 // site's own (Field Report work lines), so nothing is counted twice. Pure functions: tasks + reports in, figures out.
 
 import { schedule } from './gantt.js';
-import { toDay, fromDay, workBetween, nextWork, isWork, DEFAULT_WEEK } from '../core/util.js';
+import { toDay, fromDay, workBetween, nextWork, isWork, DEFAULT_WEEK, todayISO } from '../core/util.js';
 
 export const BEHIND_DAYS = 5;          // more than this many working days behind plan = CRITICAL RISK
 const r2 = v => Math.round(v * 100) / 100;
@@ -209,7 +209,7 @@ export function importRegister(rows, tasks = [], { workDays = DEFAULT_WEEK, newI
     }
     const t = out.find(x => (wbs && String(x.wbs || '') === wbs) || x.name.trim().toLowerCase() === name.toLowerCase());
     if (t) { Object.assign(t, patch); updated++; }
-    else { out.push({ id: newId(), duration: 1, deps: [], ...patch, start: patch.start || fromDay(nextWork(toDay(new Date().toISOString().slice(0, 10)), workDays)) }); added++; }
+    else { out.push({ id: newId(), duration: 1, deps: [], ...patch, start: patch.start || fromDay(nextWork(toDay(todayISO()), workDays)) }); added++; }
   });
   return { tasks: out, added, updated, problems };
 }

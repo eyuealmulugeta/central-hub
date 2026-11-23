@@ -9,6 +9,7 @@ import { urgentBox, urgentActions, urgentChanges, urgentSubmits } from './urgent
 import { html } from './dom.js';
 import { fmtDate } from '../core/util.js';
 import { openById } from './reports.js';
+import { dayName } from '../engine/weekly.js';   // v1.86.0 (F1)
 
 const FILTERS = [['all', 'All'], ['pending', 'Pending'], ['done', 'Done']];
 const DONE_DAYS = 14;   // decided or closed lines stay this long under Done
@@ -97,6 +98,21 @@ const alertLine = x => html`
 
 const LINE = { devices: deviceLine, requests: requestLine, reports: reportLine, alerts: alertLine };
 
+/** v1.86.0 (owner, 23 Nov, F1): the Monday report summaries (made by the server at 07:00): the newest open, older folded. */
+const wkRow = r => html`<li class="trow wk-row"><span class="tt"><b>${r.name}</b><span class="muted">${[
+  r.missing.length ? `${r.missing.length} missing: ${r.missing.map(dayName).join(', ')}` : '',
+  r.noAct.length ? `${r.noAct.length} No activity: ${r.noAct.map(x => `${dayName(x.d)} (${x.why})`).join(', ')}` : '',
+  r.off.length ? `${r.off.length} day off: ${r.off.map(x => `${dayName(x.d)} (${x.why})`).join(', ')}` : '',
+].filter(Boolean).join(' · ') || 'Every report sent'}</span></span>${r.missing.length ? html`<span class="chip bad">${r.missing.length}</span>` : html`<span class="chip ok">OK</span>`}</li>`;
+const wkBody = w => html`<ul class="tlist">${(w.rows || []).map(wkRow)}</ul>${(w.rows || []).length ? '' : html`<p class="muted small">No open project linked to Field Report.</p>`}`;
+export function weeklyBox(list = []) {
+  if (!list.length) return '';
+  const [w, ...old] = list;
+  return html`<section class="card wk-card"><h3>Weekly summary · ${dayName(w.from)} – ${dayName(w.to)}</h3>
+    <p class="muted small">Made each Monday at 07:00 for the Admin and the GM. Mark missing days in Review (one or several at once).</p>${wkBody(w)}
+    ${old.map(o => html`<details class="wk-old"><summary>${dayName(o.from)} – ${dayName(o.to)} · ${o.totals?.missing || 0} missing</summary>${wkBody(o)}</details>`)}</section>`;
+}
+
 export function render(c) {
   if (!store.isAdmin) return html`<section class="card"><p class="empty">Only the Admin sees the notifications.</p></section>`;
   fieldusers.load();
@@ -116,6 +132,7 @@ export function render(c) {
       ${lines.length ? html`<ul class="tlist notif-list">${lines.map(([k, x, done]) => html`<li class="trow notif-row ${done ? 'is-done' : ''}">${tag(k)}${LINE[k](x, done)}</li>`)}</ul>`
         : html`<p class="empty notif-empty">${filter === 'done' ? 'Nothing decided in the last two weeks.' : 'All clear. No sign-in, site request or report is waiting.'}</p>`}
     </section>
+    ${weeklyBox(store.weekly)}
     ${urgentBox(c)}`;
 }
 

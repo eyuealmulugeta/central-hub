@@ -43,6 +43,6 @@ export const actions = {
       if (m.kind === 'count') for (const l of m.lines || []) rows.push([m.date, `${kindWord('count')} (books ${l.book}, diff ${l.diff})`, l.item, l.counted, l.unit, '', '', '', '', m.byName || m.by, m.status, m.decidedByName || '', m.note || '']);
       else rows.push([m.date, kindWord(m.kind), m.item, m.qty, m.unit, m.supplier || '', m.to || '', m.zone || '', m.toProjectName || '', m.byName || m.by, m.status, m.decidedByName || '', m.note || '']);
     }
-    downloadText(`Site store ${store.project?.name || ''} ${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows));
+    downloadText(`Site store ${store.project?.name || ''} ${todayISO()}.csv`, toCSV(rows));
   },
 };

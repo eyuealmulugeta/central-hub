@@ -4,7 +4,7 @@
 // bottom. Internal meetings are company records of one division (section `meetings`). See engine/booking.js.
 
 import { store } from '../core/store.js';
-import { uid, fmtFull } from '../core/util.js';
+import { uid, fmtFull, todayISO } from '../core/util.js';
 import { html, chip, field, options } from './dom.js';
 import { tell } from '../core/image.js';
 import { linked } from './discuss.js';
@@ -137,7 +137,7 @@ export function render(c) {
       <form data-form="meeting" class="form">
         <label>Title <input name="title" required maxlength="120" placeholder="e.g. Weekly site coordination"></label>
         <div class="grid4">
-          <label>Date <input type="date" name="date" value="${day}" min="${new Date().toISOString().slice(0, 10)}" required></label>
+          <label>Date <input type="date" name="date" value="${day}" min="${todayISO()}" required></label>
           <label>Time <input type="time" name="time" value="09:00" required></label>
           <label>Length <select name="minutes">${options(LENGTHS.map(n => [String(n), n < 60 ? `${n} minutes` : `${n / 60} hour${n > 60 ? 's' : ''}`.replace('1.5 hours', '1 hour 30')]), '60')}</select></label>
           <label>Place or video link <input name="where" maxlength="300" placeholder="Office, site, or https://meet.google.com/..."></label>

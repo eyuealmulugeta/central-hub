@@ -8,6 +8,7 @@ import { reportList } from '../engine/paysteps.js';
 import { tell } from '../core/image.js';
 import { archiveFolder } from '../engine/logsheet.js';
 import { addRow, setFile } from './archive.js';
+import { todayISO } from '../core/util.js';   // v1.84.0 (audit CH-4): the local date, not UTC
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const tableOf = csv => `<table>${csv.split('\n').map(line => `<tr>${(line.match(/("([^"]|"")*"|[^,]*)(,|$)/g) || []).slice(0, -1).map(x => `<td>${esc(x.replace(/,$/, '').replace(/^"|"$/g, '').replace(/""/g, '"'))}</td>`).join('')}</tr>`).join('')}</table>`;
@@ -18,7 +19,7 @@ export async function sendPayReport({ name, csv, subject }) {
   const to = reportList(store.global, store.isAdmin ? store.user?.email || '' : '');
   try {
     // v0.51.0: filed under Company / Pay report / month (v0.79.0) and logged in the company's Log sheet
-    const date = new Date().toISOString().slice(0, 10);
+    const date = todayISO();
     const out = await saveToDrive(`${name}.csv`, csv, 'text/csv', { folder: archiveFolder(date, 'Company', 'Pay report') });
     const row = addRow({ date, type: 'payreport', subject: subject || name, projectId: '', source: 'auto' }, true);
     if (row) setFile(row.id, out, true);

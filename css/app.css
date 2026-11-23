@@ -2181,6 +2181,7 @@ mark { background: #ffe58a; color: inherit; border-radius: 3px; padding: 0 2px; 
 
 /* v1.75.0 (owner, 19 Nov): No activity, its own colour (violet); the Reports tabs with an icon, one row (scrolls sideways on a phone) */
 .chip.na { background: #ede9fe; color: #6d28d9; } .na-t { color: #6d28d9; } .na-row { border-left: 3px solid #7c3aed; } .miss-row { border-left: 3px solid #dc2626; flex-wrap: wrap; }   /* v1.82.0 */
+.miss-pick { width: 20px; height: 20px; margin: 0 8px 0 0; flex: none; } .miss-bulk { border-left: 3px solid #dc2626; background: #fef2f2; flex-wrap: wrap; }   /* v1.85.0 F3 */
 .tabs .tab .ico { flex: none; }
 :root[data-theme="dark"] .chip.na { background: #3b2a63; color: #ddd6fe; }
 /* v1.79.0: a site request with its decision, in "things need you" and on the request */

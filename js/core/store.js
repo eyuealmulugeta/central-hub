@@ -55,6 +55,7 @@ let fieldRoute = null;           // Phase E1: public/fieldRoute, how Field Repor
 let outs = [];                 // v1.1.0 (G4): the outgoing register (all for the Admin and Tier 1, one's own for the others)
 let feed = null;   // v1.2.0 (G5): datafeed/latest
 let siteSpots = [];   // v1.53.0 (FR 2.92.0): Spotlight notes and visitors, live from the phones (the Admin and the GM)
+let weekly = [];               // v1.86.0 (F1): weekly/<Monday> report summaries
 let urgent = [];               // v0.72.0: urgent notices from the GM (engine/urgent.js)
 let rcpt = { ch: [], dm: [], c: false, d: false };
 let people = null;   // v1.38.0: directory/people (Discuss names, positions, projects)   // v1.37.0: Discuss receipts (engine/receipts.js)
@@ -407,6 +408,8 @@ export const store = {
     shared.push(api.watchDoc('directory/people', d => { people = d; emit(); }, () => {}));   // v1.38.0
     shared.push(api.watchCol(`${COMPANY_PATH}/chatSeen`, docs => { rcpt.ch = docs; rcpt.c = true; emit(); receiptsTick(); }, () => {}));
     shared.push(api.watchCol(`${COMPANY_PATH}/dmSeen`, docs => { rcpt.dm = docs; rcpt.d = true; emit(); receiptsTick(); }, () => {}, ['members', 'array-contains', String(me.email).toLowerCase()]));
+    // v1.86.0 (owner, 23 Nov, F1): the Monday report summaries of the last 8 weeks (the Admin and the GM only)
+    if (role === 'owner' || gmAdmin) shared.push(api.watchCol('weekly', docs => { weekly = docs.sort((x, y) => String(y.from).localeCompare(String(x.from))); emit(); }, () => {}, ['at', '>=', Date.now() - 56 * 864e5]));
     // v0.72.0: urgent notices from the GM: the Admin reads them all (the log), everyone else those sent to them
     shared.push(api.watchCol('urgent', docs => { urgent = docs; emit(); }, () => {}, role === 'owner' ? undefined : ['emails', 'array-contains', String(me.email).toLowerCase()]));
     // evaluations are read only by whoever wrote them (the Admin reads all): the query says so, or the database refuses it
@@ -621,6 +624,7 @@ export const store = {
   /** Settings of the public booking page. Null until the Admin changes something: the page then uses its defaults. */
   get booking() { return booking; },
   get urgent() { return urgent; },
+  get weekly() { return weekly; },   // v1.86.0 (F1)
   /** v1.37.0: Discuss receipts of everyone (channels) and of this person's one-to-one chats. */
   get receipts() { return [...rcpt.ch, ...rcpt.dm]; },
   /** v1.38.0: the Discuss people list { people: [{ e, n, t, p }], projects: [{ id, name, code }] }, or null. */

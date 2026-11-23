@@ -31,7 +31,7 @@ import { paperHtml } from '../sync/mail.js';
 import { openMail } from './maildialog.js';
 import { iMay } from './prices.js';   // v0.29.0: who approves follows the access rules
 import { fieldSpotlight } from '../sync/fieldreport.js';
-import { missTools, missActions } from './misstools.js';   // v1.82.0 (B4); not dashboard.js, which loads when opened
+import { missTools, missActions, missPick, missBulk } from './misstools.js';   // v1.82.0 (B4); not dashboard.js, which loads when opened
 import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';
 import { fromField } from '../engine/spotlight.js';
 import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
@@ -141,6 +141,13 @@ let docOf = null;       // id of the report shown as the Daily Site Report (v0.2
 let brief = false;      // the client brief (one page) instead of the office's Daily Site Report
 let withAtt = false;    // the office's copy: with the attendance page (never on by itself, so the client's copy has none)
 const period = { year: 0, month: 0, week: 0 };   // the reports shown: 0 is any
+// v1.87.0 (owner, 23 Nov, F2): Review by person: the reports one person sent or approved ('' = everyone)
+let byWho = '';
+const approverOf = r => r.approval?.by || r.approvedBy || '';
+/** Everyone who sent or approved a report, by name. */
+export const peopleOf = reports => [...new Set(reports.flatMap(r => [r.by, approverOf(r)]).map(x => String(x || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+/** True when the report was sent or approved by `who` (or no one is chosen). */
+export const byPerson = (r, who) => !who || String(r.by || '').trim() === who || approverOf(r).trim() === who;
 // v1.74.0 (owner, 18 Nov; FR 3.9.0): the reports by Month › Week, one more month shown as the list is scrolled to its end
 let monthsShown = 1, findId = '';
 const shut = new Set();
@@ -163,7 +170,7 @@ export function missDays(w, opt, sent, na) {
   }
   return out.reverse();
 }
-const missRow = (c, d) => html`<li class="row miss-row"><span class="row-main"><span><b>${fmtDate(d)}</b> <span class="chip bad">Missing</span></span><span class="muted">No report for this day.</span></span>${missTools(c, d)}</li>`;
+const missRow = (c, d) => html`<li class="row miss-row">${missPick(c, d)}<span class="row-main"><span><b>${fmtDate(d)}</b> <span class="chip bad">Missing</span></span><span class="muted">No report for this day.</span></span>${missTools(c, d)}</li>`;
 if (typeof document !== 'undefined') document.addEventListener('scroll', () => {   // the next month when the end is in view
   const b = document.getElementById('repMore');
   if (b && !b.disabled && b.getBoundingClientRect().top < innerHeight + 200) { b.disabled = true; b.click(); }
@@ -184,7 +191,7 @@ function groupedList(c, shown, reports, rowOf) {
     const weeks = monthWeeks(m, vis.filter(x => x.date.startsWith(m)), all.filter(x => x.date.startsWith(m)), opt), open = !shut.has(m);
     return html`<div class="rep-month"><button type="button" class="link rep-h" data-act="repShut" data-k="${m}" aria-expanded="${open}"><b>${open ? '▾' : '▸'} ${monthTitle(m)}</b> ${counts(monthCounts(weeks))}</button>
       ${open ? weeks.map(w => { const wo = !shut.has(w.key); return html`<div class="rep-week"><button type="button" class="link rep-h sub" data-act="repShut" data-k="${w.key}" aria-expanded="${wo}"><b>${wo ? '▾' : '▸'} ${monthTitle(m).split(' ')[0]} › ${w.title}</b> ${counts(w)}</button>
-        ${wo ? ((miss = missDays(w, opt, sent, na)).length || w.rows.length || Object.keys(na).some(d => d >= w.from && d <= w.to) ? html`<ul class="list">${miss.map(d => missRow(c, d))}${Object.keys(na).filter(d => d >= w.from && d <= w.to).sort().reverse().map(d => naRow(d, na[d]))}${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
+        ${wo ? ((miss = byWho ? [] : missDays(w, opt, sent, na)).length || w.rows.length || Object.keys(na).some(d => d >= w.from && d <= w.to) ? html`<ul class="list">${missBulk(c, miss)}${miss.map(d => missRow(c, d))}${Object.keys(na).filter(d => d >= w.from && d <= w.to).sort().reverse().map(d => naRow(d, na[d]))}${w.rows.map(x => rowOf(x.r))}</ul>` : html`<p class="muted small">No report shown this week.</p>`) : ''}</div>`; }) : ''}</div>`;
   });
   const next = list[monthsShown];
   const ask = !pst && store.isAdmin ? html`<p class="notice warn">No project start date yet: Review starts at the first report. <a href="#setup">Set the start date in Project › Setup</a>.</p>` : '';
@@ -580,7 +587,9 @@ export function render(c) {
     </section>`;
 
   const pick = periodChoices(reports.map(r => r.date), period);
-  const shown = reports.filter(r => inPeriod(r.date, period));
+  const people = peopleOf(reports);
+  if (byWho && !people.includes(byWho)) byWho = '';   // another project
+  const shown = reports.filter(r => inPeriod(r.date, period) && byPerson(r, byWho));
   const listCard = html`
     <section class="card">
       <div class="toolbar">
@@ -588,6 +597,7 @@ export function render(c) {
         <select data-chg="period" data-f="year" aria-label="Year"><option value="0">Every year</option>${options(pick.years.map(y => [y, String(y)]), period.year)}</select>
         <select data-chg="period" data-f="month" aria-label="Month"><option value="0">Every month</option>${options(pick.months.map(m => [m, monthName(m)]), period.month)}</select>
         <select data-chg="period" data-f="week" aria-label="Week"><option value="0">Every week</option>${options(pick.weeks.map(w => [w, `Week ${w}`]), period.week)}</select>
+        ${people.length > 1 ? html`<select data-chg="repWho" aria-label="Person"><option value="">Everyone</option>${options(people.map(n => [n, n]), byWho)}</select>` : ''}
       </div>
       ${findCard(c, reports)}
       ${findId ? '' : shown.length ? groupedList(c, shown, reports, r => html`
@@ -874,6 +884,7 @@ export const changes = {
   spotAbout(el) { spot.about = el.value; },
   /** Year, month or week of the reports listed. A wider choice clears the narrower ones under it. */
   addTrade(el) { if (el.value) shownTrades.add(el.value); },
+  repWho(el) { byWho = el.value || ''; if (byWho) monthsShown = 99; },   // v1.87.0 (F2): every month for one person
   repFind(el) { findId = el.value || ''; if (findId) monthsShown = 99; },   // v1.74.0: every month for the search
   period(el) {
     period[el.dataset.f] = +el.value || 0;

@@ -7,7 +7,7 @@ import { companyFinance, invoiceExport, entryExport } from '../engine/finance.js
 import { dashPage, dashPaper, dashOf, seesProfit } from './tradedash.js';
 import { dashSheets } from '../engine/tradedash.js';
 import { xlsxBytes } from '../core/xlsxwrite.js';
-import { money, fmtDate, fmtFull, toCSV, downloadText } from '../core/util.js';
+import { money, fmtDate, fmtFull, toCSV, downloadText, todayISO } from '../core/util.js';
 import { paperHtml } from '../sync/mail.js';
 import { companyCode } from '../engine/docref.js';
 import { html, options, meter, chip } from './dom.js';
@@ -203,7 +203,7 @@ function tradingPage(c) {
   return dashPage(c, cur, toolbar);
 }
 
-const fileDate = () => new Date().toISOString().slice(0, 10);
+const fileDate = () => todayISO();
 
 export const actions = {
   refresh() { load(); },

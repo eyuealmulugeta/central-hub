@@ -6,6 +6,7 @@ import { saveBase64, saveToDrive } from './drive.js';
 import { describePaper } from './share.js';
 import { archiveFolder } from '../engine/logsheet.js';
 import { projectCode } from '../engine/docref.js';
+import { todayISO } from '../core/util.js';   // v1.84.0 (audit CH-4): the local date, not UTC
 
 /** The category of a sheet: its heading, "INVOICE" -> "Invoice". */
 export const docCategory = paper => {
@@ -29,7 +30,7 @@ export async function fileCopy(paper, pdf = null) {
   const key = copyKey(name, paper.textContent);
   if (done.has(key)) return false;
   done.add(key);
-  const date = new Date().toISOString().slice(0, 10);
+  const date = todayISO();
   const folder = archiveFolder(date, store.project ? store.project.fieldCode || projectCode(store.project) : 'Company', docCategory(paper), store.project?.name || '');
   try {
     const made = pdf && typeof Blob !== 'undefined' && pdf instanceof Blob ? await readPdf(pdf) : pdf;

@@ -102,9 +102,9 @@ export function photoEditor(cur) {
 
 /** The changes of the photo editor (spread into the page's `changes`). */
 export const photoChanges = {
-  phCap(el) { draftOf(el.dataset.id).cap[el.dataset.p] = el.value.trim(); },
-  phDrop(el) { const d = draftOf(el.dataset.id); d.gone = d.gone.filter(x => x !== el.dataset.p).concat(el.checked ? [el.dataset.p] : []); },
-  phAddCap(el) { const p = draftOf(el.dataset.id).added.find(x => x.id === el.dataset.p); if (p) p.cap = el.value.trim(); },
+  phCap(el) { draftOf(el.dataset.id).cap[el.dataset.p] = el.value.trim(); store.notify(); },   // v1.90.0: the preview follows
+  phDrop(el) { const d = draftOf(el.dataset.id); d.gone = d.gone.filter(x => x !== el.dataset.p).concat(el.checked ? [el.dataset.p] : []); store.notify(); },
+  phAddCap(el) { const p = draftOf(el.dataset.id).added.find(x => x.id === el.dataset.p); if (p) p.cap = el.value.trim(); store.notify(); },
   async phAdd(el) {
     const d = draftOf(el.dataset.id);
     for (const f of el.files || []) {

@@ -35,8 +35,8 @@ import { missTools, missActions, missPick, missBulk } from './misstools.js';   /
 import { hubNotes, actions as spotActions, changes as spotChanges, submits as spotSubmits } from './spotnotes.js';
 import { fromField } from '../engine/spotlight.js';
 import { engagementOf, ENGAGE_WORDS } from '../engine/evaluation.js';
-import { frPdf } from './frpdf.js';
-import { photoEditor, photoChanges, photoActions, changeList, saveOfficeVersion, photosAfter, draftOf, dropDraft, olderVersions, FR_WEATHER } from './officever.js';   // v0.55.0
+import { frPdf, frPreview } from './frpdf.js';
+import { photoEditor, photoChanges, photoActions, changeList, saveOfficeVersion, photosAfter, draftOf, dropDraft, olderVersions, FR_WEATHER, officeFull } from './officever.js';   // v0.55.0
 
 /** v0.49.0: the report's engagement (5 points), for the office only: never on the client's copy. */
 const engChip = (r, c) => { const e = r.source === 'field' && engagementOf(r, c?.project?.crewStart); return e ? html`<span class="chip ${e.v >= 4 ? 'ok' : e.v >= 2 ? 'warn' : 'high'}" title="${Object.entries(ENGAGE_WORDS).map(([k, w]) => `${e.parts[k] ? '✓' : '✗'} ${w}`).join(' · ')}">Engagement ${e.v}/5</span>` : ''; };
@@ -670,6 +670,23 @@ function docView(r, c) {
 /** v1.59.0 (owner, 12 Nov): the PE or GM (an approver) changes the 12 client photos until the report is approved. */
 const pickOk = r => store.canApprove && r.source === 'field' && r.review !== 'done';
 
+/* v1.90.0 (owner, 25 Nov): photo edits show at once in the PDF on the page (a preview made here; Drive's PDF changes on save). */
+const previews = new Map();   // report id -> { key, url, busy }
+const editKey = d => (d.gone.length || d.added.length || Object.keys(d.cap).length ? JSON.stringify([d.cap, d.gone, d.added.map(p => [p.id, p.cap])]) : '');
+function previewOf(r, c) {
+  const d = draftOf(r.id), key = editKey(d), pv = previews.get(r.id) || {};
+  if (!key) return null;
+  if (pv.key !== key && !pv.busy) {
+    previews.set(r.id, { ...pv, busy: true });
+    frPreview(c, r, d, officeFull).catch(() => '').then(url => {
+      if (pv.url && url) URL.revokeObjectURL(pv.url);
+      previews.set(r.id, { key, url: url || pv.url || '', busy: false });
+      store.notify();
+    });
+  }
+  return previews.get(r.id);
+}
+
 /** The report's own PDF, shown from Google Drive. */
 function pdfCard(r, c) {
   const f = r.field || {};
@@ -684,8 +701,11 @@ function pdfCard(r, c) {
   return html`<section class="card">
     <div class="toolbar"><h3>Field Report PDF, ${fmtDate(r.date)}</h3><span class="grow"></span>${same}
       <a class="btn small" href="https://drive.google.com/file/d/${x.pdfId}/view" target="_blank" rel="noopener">Open in Drive</a>${locate(x, f)}</div>
-    <iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
-    <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>
+    ${(() => { const pv = r.source === 'field' && r.review === 'pending' ? previewOf(r, c) : null;
+      return pv ? html`<p class="chip info">Preview with your photo changes${pv.busy ? ' · updating…' : ''}. Not saved yet: Drive's PDF changes when you save the office version.</p>
+        ${pv.url ? html`<iframe class="rv-pdf" src="${pv.url}" title="Preview of ${fmtDate(r.date)} with your changes"></iframe>` : html`<p class="muted">Making the preview…</p>`}`
+      : html`<iframe class="rv-pdf" src="https://drive.google.com/file/d/${x.pdfId}/preview" title="Field Report PDF of ${fmtDate(r.date)}" loading="lazy"></iframe>
+    <p class="muted">Shown through Google Drive: you need to be signed in to Google with access to the file.</p>`; })()}
     ${olderList(r, c)}${versionList(r)}
   </section>`;
 }

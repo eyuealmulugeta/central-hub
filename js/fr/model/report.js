@@ -126,6 +126,13 @@ export function stepStatus(r, id) {
 /** Planned activities not yet logged as work done today. */
 export const openPlanned = r => (r.planned || []).filter(p => !r.items.some(i => i.planId === p.id));
 
+/** 3.20.0 (owner, 25 Nov): after a step is ticked done, the next step not done yet (wrapping round); '' when all are. */
+export const nextStep = (r, id) => {
+  const i = STEPS.findIndex(s => s.id === id), order = [...STEPS.slice(i + 1), ...STEPS.slice(0, Math.max(0, i))];
+  const s = order.find(x => stepStatus(r, x.id).state !== 'ok');
+  return s ? s.id : '';
+};
+
 /** How many of the nine steps are ticked. */
 export const doneCount = r => STEPS.filter(s => stepStatus(r, s.id).state === 'ok').length;
 

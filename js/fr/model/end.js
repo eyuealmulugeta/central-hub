@@ -141,7 +141,7 @@ export function reportMeta(r, project, profile = {}) {
     preparedBy: String(profile.name || '').trim(), position: String(profile.position || '').trim(),
     photos: r.photos.length,
     // 3.7.0 (owner, 18 Nov): sent with fewer than 12 photos, and why (office only: never on the PDF)
-    ...(isFew(r.photos) && String(r.fewWhy || '').trim() ? { fewPhotos: { n: r.photos.length, why: String(r.fewWhy).trim().slice(0, 300) } } : {}),
+    ...(isFew(r.photos) && String(r.fewWhy || '').trim() ? { fewPhotos: { n: r.photos.length, why: String(r.fewWhy).trim().slice(0, 1000) } } : {}),
     photoTags: r.photos.map(p => ({ caption: p.caption || p.captionKind || '', time: p.at || '', zone: p.zone || '', task: (r.items.find(i => i.id === p.itemId) || {}).task || '' })),
     // 2.1.0: the photos sent to Drive with this report (the script fills in fileId)
     photoFiles: r.photos.map(p => ({ id: p.id, caption: p.caption || p.captionKind || '', ...(p.gallery ? { gallery: true } : {}), ...(p.client ? { client: true } : {}),   // 2.99.0: for the client   // 2.93.0: a gallery photo is flagged; only the office copy says so

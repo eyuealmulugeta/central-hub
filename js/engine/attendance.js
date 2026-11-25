@@ -277,13 +277,13 @@ export function photoDay(ws, date) {
   return ph ? { state: ph.st, ...ph } : { state: 'missing' };
 }
 
-/** Needs attention for the Project Engineer and the GM: a late or missing crew photo in the last 3 days. */
+/** Needs attention for the Project Engineer and the GM: a late crew photo in the last 3 days (v1.90.0: not a missing one). */
 export function crewPhotoFlags(ws, today) {
   const out = [];
   for (let i = 0; i < 3; i++) {
     const d = fromDay(toDay(today) - i), s = photoDay(ws, d);
-    if (s.state === 'missing') out.push({ sev: 'warn', kind: 'Attendance', title: `No morning crew photo on ${d}`, detail: 'The report came without the crew photo.', link: 'attendance' });
-    else if (s.state === 'late') out.push({ sev: 'warn', kind: 'Attendance', title: `Crew photo late on ${d}`, detail: `Taken at ${s.time}${s.tags.length ? ` (${s.tags.join(', ')})` : ''}.`, link: 'attendance' });
+    // v1.90.0 (owner, 25 Nov): a missing crew photo is no longer on Needs attention (Attendance still shows it)
+    if (s.state === 'late') out.push({ sev: 'warn', kind: 'Attendance', title: `Crew photo late on ${d}`, detail: `Taken at ${s.time}${s.tags.length ? ` (${s.tags.join(', ')})` : ''}.`, link: 'attendance' });
   }
   return out;
 }

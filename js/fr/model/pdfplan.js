@@ -113,8 +113,9 @@ export function clientProblem(photos = []) {
   if (x.tick) return `Choose ${x.tick} more photo${s(x.tick)} for the client (exactly ${CLIENT_PHOTOS})`;
   return '';
 }
-/** 3.7.0 (owner, 18 Nov): fewer than 12 photos need a reason of at least 10 characters before Send. */
-export const FEW_MIN = 10;
+/** 3.7.0 (owner, 18 Nov): fewer than 12 photos need a reason before Send. 3.20.0 (owner, 25 Nov): no letter count, any reason. */
+export const FEW_MIN = 1;
+export const FEW_MAX = 1000;   // 3.20.0: was 300
 export const isFew = (photos = []) => photos.length < CLIENT_PHOTOS;
 export const fewOk = r => !isFew(r.photos || []) || String(r.fewWhy || '').trim().length >= FEW_MIN;
 /** How many more to tick (kept for older callers). */

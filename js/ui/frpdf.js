@@ -81,3 +81,31 @@ export async function frPdf(c, r, client = false, v = 0) {
     tell(`✓ ${pdfFileName(rec, client)} downloaded.${missing > 0 ? ` ${missing} photo${missing > 1 ? 's' : ''} could not be read from Drive.` : ''}`);
   } catch (err) { tell(`The PDF could not be made: ${err?.message || err}`); }
 }
+
+/* v1.90.0 (owner, 25 Nov): "when I change the caption and tick Remove, it should instantly change in the PDF preview".
+ * The report page shows this preview, made here from the saved report with the office's photo edits (officever.js),
+ * until the office version is saved; Drive's PDF changes only then. Photos read from Drive once and kept. */
+const picCache = new Map();
+const picOf = (code, pdf, id) => (picCache.has(`${pdf}|${id}`) ? Promise.resolve(picCache.get(`${pdf}|${id}`))
+  : fieldPhoto(code, pdf, id).catch(() => '').then(b => { if (b) picCache.set(`${pdf}|${id}`, b); return b; }));
+export async function frPreview(c, r, draft, officeFull) {
+  const rec = await savedReport(c, r);
+  if (!rec?.full?.r) return '';
+  const full = officeFull(rec.full, { draft, at: new Date().toISOString() });
+  const code = full.project?.code || c.project.fieldCode || '';
+  const all = full.r.photos || [], pick = Array.isArray(r.field?.clientPick) ? r.field.clientPick.filter(id => all.some(p => p.id === id)) : null;
+  const ids = [...clientIds(all, pick && pick.length ? pick : null), ...draft.added.map(p => p.id)].filter((x, i, a) => a.indexOf(x) === i);
+  const added = new Map(draft.added.map(p => [p.id, p.data]));
+  const photos = [];
+  for (const ph of all.filter(p => ids.includes(p.id))) {
+    const data = added.get(ph.id) || (await picOf(code, rec.pdf, ph.id).then(b => (b ? `data:image/jpeg;base64,${b}` : '')));
+    if (!data) continue;
+    photos.push({ data, ...(await sizeOf(data)), at: ph.at || '', cap: plainCap(photoCaption(ph, full.r.items)), gal: !!ph.gallery || GAL_CAP.test(String(ph.caption || '')) });
+  }
+  const w = weatherFile(weatherTerm(full.r.start?.cond));
+  const [logo, weather] = await Promise.all([asDataUrl('assets/fr/icon-192.png'), w ? asDataUrl(`assets/fr/weather/${w}.png`) : '']);
+  const input = pdfInput({ ...rec, full }, { logo, weather, photos }, false);
+  if (!input.progress.length && c.ws) { try { input.progress = pastProgress(c.project, c.ws, full.r.date || r.date, full.r.items); } catch { /* no chart */ } }
+  const doc = buildPdf(await loadPdfLib(), input);
+  return URL.createObjectURL(doc.output('blob'));
+}
